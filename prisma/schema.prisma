@@ -102,6 +102,8 @@ model Product {
   name                  String
   sku                   String       @unique
   imageKey              String?
+  barcodeKey            String?
+  packagingKey          String?
   defaultManufacturerId String       @db.Uuid
   defaultManufacturer   Manufacturer @relation("ProductDefaultManufacturer", fields: [defaultManufacturerId], references: [id], onDelete: Restrict)
   verified              Boolean      @default(false)

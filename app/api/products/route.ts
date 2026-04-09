@@ -39,6 +39,8 @@ export async function POST(request: Request) {
         name: parsed.data.name,
         sku: parsed.data.sku,
         imageKey: parsed.data.imageKey ?? null,
+        barcodeKey: parsed.data.barcodeKey ?? null,
+        packagingKey: parsed.data.packagingKey ?? null,
         defaultManufacturerId: parsed.data.defaultManufacturerId,
         verified: parsed.data.verified ?? false,
         createdById: userId,

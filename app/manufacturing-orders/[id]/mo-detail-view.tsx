@@ -350,6 +350,8 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     id?: string;
     values: ProductFormValues;
     patchImageKey: boolean;
+    patchBarcodeKey: boolean;
+    patchPackagingKey: boolean;
   }) {
     if (!payload.id) return;
     const body: Record<string, unknown> = {
@@ -360,6 +362,12 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     };
     if (payload.patchImageKey) {
       body.imageKey = payload.values.imageKey;
+    }
+    if (payload.patchBarcodeKey) {
+      body.barcodeKey = payload.values.barcodeKey;
+    }
+    if (payload.patchPackagingKey) {
+      body.packagingKey = payload.values.packagingKey;
     }
     await updateProduct.mutateAsync({ id: payload.id, body });
   }

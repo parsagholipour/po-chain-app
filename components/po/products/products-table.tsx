@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
+import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import type { Product } from "@/lib/types/api";
 import { useConfirm } from "@/components/confirm-provider";
 import { Pencil, Trash2 } from "lucide-react";
@@ -33,6 +34,8 @@ export function ProductsTable({ rows, isPending, onEdit, onDelete }: Props) {
             <TableHead className="w-14">Image</TableHead>
             <TableHead>Name</TableHead>
             <TableHead>SKU</TableHead>
+            <TableHead className="w-14">Barcode</TableHead>
+            <TableHead>Packaging</TableHead>
             <TableHead>Default Mfr.</TableHead>
             <TableHead>Verified</TableHead>
             <TableHead className="w-[120px] text-end">Actions</TableHead>
@@ -41,13 +44,13 @@ export function ProductsTable({ rows, isPending, onEdit, onDelete }: Props) {
         <TableBody>
           {isPending ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
                 No products yet.
               </TableCell>
             </TableRow>
@@ -63,6 +66,16 @@ export function ProductsTable({ rows, isPending, onEdit, onDelete }: Props) {
                 </TableCell>
                 <TableCell className="font-medium">{row.name}</TableCell>
                 <TableCell className="font-mono text-xs">{row.sku}</TableCell>
+                <TableCell>
+                  <StorageObjectImage
+                    reference={row.barcodeKey}
+                    className="size-8 shrink-0"
+                    objectFit="contain"
+                  />
+                </TableCell>
+                <TableCell>
+                  <StorageObjectLink reference={row.packagingKey} label="Open file" />
+                </TableCell>
                 <TableCell>{row.defaultManufacturer.name}</TableCell>
                 <TableCell>
                   {row.verified ? (

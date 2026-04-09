@@ -26,6 +26,8 @@ export const productCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   sku: z.string().min(1, "SKU is required"),
   imageKey: z.string().min(1).nullable().optional(),
+  barcodeKey: z.string().min(1).nullable().optional(),
+  packagingKey: z.string().min(1).nullable().optional(),
   defaultManufacturerId: z.uuid(),
   verified: z.boolean().optional(),
 });

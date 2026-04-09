@@ -46,6 +46,8 @@ export function ProductsView() {
         defaultManufacturerId: values.defaultManufacturerId,
         verified: values.verified,
         imageKey: values.imageKey,
+        barcodeKey: values.barcodeKey,
+        packagingKey: values.packagingKey,
       });
       return row;
     },
@@ -83,6 +85,8 @@ export function ProductsView() {
     id?: string;
     values: ProductFormValues;
     patchImageKey: boolean;
+    patchBarcodeKey: boolean;
+    patchPackagingKey: boolean;
   }) {
     if (payload.id) {
       const body: Record<string, unknown> = {
@@ -93,6 +97,12 @@ export function ProductsView() {
       };
       if (payload.patchImageKey) {
         body.imageKey = payload.values.imageKey;
+      }
+      if (payload.patchBarcodeKey) {
+        body.barcodeKey = payload.values.barcodeKey;
+      }
+      if (payload.patchPackagingKey) {
+        body.packagingKey = payload.values.packagingKey;
       }
       await updateMut.mutateAsync({ id: payload.id, body });
     } else {

@@ -19,7 +19,6 @@ import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardFooter,
   CardHeader,
@@ -171,6 +170,8 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
     id?: string;
     values: ProductFormValues;
     patchImageKey: boolean;
+    patchBarcodeKey: boolean;
+    patchPackagingKey: boolean;
   }) {
     if (!payload.id) return;
     const body: Record<string, unknown> = {
@@ -181,6 +182,12 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
     };
     if (payload.patchImageKey) {
       body.imageKey = payload.values.imageKey;
+    }
+    if (payload.patchBarcodeKey) {
+      body.barcodeKey = payload.values.barcodeKey;
+    }
+    if (payload.patchPackagingKey) {
+      body.packagingKey = payload.values.packagingKey;
     }
     await updateProduct.mutateAsync({ id: payload.id, body });
   }

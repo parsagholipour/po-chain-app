@@ -22,6 +22,8 @@ export type Product = {
   name: string;
   sku: string;
   imageKey: string | null;
+  barcodeKey: string | null;
+  packagingKey: string | null;
   defaultManufacturerId: string;
   verified: boolean;
   defaultManufacturer: Manufacturer;

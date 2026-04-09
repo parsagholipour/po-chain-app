@@ -18,6 +18,8 @@ type Props = {
     id?: string;
     values: ProductFormValues;
     patchImageKey: boolean;
+    patchBarcodeKey: boolean;
+    patchPackagingKey: boolean;
   }) => Promise<void>;
 };
 
@@ -37,6 +39,8 @@ export function ProductUpsertDialog({
         defaultManufacturerId: editing.defaultManufacturerId,
         verified: editing.verified,
         imageKey: editing.imageKey,
+        barcodeKey: editing.barcodeKey,
+        packagingKey: editing.packagingKey,
       }
     : {
         name: "",
@@ -44,6 +48,8 @@ export function ProductUpsertDialog({
         defaultManufacturerId: firstMf,
         verified: false,
         imageKey: null,
+        barcodeKey: null,
+        packagingKey: null,
       };
 
   return (
@@ -59,14 +65,19 @@ export function ProductUpsertDialog({
           onCancel={() => onOpenChange(false)}
           onSubmit={async (values, meta) => {
             const patchImageKey =
+              !editing || meta.imageChanged || values.imageKey !== editing.imageKey;
+            const patchBarcodeKey =
+              !editing || meta.barcodeChanged || values.barcodeKey !== editing.barcodeKey;
+            const patchPackagingKey =
               !editing ||
-              meta.hadNewImageFile ||
-              meta.removeStoredImage ||
-              values.imageKey !== editing.imageKey;
+              meta.packagingChanged ||
+              values.packagingKey !== editing.packagingKey;
             await onSave({
               id: editing?.id,
               values,
               patchImageKey,
+              patchBarcodeKey,
+              patchPackagingKey,
             });
             onOpenChange(false);
           }}

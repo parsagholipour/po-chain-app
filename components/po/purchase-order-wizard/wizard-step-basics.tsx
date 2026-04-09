@@ -5,21 +5,13 @@ import { Download, Loader2 } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { parseStoredImageReference } from "@/lib/storage/storage-key";
+import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { presignedFileUrl } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 
 export function documentDisplayName(documentKey: string | null, docFile: File | null): string | null {
   if (docFile?.name) return docFile.name;
-  if (!documentKey) return null;
-  const { objectKey } = parseStoredImageReference(documentKey);
-  const last = objectKey.split("/").filter(Boolean).pop();
-  if (!last) return null;
-  try {
-    return decodeURIComponent(last);
-  } catch {
-    return last;
-  }
+  return storageObjectDisplayName(documentKey);
 }
 
 type Props = {
@@ -42,20 +34,22 @@ export function WizardStepBasics({
   onRetryDocUpload,
 }: Props) {
   const displayName = documentDisplayName(documentKey, docFile);
-  const [downloadHref, setDownloadHref] = useState<string | null>(null);
+  const [downloadState, setDownloadState] = useState<{
+    documentKey: string;
+    href: string | null;
+  } | null>(null);
+  const downloadHref =
+    downloadState?.documentKey === documentKey ? downloadState.href : null;
 
   useEffect(() => {
-    if (!documentKey) {
-      setDownloadHref(null);
-      return;
-    }
+    if (!documentKey) return;
     let cancelled = false;
     presignedFileUrl(documentKey)
       .then((u) => {
-        if (!cancelled) setDownloadHref(u);
+        if (!cancelled) setDownloadState({ documentKey, href: u });
       })
       .catch(() => {
-        if (!cancelled) setDownloadHref(null);
+        if (!cancelled) setDownloadState({ documentKey, href: null });
       });
     return () => {
       cancelled = true;

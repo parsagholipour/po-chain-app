@@ -1,10 +1,11 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Controller, useForm, useFormState } from "react-hook-form";
 import { z } from "zod";
 import { uploadFileToStorage } from "@/lib/upload-client";
+import { useConfirm } from "@/components/confirm-provider";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -17,6 +18,7 @@ import {
 } from "@/components/ui/field";
 import { ImageFileInput } from "@/components/ui/image-file-input";
 import { Input } from "@/components/ui/input";
+import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import {
   Select,
   SelectContent,
@@ -26,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { DialogFooter } from "@/components/ui/dialog";
 import type { Manufacturer } from "@/lib/types/api";
+import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,6 +38,8 @@ const schema = z.object({
   defaultManufacturerId: z.string().uuid(),
   verified: z.boolean(),
   imageKey: z.string().nullable().optional(),
+  barcodeKey: z.string().nullable().optional(),
+  packagingKey: z.string().nullable().optional(),
 });
 
 export type ProductFormValues = z.infer<typeof schema>;
@@ -44,7 +49,11 @@ type Props = {
   defaultValues: ProductFormValues;
   onSubmit: (
     values: ProductFormValues,
-    meta: { hadNewImageFile: boolean; removeStoredImage: boolean },
+    meta: {
+      imageChanged: boolean;
+      barcodeChanged: boolean;
+      packagingChanged: boolean;
+    },
   ) => Promise<void>;
   onCancel: () => void;
 };
@@ -55,8 +64,14 @@ export function ProductForm({
   onSubmit,
   onCancel,
 }: Props) {
+  const confirm = useConfirm();
+  const packagingInputRef = useRef<HTMLInputElement>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [removeStoredImage, setRemoveStoredImage] = useState(false);
+  const [barcodeFile, setBarcodeFile] = useState<File | null>(null);
+  const [removeStoredBarcode, setRemoveStoredBarcode] = useState(false);
+  const [packagingFile, setPackagingFile] = useState<File | null>(null);
+  const [removeStoredPackaging, setRemoveStoredPackaging] = useState(false);
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(schema),
@@ -66,6 +81,14 @@ export function ProductForm({
 
   const storedImageKey =
     removeStoredImage || imageFile ? null : (defaultValues.imageKey ?? null);
+  const storedBarcodeKey =
+    removeStoredBarcode || barcodeFile ? null : (defaultValues.barcodeKey ?? null);
+  const storedPackagingKey =
+    removeStoredPackaging || packagingFile
+      ? null
+      : (defaultValues.packagingKey ?? null);
+  const packagingDisplayName =
+    packagingFile?.name ?? storageObjectDisplayName(storedPackagingKey);
 
   async function handleSubmit(values: ProductFormValues) {
     let imageKey: string | null;
@@ -81,11 +104,41 @@ export function ProductForm({
     } else {
       imageKey = defaultValues.imageKey ?? null;
     }
+
+    let barcodeKey: string | null;
+    if (barcodeFile) {
+      try {
+        barcodeKey = await uploadFileToStorage(barcodeFile, "products/barcodes");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Upload failed");
+        return;
+      }
+    } else if (removeStoredBarcode) {
+      barcodeKey = null;
+    } else {
+      barcodeKey = defaultValues.barcodeKey ?? null;
+    }
+
+    let packagingKey: string | null;
+    if (packagingFile) {
+      try {
+        packagingKey = await uploadFileToStorage(packagingFile, "products/packaging");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Upload failed");
+        return;
+      }
+    } else if (removeStoredPackaging) {
+      packagingKey = null;
+    } else {
+      packagingKey = defaultValues.packagingKey ?? null;
+    }
+
     await onSubmit(
-      { ...values, imageKey },
+      { ...values, imageKey, barcodeKey, packagingKey },
       {
-        hadNewImageFile: imageFile !== null,
-        removeStoredImage,
+        imageChanged: imageFile !== null || removeStoredImage,
+        barcodeChanged: barcodeFile !== null || removeStoredBarcode,
+        packagingChanged: packagingFile !== null || removeStoredPackaging,
       },
     );
   }
@@ -177,6 +230,103 @@ export function ProductForm({
                   : "Choose image"
               }
             />
+          </Field>
+          <Field className="gap-1.5">
+            <ImageFileInput
+              id="pf-barcode"
+              label="Barcode"
+              variant="image"
+              value={barcodeFile}
+              onChange={(file) => {
+                setBarcodeFile(file);
+                if (file) setRemoveStoredBarcode(false);
+              }}
+              existingObjectKey={storedBarcodeKey}
+              onRemoveStored={
+                defaultValues.barcodeKey
+                  ? () => {
+                      setRemoveStoredBarcode(true);
+                      setBarcodeFile(null);
+                    }
+                  : undefined
+              }
+              chooseLabel={
+                defaultValues.barcodeKey && !removeStoredBarcode
+                  ? "Replace barcode"
+                  : "Choose barcode"
+              }
+              removeStoredLabel="Remove barcode"
+            />
+          </Field>
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor="pf-packaging">Packaging</FieldLabel>
+            <FieldContent>
+              <Input
+                ref={packagingInputRef}
+                id="pf-packaging"
+                type="file"
+                disabled={isSubmitting}
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  setPackagingFile(file);
+                  if (file) setRemoveStoredPackaging(false);
+                }}
+              />
+              {packagingDisplayName ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">File:</span>
+                  <span className="break-all font-medium">{packagingDisplayName}</span>
+                  {storedPackagingKey ? (
+                    <StorageObjectLink reference={storedPackagingKey} label="Open file" />
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {defaultValues.packagingKey && !packagingFile && !removeStoredPackaging ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      void (async () => {
+                        const ok = await confirm({
+                          title: "Remove this packaging file?",
+                          description:
+                            "The stored packaging file will be cleared when you save this product.",
+                          confirmLabel: "Remove",
+                          variant: "destructive",
+                        });
+                        if (!ok) return;
+                        setRemoveStoredPackaging(true);
+                        setPackagingFile(null);
+                        if (packagingInputRef.current) {
+                          packagingInputRef.current.value = "";
+                        }
+                      })();
+                    }}
+                  >
+                    Remove packaging
+                  </Button>
+                ) : null}
+                {packagingFile ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      setPackagingFile(null);
+                      if (packagingInputRef.current) {
+                        packagingInputRef.current.value = "";
+                      }
+                    }}
+                  >
+                    Clear new file
+                  </Button>
+                ) : null}
+              </div>
+            </FieldContent>
           </Field>
         </FieldGroup>
       </FieldSet>
