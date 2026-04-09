@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client"
   output   = "../app/generated/prisma"
@@ -12,21 +10,239 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  posts     Post[]
+enum SaleChannelType {
+  distributor
+  amazon
+  cjdropshipping
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  published Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  authorId  String?
-  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+/// Row kind for `PurchaseOrder`: distributor PO vs internal stock order (same table).
+enum PurchaseOrderType {
+  distributor
+  stock
+}
+
+/// Distributor / logistics lifecycle on the purchase order
+enum PurchaseOrderStatus {
+  open
+  in_transit
+  closed
+}
+
+/// Manufacturing workflow status on the manufacturing order
+enum ManufacturingOrderStatus {
+  open
+  ready_to_ship
+  shipped
+  in_transit
+  delivered
+  invoiced
+  paid
+  closed
+}
+
+enum ManufacturingOrderManufacturerStatus {
+  initial
+  deposit_paid
+  manufacturing
+  balance_paid
+  ready_to_pickup
+}
+
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  keycloakSub String   @unique @db.Uuid
+  email       String   @unique
+  name        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  manufacturersCreated                    Manufacturer[]                       @relation("ManufacturerCreatedBy")
+  saleChannelsCreated                     SaleChannel[]                        @relation("SaleChannelCreatedBy")
+  productsCreated                         Product[]                            @relation("ProductCreatedBy")
+  invoicesCreated                         Invoice[]                            @relation("InvoiceCreatedBy")
+  purchaseOrdersCreated                   PurchaseOrder[]                      @relation("PurchaseOrderCreatedBy")
+  purchaseOrderLinesCreated               PurchaseOrderLine[]                  @relation("POLineCreatedBy")
+  manufacturingOrdersCreated              ManufacturingOrder[]                 @relation("ManufacturingOrderCreatedBy")
+  manufacturingOrderManufacturersCreated  ManufacturingOrderManufacturer[]     @relation("MOManufacturerCreatedBy")
+  manufacturingShippingsCreated           ManufacturingShipping[]              @relation("ManufacturingShippingCreatedBy")
+  manufacturingOrderPurchaseOrderLinesCreated ManufacturingOrderPurchaseOrderLine[] @relation("MOPurchaseOrderLineCreatedBy")
+}
+
+model Manufacturer {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  logoKey     String?
+  region      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String   @db.Uuid
+  createdBy   User     @relation("ManufacturerCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  productsAsDefault Product[] @relation("ProductDefaultManufacturer")
+  onManufacturingOrders ManufacturingOrderManufacturer[]
+  onMoLines         ManufacturingOrderPurchaseOrderLine[]
+}
+
+model SaleChannel {
+  id          String          @id @default(uuid()) @db.Uuid
+  name        String
+  logoKey     String?
+  type        SaleChannelType
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  createdById String          @db.Uuid
+  createdBy   User            @relation("SaleChannelCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  purchaseOrders              PurchaseOrder[]
+}
+
+model Product {
+  id                    String       @id @default(uuid()) @db.Uuid
+  name                  String
+  sku                   String       @unique
+  imageKey              String?
+  defaultManufacturerId String       @db.Uuid
+  defaultManufacturer   Manufacturer @relation("ProductDefaultManufacturer", fields: [defaultManufacturerId], references: [id], onDelete: Restrict)
+  verified              Boolean      @default(false)
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
+  createdById           String       @db.Uuid
+  createdBy             User         @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  purchaseOrderLines PurchaseOrderLine[]
+}
+
+model Invoice {
+  id                      String    @id @default(uuid()) @db.Uuid
+  orderDate               DateTime?
+  estimatedCompletionDate DateTime?
+  invoiceNumber           String    @unique
+  documentKey             String?
+  depositPaidAt           DateTime?
+  balancePaidAt           DateTime?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  createdById             String    @db.Uuid
+  createdBy               User      @relation("InvoiceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  manufacturingOrderManufacturer ManufacturingOrderManufacturer?
+}
+
+model PurchaseOrder {
+  id            String              @id @default(uuid()) @db.Uuid
+  number        Int                 @unique @default(autoincrement())
+  name          String
+  type          PurchaseOrderType   @default(distributor)
+  status        PurchaseOrderStatus @default(open)
+  documentKey   String?
+  saleChannelId String?             @db.Uuid
+  saleChannel   SaleChannel?        @relation(fields: [saleChannelId], references: [id], onDelete: Restrict)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  createdById   String              @db.Uuid
+  createdBy     User                @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  lines                        PurchaseOrderLine[]
+  manufacturingOrderPurchaseOrders ManufacturingOrderPurchaseOrder[]
+}
+
+model PurchaseOrderLine {
+  id              String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId String   @db.Uuid
+  productId       String   @db.Uuid
+  quantity        Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdById     String   @db.Uuid
+  createdBy       User     @relation("POLineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  manufacturingOrderLines ManufacturingOrderPurchaseOrderLine[]
+}
+
+model ManufacturingOrder {
+  id           String                   @id @default(uuid()) @db.Uuid
+  number       Int                      @unique @default(autoincrement())
+  name         String
+  status       ManufacturingOrderStatus @default(open)
+  documentKey  String?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  createdById  String                   @db.Uuid
+  createdBy    User                     @relation("ManufacturingOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  manufacturers ManufacturingOrderManufacturer[]
+  purchaseOrders  ManufacturingOrderPurchaseOrder[]
+  lineAllocations ManufacturingOrderPurchaseOrderLine[]
+  manufacturingOrderShippings ManufacturingOrderManufacturingShipping[]
+}
+
+model ManufacturingOrderManufacturer {
+  manufacturingOrderId String                           @db.Uuid
+  manufacturerId       String                           @db.Uuid
+  status               ManufacturingOrderManufacturerStatus @default(initial)
+  invoiceId            String?                          @unique @db.Uuid
+  createdAt            DateTime                         @default(now())
+  updatedAt            DateTime                         @updatedAt
+  createdById          String                           @db.Uuid
+  createdBy            User                             @relation("MOManufacturerCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  manufacturingOrder ManufacturingOrder @relation(fields: [manufacturingOrderId], references: [id], onDelete: Cascade)
+  manufacturer       Manufacturer       @relation(fields: [manufacturerId], references: [id], onDelete: Restrict)
+  invoice            Invoice?           @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+
+  @@id([manufacturingOrderId, manufacturerId])
+}
+
+model ManufacturingOrderPurchaseOrder {
+  manufacturingOrderId String @db.Uuid
+  purchaseOrderId    String @db.Uuid
+
+  manufacturingOrder ManufacturingOrder @relation(fields: [manufacturingOrderId], references: [id], onDelete: Cascade)
+  purchaseOrder      PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@id([manufacturingOrderId, purchaseOrderId])
+}
+
+model ManufacturingShipping {
+  id                 String   @id @default(uuid()) @db.Uuid
+  trackingNumber     String
+  shippedAt          DateTime
+  invoiceDocumentKey String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  createdById        String   @db.Uuid
+  createdBy          User     @relation("ManufacturingShippingCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  manufacturingOrders ManufacturingOrderManufacturingShipping[]
+}
+
+model ManufacturingOrderManufacturingShipping {
+  manufacturingOrderId   String @db.Uuid
+  manufacturingShippingId String @db.Uuid
+
+  manufacturingOrder   ManufacturingOrder   @relation(fields: [manufacturingOrderId], references: [id], onDelete: Cascade)
+  manufacturingShipping ManufacturingShipping @relation(fields: [manufacturingShippingId], references: [id], onDelete: Cascade)
+
+  @@id([manufacturingOrderId, manufacturingShippingId])
+}
+
+model ManufacturingOrderPurchaseOrderLine {
+  manufacturingOrderId   String   @db.Uuid
+  purchaseOrderLineId    String   @db.Uuid
+  manufacturerId         String   @db.Uuid
+  verified               Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  createdById            String   @db.Uuid
+  createdBy              User     @relation("MOPurchaseOrderLineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  manufacturingOrder ManufacturingOrder @relation(fields: [manufacturingOrderId], references: [id], onDelete: Cascade)
+  purchaseOrderLine  PurchaseOrderLine  @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Cascade)
+  manufacturer       Manufacturer       @relation(fields: [manufacturerId], references: [id], onDelete: Restrict)
+
+  @@id([manufacturingOrderId, purchaseOrderLineId])
 }
