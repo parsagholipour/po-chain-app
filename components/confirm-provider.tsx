@@ -7,6 +7,7 @@ import {
   DialogClose,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -40,7 +41,10 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [options, setOptions] = React.useState<ConfirmOptions | null>(null);
   const pendingRef = React.useRef<((value: boolean) => void) | null>(null);
   const openRef = React.useRef(open);
-  openRef.current = open;
+
+  React.useEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   const confirm = React.useCallback((opts: ConfirmOptions) => {
     if (pendingRef.current !== null) {
@@ -85,21 +89,27 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
         onOpenChange={handleOpenChange}
         onOpenChangeComplete={handleOpenChangeComplete}
       >
-        <DialogContent showCloseButton={false}>
+        <DialogContent showCloseButton={false} disableCloseAnimation>
           {options ? (
             <>
-              <DialogHeader>
+              <DialogHeader
+                className={options.description ? undefined : "border-b-0 pb-1"}
+              >
                 <DialogTitle>{options.title}</DialogTitle>
                 {options.description ? (
                   <DialogDescription>{options.description}</DialogDescription>
                 ) : null}
               </DialogHeader>
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                <DialogClose type="button" render={<Button variant="outline" />}>
+              <DialogFooter className="mx-0 mb-0 rounded-none border-t-0 bg-transparent p-0 pt-3 pb-1">
+                <DialogClose
+                  type="button"
+                  render={<Button variant="outline" className="active:translate-y-0" />}
+                >
                   {cancelLabel}
                 </DialogClose>
                 <Button
                   type="button"
+                  className="active:translate-y-0"
                   variant={
                     options.variant === "destructive"
                       ? "destructive"
@@ -109,7 +119,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
                 >
                   {options.confirmLabel}
                 </Button>
-              </div>
+              </DialogFooter>
             </>
           ) : null}
         </DialogContent>

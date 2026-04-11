@@ -7,6 +7,13 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
+function isDialogSectionChild(
+  child: React.ReactNode,
+  component: React.JSXElementConstructor<unknown>
+) {
+  return React.isValidElement(child) && child.type === component
+}
+
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
@@ -43,29 +50,71 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  style,
+  disableCloseAnimation = false,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  disableCloseAnimation?: boolean
 }) {
+  const childArray = React.Children.toArray(children)
+  let bodyStartIndex = 0
+
+  while (
+    bodyStartIndex < childArray.length &&
+    isDialogSectionChild(childArray[bodyStartIndex], DialogHeader)
+  ) {
+    bodyStartIndex += 1
+  }
+
+  let bodyEndIndex = childArray.length
+
+  while (
+    bodyEndIndex > bodyStartIndex &&
+    isDialogSectionChild(childArray[bodyEndIndex - 1], DialogFooter)
+  ) {
+    bodyEndIndex -= 1
+  }
+
+  const headerChildren = childArray.slice(0, bodyStartIndex)
+  const bodyChildren = childArray.slice(bodyStartIndex, bodyEndIndex)
+  const footerChildren = childArray.slice(bodyEndIndex)
+
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay
+        className={disableCloseAnimation ? "data-closed:animation-duration-0" : undefined}
+      />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 flex flex-col max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          disableCloseAnimation && "data-closed:animation-duration-0",
           className
         )}
+        style={{ ...style, overflow: "hidden", overflowX: "hidden", overflowY: "hidden" }}
         {...props}
       >
-        {children}
+        {headerChildren}
+        {bodyChildren.length > 0 ? (
+          <div
+            data-slot="dialog-body"
+            className={cn(
+              "-mx-4 min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-4",
+              headerChildren.length > 0 && "pt-4"
+            )}
+          >
+            {bodyChildren}
+          </div>
+        ) : null}
+        {footerChildren}
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
             render={
               <Button
                 variant="ghost"
-                className="absolute top-2 right-2"
+                className="absolute top-3 right-3 z-20"
                 size="icon-sm"
               />
             }
@@ -84,7 +133,10 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2", className)}
+      className={cn(
+        "-mx-4 -mt-4 flex shrink-0 flex-col gap-2 border-b bg-popover px-4 pt-4 pb-4 pr-12",
+        className
+      )}
       {...props}
     />
   )

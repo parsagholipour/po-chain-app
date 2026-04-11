@@ -17,12 +17,6 @@ import {
 
 const links = [
   {
-    href: "/manufacturing-orders",
-    title: "Manufacturing orders",
-    description: "Factories, invoices, shipments, and PO line allocations.",
-    icon: FileText,
-  },
-  {
     href: "/purchase-orders-overview",
     title: "Purchase orders",
     description: "Distributor orders by channel and logistics status.",
@@ -33,6 +27,12 @@ const links = [
     title: "Stock orders",
     description: "Internal replenishment orders (same data model as POs, separate UI).",
     icon: Warehouse,
+  }, 
+  {
+    href: "/manufacturing-orders",
+    title: "Manufacturing orders",
+    description: "Factories, invoices, shipments, and PO line allocations.",
+    icon: FileText,
   },
   {
     href: "/manufacturers",

@@ -75,14 +75,14 @@ export function LineItemCard({
   return (
     <article
       className={cn(
-        "flex flex-col items-center border border-border/80 bg-card text-center shadow-sm",
+        "group/card flex flex-col items-center border border-border/80 bg-card text-center shadow-sm",
         compact ? "gap-2 rounded-lg p-2" : "gap-3 rounded-xl p-4",
         className,
       )}
     >
       <div
         className={cn(
-          "group/image relative w-full",
+          "relative w-full",
           compact ? "max-w-[4.5rem]" : "max-w-[200px]",
         )}
       >
@@ -100,7 +100,7 @@ export function LineItemCard({
             className={cn(
               "pointer-events-none absolute inset-0 flex items-start justify-end transition-opacity",
               compact ? "p-1" : "p-1.5",
-              "opacity-100 sm:opacity-0 sm:group-hover/image:opacity-100 sm:group-focus-within/image:opacity-100",
+              "opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 sm:group-focus-within/card:opacity-100",
             )}
           >
             <Button

@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/axios";
@@ -25,12 +25,16 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { Plus } from "lucide-react";
+import { toast } from "sonner";
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { cn } from "@/lib/utils";
-import type { Manufacturer, PurchaseOrderSummary, SaleChannel } from "@/lib/types/api";
+import type { Manufacturer, Product, PurchaseOrderSummary, SaleChannel } from "@/lib/types/api";
 import {
   distributorPoStatusLabels,
   distributorPoStatuses,
 } from "@/lib/po/status-labels";
+import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
+import type { ProductFormValues } from "@/components/po/products/product-form";
 import {
   ExpandableOrderSummaryRow,
   ExpandableOrderSummaryTableHead,
@@ -42,6 +46,7 @@ const poListKey = ["purchase-orders", "list"] as const;
 const poOpenCountsKey = ["purchase-orders", "open-counts"] as const;
 const saleChannelsKey = ["sale-channels"] as const;
 const manufacturersKey = ["manufacturers"] as const;
+const productsKey = ["products"] as const;
 
 /** Subtab value: list POs across all sale channels or all manufacturers (no scope filter). */
 export const PO_LIST_ALL_SCOPE_ID = "__all__";
@@ -195,6 +200,7 @@ function PoListFiltersAndTable({
   data,
   emptyNoScopeMessage,
   emptyFilteredMessage,
+  onEditProduct,
 }: {
   q: string;
   onQChange: (value: string) => void;
@@ -205,6 +211,7 @@ function PoListFiltersAndTable({
   data: PurchaseOrderSummary[];
   emptyNoScopeMessage: string;
   emptyFilteredMessage: string;
+  onEditProduct?: (product: Product) => void;
 }) {
   return (
     <>
@@ -268,7 +275,12 @@ function PoListFiltersAndTable({
               </TableRow>
             ) : (
               data.map((row) => (
-                <ExpandableOrderSummaryRow key={row.id} row={row} apiScope="purchase-orders" />
+                <ExpandableOrderSummaryRow
+                  key={row.id}
+                  row={row}
+                  apiScope="purchase-orders"
+                  onEditProduct={onEditProduct}
+                />
               ))
             )}
           </TableBody>
@@ -279,6 +291,7 @@ function PoListFiltersAndTable({
 }
 
 export function PurchaseOrdersListView() {
+  const qc = useQueryClient();
   const [perspective, setPerspective] = useState<Perspective>("sale_channels");
   const [selectedSaleChannelId, setSelectedSaleChannelId] = useState<string>(
     PO_LIST_ALL_SCOPE_ID,
@@ -289,6 +302,8 @@ export function PurchaseOrdersListView() {
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [productEditOpen, setProductEditOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -381,6 +396,53 @@ export function PurchaseOrdersListView() {
     },
   });
 
+  const updateProduct = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
+      const { data } = await api.patch<Product>(`/api/products/${id}`, body);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: productsKey });
+      qc.invalidateQueries({ queryKey: poListKey });
+      toast.success("Product updated");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  async function saveProduct(payload: {
+    id?: string;
+    values: ProductFormValues;
+    patchImageKey: boolean;
+    patchBarcodeKey: boolean;
+    patchPackagingKey: boolean;
+  }) {
+    if (!payload.id) return;
+    const body: Record<string, unknown> = {
+      name: payload.values.name,
+      sku: payload.values.sku,
+      defaultManufacturerId: payload.values.defaultManufacturerId,
+      verified: payload.values.verified,
+    };
+    if (payload.patchImageKey) {
+      body.imageKey = payload.values.imageKey;
+    }
+    if (payload.patchBarcodeKey) {
+      body.barcodeKey = payload.values.barcodeKey;
+    }
+    if (payload.patchPackagingKey) {
+      body.packagingKey = payload.values.packagingKey;
+    }
+    await updateProduct.mutateAsync({ id: payload.id, body });
+  }
+
+  const onEditProduct =
+    manufacturers.length > 0
+      ? (product: Product) => {
+          setEditingProduct(product);
+          setProductEditOpen(true);
+        }
+      : undefined;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -450,6 +512,7 @@ export function PurchaseOrdersListView() {
                     ? "No purchase orders match your filters."
                     : "No purchase orders for this channel match your filters."
                 }
+                onEditProduct={onEditProduct}
               />
             </div>
           </TabsContent>
@@ -478,11 +541,23 @@ export function PurchaseOrdersListView() {
                     ? "No purchase orders match your filters."
                     : "No purchase orders for this manufacturer match your filters."
                 }
+                onEditProduct={onEditProduct}
               />
             </div>
           </TabsContent>
         </Tabs>
       </div>
+
+      <ProductUpsertDialog
+        open={productEditOpen}
+        onOpenChange={(o) => {
+          setProductEditOpen(o);
+          if (!o) setEditingProduct(null);
+        }}
+        editing={editingProduct}
+        manufacturers={manufacturers}
+        onSave={saveProduct}
+      />
     </div>
   );
 }

@@ -9,6 +9,11 @@ import {
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-include";
+import {
+  findLinesMissingProductAssets,
+  formatMissingProductAssetsError,
+} from "@/lib/mo-product-assets";
+import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 
 export const runtime = "nodejs";
 
@@ -56,6 +61,18 @@ export async function GET(request: Request) {
         },
         orderBy: { manufacturer: { name: "asc" } },
       },
+      manufacturingOrderShippings: {
+        select: {
+          shipping: {
+            select: {
+              id: true,
+              status: true,
+              type: true,
+              trackingNumber: true,
+            },
+          },
+        },
+      },
     },
   });
   return NextResponse.json(
@@ -69,6 +86,12 @@ export async function GET(request: Request) {
         manufacturerId: m.manufacturerId,
         name: m.manufacturer.name,
         status: m.status,
+      })),
+      shippingBadges: r.manufacturingOrderShippings.map((s) => ({
+        id: s.shipping.id,
+        status: s.shipping.status,
+        type: s.shipping.type,
+        trackingNumber: s.shipping.trackingNumber,
       })),
     })),
   );
@@ -111,15 +134,49 @@ export async function POST(request: Request) {
         manufacturerById.set(m.manufacturerId, { status: m.status });
       }
 
-      let poLines: { id: string; product: { defaultManufacturerId: string } }[] = [];
+      let poLines: {
+        id: string;
+        product: {
+          defaultManufacturerId: string;
+          name: string;
+          sku: string;
+          barcodeKey: string | null;
+          packagingKey: string | null;
+        };
+        purchaseOrder: { number: number; name: string; type: "distributor" | "stock" };
+      }[] = [];
       if (purchaseOrderIds.length > 0) {
         poLines = await tx.purchaseOrderLine.findMany({
           where: { purchaseOrderId: { in: purchaseOrderIds } },
           select: {
             id: true,
-            product: { select: { defaultManufacturerId: true } },
+            product: {
+              select: {
+                defaultManufacturerId: true,
+                name: true,
+                sku: true,
+                barcodeKey: true,
+                packagingKey: true,
+              },
+            },
+            purchaseOrder: {
+              select: {
+                number: true,
+                name: true,
+                type: true,
+              },
+            },
           },
         });
+        const missingProductAssets = findLinesMissingProductAssets(poLines);
+        if (missingProductAssets.length > 0) {
+          throw new Error(
+            formatMissingProductAssetsError(
+              missingProductAssets,
+              "Cannot create this manufacturing order",
+            ),
+          );
+        }
         for (const line of poLines) {
           const dm = line.product.defaultManufacturerId;
           if (!manufacturerById.has(dm)) {
@@ -178,7 +235,9 @@ export async function POST(request: Request) {
       where: { id: result },
       include: manufacturingOrderDetailInclude,
     });
-    return NextResponse.json(full, { status: 201 });
+    return NextResponse.json(full ? manufacturingOrderDetailFromPrisma(full) : null, {
+      status: 201,
+    });
   } catch (e) {
     if (e instanceof Error) {
       if (e.message === "PO_NOT_FOUND") {
@@ -186,6 +245,9 @@ export async function POST(request: Request) {
       }
       if (e.message === "MANUFACTURER_NOT_FOUND") {
         return jsonError("One or more manufacturers were not found", 400);
+      }
+      if (e.message.startsWith("Cannot create this manufacturing order")) {
+        return jsonError(e.message, 400);
       }
     }
     const j = jsonFromPrisma(e);

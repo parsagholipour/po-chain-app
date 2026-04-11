@@ -6,7 +6,94 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+type AutoSelectItem = {
+  value: unknown
+  label: React.ReactNode
+}
+
+function collectSelectItems(children: React.ReactNode, items: AutoSelectItem[] = []) {
+  React.Children.forEach(children, (child) => {
+    if (!React.isValidElement(child)) {
+      return
+    }
+
+    if (child.type === SelectItem) {
+      const { value, children: label } = child.props as {
+        value?: unknown
+        children?: React.ReactNode
+      }
+
+      if (value !== undefined) {
+        items.push({ value, label })
+      }
+      return
+    }
+
+    const childChildren = (child.props as { children?: React.ReactNode }).children
+    if (childChildren) {
+      collectSelectItems(childChildren, items)
+    }
+  })
+
+  return items
+}
+
+function hasSelectValue(children: React.ReactNode): boolean {
+  let found = false
+
+  React.Children.forEach(children, (child) => {
+    if (found || !React.isValidElement(child)) {
+      return
+    }
+
+    if (child.type === SelectValue) {
+      found = true
+      return
+    }
+
+    const childChildren = (child.props as { children?: React.ReactNode }).children
+    if (childChildren && hasSelectValue(childChildren)) {
+      found = true
+    }
+  })
+
+  return found
+}
+
+function Select<Value, Multiple extends boolean | undefined = false>({
+  children,
+  items,
+  ...props
+}: SelectPrimitive.Root.Props<Value, Multiple>) {
+  const inferredItems = items == null ? collectSelectItems(children) : undefined
+  const resolvedItems =
+    items ?? (inferredItems && inferredItems.length > 0 ? inferredItems : undefined)
+  const warnedRef = React.useRef(false)
+
+  React.useEffect(() => {
+    if (process.env.NODE_ENV === "production") {
+      return
+    }
+
+    if (warnedRef.current || items != null || resolvedItems != null || !hasSelectValue(children)) {
+      return
+    }
+
+    warnedRef.current = true
+    console.warn(
+      "Select missing `items` prop and could not infer labels from `SelectItem` children. `SelectValue` may render raw values.",
+    )
+  }, [children, items, resolvedItems])
+
+  return (
+    <SelectPrimitive.Root
+      items={resolvedItems as SelectPrimitive.Root.Props<Value, Multiple>["items"]}
+      {...props}
+    >
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

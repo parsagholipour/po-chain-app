@@ -18,7 +18,23 @@ export const manufacturingOrderDetailInclude = {
   },
   manufacturingOrderShippings: {
     include: {
-      manufacturingShipping: true,
+      shipping: {
+        include: {
+          logisticsPartner: true,
+          manufacturingOrderShippings: {
+            include: {
+              manufacturingOrder: {
+                select: {
+                  id: true,
+                  number: true,
+                  name: true,
+                  status: true,
+                },
+              },
+            },
+          },
+        },
+      },
     },
   },
 } as const;

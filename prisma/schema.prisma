@@ -34,8 +34,6 @@ enum ManufacturingOrderStatus {
   open
   ready_to_ship
   shipped
-  in_transit
-  delivered
   invoiced
   paid
   closed
@@ -47,6 +45,25 @@ enum ManufacturingOrderManufacturerStatus {
   manufacturing
   balance_paid
   ready_to_pickup
+  picked_up
+}
+
+enum ShippingType {
+  manufacturing_order
+  purchase_order
+  stock_order
+}
+
+enum ShippingStatus {
+  pending
+  in_transit
+  delivered
+  cancelled
+}
+
+enum LogisticsPartnerType {
+  freight_forwarder
+  carrier
 }
 
 model User {
@@ -65,7 +82,8 @@ model User {
   purchaseOrderLinesCreated               PurchaseOrderLine[]                  @relation("POLineCreatedBy")
   manufacturingOrdersCreated              ManufacturingOrder[]                 @relation("ManufacturingOrderCreatedBy")
   manufacturingOrderManufacturersCreated  ManufacturingOrderManufacturer[]     @relation("MOManufacturerCreatedBy")
-  manufacturingShippingsCreated           ManufacturingShipping[]              @relation("ManufacturingShippingCreatedBy")
+  logisticsPartnersCreated                LogisticsPartner[]                   @relation("LogisticsPartnerCreatedBy")
+  shippingsCreated                        Shipping[]                           @relation("ShippingCreatedBy")
   manufacturingOrderPurchaseOrderLinesCreated ManufacturingOrderPurchaseOrderLine[] @relation("MOPurchaseOrderLineCreatedBy")
 }
 
@@ -147,6 +165,7 @@ model PurchaseOrder {
 
   lines                        PurchaseOrderLine[]
   manufacturingOrderPurchaseOrders ManufacturingOrderPurchaseOrder[]
+  purchaseOrderShippings       PurchaseOrderShipping[]
 }
 
 model PurchaseOrderLine {
@@ -179,7 +198,7 @@ model ManufacturingOrder {
   manufacturers ManufacturingOrderManufacturer[]
   purchaseOrders  ManufacturingOrderPurchaseOrder[]
   lineAllocations ManufacturingOrderPurchaseOrderLine[]
-  manufacturingOrderShippings ManufacturingOrderManufacturingShipping[]
+  manufacturingOrderShippings ManufacturingOrderShipping[]
 }
 
 model ManufacturingOrderManufacturer {
@@ -187,6 +206,22 @@ model ManufacturingOrderManufacturer {
   manufacturerId       String                           @db.Uuid
   status               ManufacturingOrderManufacturerStatus @default(initial)
   invoiceId            String?                          @unique @db.Uuid
+
+  depositPaidAt           DateTime? @map("deposit_paid_at")
+  depositPaidAmount       Decimal?  @db.Decimal(12, 2) @map("deposit_paid_amount")
+  depositTrackingNumber   String?   @map("deposit_tracking_number")
+  depositDocumentKey      String?   @map("deposit_document_key")
+
+  manufacturingStartedAt  DateTime? @map("manufacturing_started_at")
+
+  balancePaidAt           DateTime? @map("balance_paid_at")
+  balancePaidAmount       Decimal?  @db.Decimal(12, 2) @map("balance_paid_amount")
+  balanceTrackingNumber   String?   @map("balance_tracking_number")
+  balanceDocumentKey      String?   @map("balance_document_key")
+
+  readyAt                 DateTime? @map("ready_at")
+  pickedUpAt              DateTime? @map("picked_up_at")
+
   createdAt            DateTime                         @default(now())
   updatedAt            DateTime                         @updatedAt
   createdById          String                           @db.Uuid
@@ -209,27 +244,59 @@ model ManufacturingOrderPurchaseOrder {
   @@id([manufacturingOrderId, purchaseOrderId])
 }
 
-model ManufacturingShipping {
-  id                 String   @id @default(uuid()) @db.Uuid
-  trackingNumber     String
-  shippedAt          DateTime
-  invoiceDocumentKey String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  createdById        String   @db.Uuid
-  createdBy          User     @relation("ManufacturingShippingCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+model LogisticsPartner {
+  id            String               @id @default(uuid()) @db.Uuid
+  name          String
+  logoKey       String?
+  contactNumber String?
+  link          String?
+  type          LogisticsPartnerType
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  createdById   String               @db.Uuid
+  createdBy     User                 @relation("LogisticsPartnerCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  manufacturingOrders ManufacturingOrderManufacturingShipping[]
+  shippings Shipping[]
 }
 
-model ManufacturingOrderManufacturingShipping {
-  manufacturingOrderId   String @db.Uuid
-  manufacturingShippingId String @db.Uuid
+model Shipping {
+  id                 String         @id @default(uuid()) @db.Uuid
+  type               ShippingType
+  status             ShippingStatus @default(pending)
+  trackingNumber     String
+  shippedAt          DateTime?
+  trackingLink       String?
+  notes              String?
+  invoiceDocumentKey String?
+  logisticsPartnerId String?        @db.Uuid
+  logisticsPartner   LogisticsPartner? @relation(fields: [logisticsPartnerId], references: [id], onDelete: SetNull)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  createdById        String         @db.Uuid
+  createdBy          User           @relation("ShippingCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  manufacturingOrder   ManufacturingOrder   @relation(fields: [manufacturingOrderId], references: [id], onDelete: Cascade)
-  manufacturingShipping ManufacturingShipping @relation(fields: [manufacturingShippingId], references: [id], onDelete: Cascade)
+  manufacturingOrderShippings ManufacturingOrderShipping[]
+  purchaseOrderShippings      PurchaseOrderShipping[]
+}
 
-  @@id([manufacturingOrderId, manufacturingShippingId])
+model ManufacturingOrderShipping {
+  manufacturingOrderId String @db.Uuid
+  shippingId           String @db.Uuid
+
+  manufacturingOrder ManufacturingOrder @relation(fields: [manufacturingOrderId], references: [id], onDelete: Cascade)
+  shipping           Shipping           @relation(fields: [shippingId], references: [id], onDelete: Cascade)
+
+  @@id([manufacturingOrderId, shippingId])
+}
+
+model PurchaseOrderShipping {
+  purchaseOrderId String @db.Uuid
+  shippingId      String @db.Uuid
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  shipping      Shipping      @relation(fields: [shippingId], references: [id], onDelete: Cascade)
+
+  @@id([purchaseOrderId, shippingId])
 }
 
 model ManufacturingOrderPurchaseOrderLine {

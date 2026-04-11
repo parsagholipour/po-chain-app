@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,81 @@ import type { MoManufacturerPivot } from "@/lib/types/api";
 import { formatInvoiceDate } from "@/lib/po/invoice-form";
 import { PoDocumentLink } from "@/components/po/purchase-order/po-document-link";
 import { moManufacturerStatuses, moStatusLabels } from "@/lib/po/status-labels";
+import { Pencil } from "lucide-react";
+
+function formatAmount(v: string | number | null): string {
+  if (v == null) return "—";
+  const n = typeof v === "string" ? parseFloat(v) : v;
+  return isNaN(n) ? "—" : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function PivotStepDetails({ row, onEdit }: { row: MoManufacturerPivot; onEdit?: () => void }) {
+  const entries: { label: string; value: React.ReactNode }[] = [];
+
+  if (row.depositPaidAt) {
+    entries.push({ label: "Deposit paid at", value: formatInvoiceDate(row.depositPaidAt) });
+  }
+  if (row.depositPaidAmount != null) {
+    entries.push({ label: "Deposit amount", value: formatAmount(row.depositPaidAmount) });
+  }
+  if (row.depositTrackingNumber) {
+    entries.push({ label: "Deposit tracking #", value: row.depositTrackingNumber });
+  }
+  if (row.depositDocumentKey) {
+    entries.push({ label: "Deposit document", value: <PoDocumentLink documentKey={row.depositDocumentKey} /> });
+  }
+  if (row.manufacturingStartedAt) {
+    entries.push({ label: "Manufacturing started", value: formatInvoiceDate(row.manufacturingStartedAt) });
+  }
+  if (row.balancePaidAt) {
+    entries.push({ label: "Balance paid at", value: formatInvoiceDate(row.balancePaidAt) });
+  }
+  if (row.balancePaidAmount != null) {
+    entries.push({ label: "Balance amount", value: formatAmount(row.balancePaidAmount) });
+  }
+  if (row.balanceTrackingNumber) {
+    entries.push({ label: "Balance tracking #", value: row.balanceTrackingNumber });
+  }
+  if (row.balanceDocumentKey) {
+    entries.push({ label: "Balance document", value: <PoDocumentLink documentKey={row.balanceDocumentKey} /> });
+  }
+  if (row.readyAt) {
+    entries.push({ label: "Ready at", value: formatInvoiceDate(row.readyAt) });
+  }
+  if (row.pickedUpAt) {
+    entries.push({ label: "Picked up at", value: formatInvoiceDate(row.pickedUpAt) });
+  }
+
+  if (entries.length === 0) return null;
+
+  return (
+    <>
+      <Separator />
+      <div className="flex items-start justify-between gap-2">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+          {entries.map((e) => (
+            <Fragment key={e.label}>
+              <dt className="text-muted-foreground">{e.label}</dt>
+              <dd>{e.value}</dd>
+            </Fragment>
+          ))}
+        </dl>
+        {onEdit ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7 shrink-0"
+            onClick={onEdit}
+          >
+            <Pencil className="size-3.5" />
+            <span className="sr-only">Edit step details</span>
+          </Button>
+        ) : null}
+      </div>
+    </>
+  );
+}
 
 const pivotStatusSelectItems = moManufacturerStatuses.map((s) => ({
   value: s,
@@ -36,6 +112,7 @@ type Props = {
   onPivotStatusChange: (manufacturerId: string, status: string) => void;
   onCreateInvoice: (row: MoManufacturerPivot) => void;
   onEditInvoice: (row: MoManufacturerPivot) => void;
+  onEditStepDetails?: (row: MoManufacturerPivot) => void;
   /** Hide the section H2 when a parent provides the title (e.g. collapsible). */
   hideHeading?: boolean;
 };
@@ -45,6 +122,7 @@ export function PoManufacturersSection({
   onPivotStatusChange,
   onCreateInvoice,
   onEditInvoice,
+  onEditStepDetails,
   hideHeading = false,
 }: Props) {
   return (
@@ -131,6 +209,10 @@ export function PoManufacturersSection({
                   Create invoice
                 </Button>
               )}
+              <PivotStepDetails
+                row={row}
+                onEdit={onEditStepDetails ? () => onEditStepDetails(row) : undefined}
+              />
             </CardContent>
           </Card>
         ))}

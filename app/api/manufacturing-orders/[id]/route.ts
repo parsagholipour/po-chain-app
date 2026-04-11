@@ -5,6 +5,7 @@ import { manufacturingOrderPatchSchema } from "@/lib/validations/manufacturing-o
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-include";
+import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ export async function GET(
     include: manufacturingOrderDetailInclude,
   });
   if (!row) return jsonError("Not found", 404);
-  return NextResponse.json(row);
+  return NextResponse.json(manufacturingOrderDetailFromPrisma(row));
 }
 
 export async function PATCH(
@@ -63,7 +64,7 @@ export async function PATCH(
       where: { id: pid.data.id },
       include: manufacturingOrderDetailInclude,
     });
-    return NextResponse.json(row);
+    return NextResponse.json(row ? manufacturingOrderDetailFromPrisma(row) : null);
   } catch (e) {
     const j = jsonFromPrisma(e);
     if (j) return j;
@@ -101,16 +102,16 @@ export async function DELETE(
         await tx.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
       }
 
-      const shippingJoins = await tx.manufacturingOrderManufacturingShipping.findMany({
+      const shippingJoins = await tx.manufacturingOrderShipping.findMany({
         where: { manufacturingOrderId: pid.data.id },
-        select: { manufacturingShippingId: true },
+        select: { shippingId: true },
       });
-      for (const { manufacturingShippingId } of shippingJoins) {
-        const linkCount = await tx.manufacturingOrderManufacturingShipping.count({
-          where: { manufacturingShippingId },
+      for (const { shippingId } of shippingJoins) {
+        const linkCount = await tx.manufacturingOrderShipping.count({
+          where: { shippingId },
         });
         if (linkCount === 1) {
-          await tx.manufacturingShipping.delete({ where: { id: manufacturingShippingId } });
+          await tx.shipping.delete({ where: { id: shippingId } });
         }
       }
 

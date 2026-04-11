@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
+import {
+  findLinesMissingProductAssets,
+  formatMissingProductAssetsError,
+} from "@/lib/mo-product-assets";
 import { uploadFileToStorage } from "@/lib/upload-client";
 import { useWizardDocumentUpload } from "@/lib/use-wizard-document-upload";
 import type { Manufacturer, PurchaseOrderDetail } from "@/lib/types/api";
@@ -113,6 +117,20 @@ export function NewManufacturingOrderWizard() {
       requiredManufacturerIds.add(line.product.defaultManufacturerId);
     }
   }
+  const missingProductAssetLines = orderDetailQueries.flatMap((q) => {
+    const order = q.data;
+    if (!order) return [];
+    return findLinesMissingProductAssets(
+      order.lines.map((line) => ({
+        ...line,
+        purchaseOrder: {
+          number: order.number,
+          name: order.name,
+          type: order.type,
+        },
+      })),
+    );
+  });
 
   const orderDefaultsLoading =
     purchaseOrderIdList.length > 0 &&
@@ -174,6 +192,20 @@ export function NewManufacturingOrderWizard() {
   async function handleSubmit() {
     setIsFinishing(true);
     try {
+      if (orderDefaultsLoading) {
+        toast.error("Wait for selected order lines to finish loading");
+        return;
+      }
+      if (missingProductAssetLines.length > 0) {
+        toast.error(
+          formatMissingProductAssetsError(
+            missingProductAssetLines,
+            "Cannot create this manufacturing order",
+          ),
+        );
+        return;
+      }
+
       let key = documentKey;
       if (docFile && !key) {
         try {
@@ -286,6 +318,23 @@ export function NewManufacturingOrderWizard() {
                   Loading default manufacturers from selected order lines…
                 </p>
               ) : null}
+              {missingProductAssetLines.length > 0 ? (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-destructive">
+                    Selected order line products need barcode and packaging before creating an MO:
+                  </p>
+                  <ul className="text-xs text-destructive/80 list-disc list-inside">
+                    {missingProductAssetLines.slice(0, 5).map((line) => (
+                      <li key={`${line.product.sku}`}>
+                        {line.product.sku} - {line.product.name} ({line.missingFields.join(" and ")})
+                      </li>
+                    ))}
+                    {missingProductAssetLines.length > 5 && (
+                      <li>+{missingProductAssetLines.length - 5} more</li>
+                    )}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -366,6 +415,11 @@ export function NewManufacturingOrderWizard() {
                   . Line allocations to those manufacturers are created when you submit.
                 </p>
               ) : null}
+              {missingProductAssetLines.length > 0 ? (
+                <p className="text-xs font-medium text-destructive">
+                  Selected order line products need barcode and packaging before creating an MO.
+                </p>
+              ) : null}
             </div>
           ) : null}
 
@@ -385,7 +439,15 @@ export function NewManufacturingOrderWizard() {
                 <ChevronRight className="size-4" />
               </Button>
             ) : (
-              <Button type="submit" disabled={isFinishing || !name.trim()}>
+              <Button
+                type="submit"
+                disabled={
+                  isFinishing ||
+                  !name.trim() ||
+                  orderDefaultsLoading ||
+                  missingProductAssetLines.length > 0
+                }
+              >
                 {isFinishing ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (

@@ -8,7 +8,7 @@ import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { uploadFileToStorage } from "@/lib/upload-client";
 import { useWizardDocumentUpload } from "@/lib/use-wizard-document-upload";
-import type { Product } from "@/lib/types/api";
+import type { Product, SaleChannel } from "@/lib/types/api";
 import { WizardStepBasics } from "@/components/po/purchase-order-wizard/wizard-step-basics";
 import {
   WizardStepLines,
@@ -17,13 +17,14 @@ import {
   type LineDraft,
 } from "@/components/po/purchase-order-wizard/wizard-step-lines";
 import { WizardStepReview } from "@/components/po/purchase-order-wizard/wizard-step-review";
+import { WizardStepSaleChannels } from "@/components/po/purchase-order-wizard/wizard-step-sale-channels";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const WIZARD_STEPS = ["Basics", "Lines", "Review"] as const;
+const WIZARD_STEPS = ["Basics", "Sale channel", "Lines", "Review"] as const;
 
 export function NewStockOrderWizard() {
   const router = useRouter();
@@ -37,8 +38,27 @@ export function NewStockOrderWizard() {
     onDocFileChange,
     onRetryDocUpload,
   } = useWizardDocumentUpload("purchase-orders");
+  const [saleChannelId, setSaleChannelId] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [isFinishing, setIsFinishing] = useState(false);
+
+  const { data: saleChannels = [] } = useQuery({
+    queryKey: ["sale-channels"],
+    queryFn: async () => {
+      const { data } = await api.get<SaleChannel[]>("/api/sale-channels");
+      return data;
+    },
+  });
+
+  const nonDistributorChannels = saleChannels.filter(
+    (sc) => sc.type !== "distributor",
+  );
+
+  useEffect(() => {
+    if (saleChannelId === "" && nonDistributorChannels.length === 1) {
+      setSaleChannelId(nonDistributorChannels[0].id);
+    }
+  }, [saleChannelId, nonDistributorChannels]);
 
   const { data: products = [] } = useQuery({
     queryKey: ["products"],
@@ -53,6 +73,7 @@ export function NewStockOrderWizard() {
       const { data } = await api.post<{ id: string }>("/api/stock-orders", {
         name: name.trim(),
         documentKey: vars.documentKey,
+        saleChannelId,
         lines: filledLines(lines).map((l) => ({
           productId: l.productId,
           quantity: l.quantity,
@@ -68,7 +89,7 @@ export function NewStockOrderWizard() {
   });
 
   useEffect(() => {
-    if (step !== 1) return;
+    if (step !== 2) return;
     if (products.length === 0) return;
     setLines((prev) => (prev.length > 0 ? prev : [emptyLineDraft()]));
   }, [step, products.length]);
@@ -107,6 +128,7 @@ export function NewStockOrderWizard() {
 
   function canNext(): boolean {
     if (step === 0) return name.trim().length > 0 && !isDocUploading;
+    if (step === 1) return saleChannelId.length > 0;
     return true;
   }
 
@@ -142,8 +164,12 @@ export function NewStockOrderWizard() {
     }
   }
 
+  const saleChannelName =
+    nonDistributorChannels.find((s) => s.id === saleChannelId)?.name ?? null;
+
   const stepDescriptions = [
     "Name the stock order and attach an optional document.",
+    "Choose the sale channel for this stock order.",
     "Add products and quantities.",
     "Confirm and create the stock order.",
   ] as const;
@@ -203,6 +229,14 @@ export function NewStockOrderWizard() {
           ) : null}
 
           {step === 1 ? (
+            <WizardStepSaleChannels
+              saleChannels={nonDistributorChannels}
+              value={saleChannelId}
+              onChange={setSaleChannelId}
+            />
+          ) : null}
+
+          {step === 2 ? (
             <WizardStepLines
               products={products}
               manufacturers={[]}
@@ -214,17 +248,16 @@ export function NewStockOrderWizard() {
             />
           ) : null}
 
-          {step === 2 ? (
+          {step === 3 ? (
             <WizardStepReview
               name={name}
               hasDocument={!!(documentKey || docFile)}
-              saleChannelName={null}
+              saleChannelName={saleChannelName}
               manufacturerNames={[]}
               lines={filledLines(lines)}
               products={products}
               manufacturers={[]}
               hideManufacturers
-              hideSaleChannel
             />
           ) : null}
 
@@ -244,7 +277,7 @@ export function NewStockOrderWizard() {
                 <ChevronRight className="size-4" />
               </Button>
             ) : (
-              <Button type="submit" disabled={isFinishing || !name.trim()}>
+              <Button type="submit" disabled={isFinishing || !name.trim() || !saleChannelId}>
                 {isFinishing ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (

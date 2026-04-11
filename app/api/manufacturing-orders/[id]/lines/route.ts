@@ -9,6 +9,7 @@ import {
   manufacturerOnManufacturingOrder,
   purchaseOrderLineLinkedToMo,
 } from "@/lib/mo-line-guard";
+import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 
 export const runtime = "nodejs";
 
@@ -68,7 +69,9 @@ export async function POST(
       where: { id: pid.data.id },
       include: manufacturingOrderDetailInclude,
     });
-    return NextResponse.json(full, { status: 201 });
+    return NextResponse.json(full ? manufacturingOrderDetailFromPrisma(full) : null, {
+      status: 201,
+    });
   } catch (e) {
     const j = jsonFromPrisma(e);
     if (j) return j;

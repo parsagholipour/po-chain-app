@@ -8,8 +8,8 @@ import { LineItemCard, LineItemsGrid } from "@/components/po/line-items/line-ite
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
-import type { ManufacturingOrderDetail, ManufacturingOrderSummary } from "@/lib/types/api";
-import { moStatusLabels } from "@/lib/po/status-labels";
+import type { ManufacturingOrderDetail, ManufacturingOrderSummary, Product } from "@/lib/types/api";
+import { moStatusLabels, shippingStatusLabels } from "@/lib/po/status-labels";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 export function ExpandableMoTableHead() {
@@ -22,8 +22,10 @@ export function ExpandableMoTableHead() {
 
 export function ExpandableManufacturingOrderSummaryRow({
   row,
+  onEditProduct,
 }: {
   row: ManufacturingOrderSummary;
+  onEditProduct?: (product: Product) => void;
 }) {
   const [open, setOpen] = useState(false);
   const href = `/manufacturing-orders/${row.id}`;
@@ -96,6 +98,16 @@ export function ExpandableManufacturingOrderSummaryRow({
                   </li>
                 ))}
               </ul>
+              {row.shippingBadges && row.shippingBadges.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2">
+                  <span className="text-xs font-medium text-foreground">Shipping</span>
+                  {row.shippingBadges.map((s) => (
+                    <Badge key={s.id} variant="outline" className="shrink-0 text-[10px] font-medium">
+                      {shippingStatusLabels[s.status] ?? s.status}
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
             <Badge variant="secondary">{moStatusLabels[row.status] ?? row.status}</Badge>
@@ -127,6 +139,7 @@ export function ExpandableManufacturingOrderSummaryRow({
                         imageKey={a.purchaseOrderLine.product.imageKey}
                         title={a.purchaseOrderLine.product.name}
                         subtitle={`Qty ${a.purchaseOrderLine.quantity} · ${a.manufacturer.name}`}
+                        onEditProduct={onEditProduct ? () => onEditProduct(a.purchaseOrderLine.product) : undefined}
                         footer={
                           <div className="space-y-1 text-start text-[10px] leading-tight text-muted-foreground">
                             <p className="font-mono">{prefix} #{po.number}</p>

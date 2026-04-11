@@ -8,8 +8,8 @@ import { LineItemCard, LineItemsGrid } from "@/components/po/line-items/line-ite
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
-import type { PoLineRow, PurchaseOrderSummary } from "@/lib/types/api";
-import { distributorPoStatusLabels } from "@/lib/po/status-labels";
+import type { PoLineRow, Product, PurchaseOrderSummary } from "@/lib/types/api";
+import { distributorPoStatusLabels, shippingStatusLabels } from "@/lib/po/status-labels";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 export type OrderListLinesApiScope = "purchase-orders" | "stock-orders";
@@ -37,9 +37,11 @@ export function ExpandableOrderSummaryTableHead() {
 export function ExpandableOrderSummaryRow({
   row,
   apiScope,
+  onEditProduct,
 }: {
   row: PurchaseOrderSummary;
   apiScope: OrderListLinesApiScope;
+  onEditProduct?: (product: Product) => void;
 }) {
   const [open, setOpen] = useState(false);
   const href = detailHref(apiScope, row.id);
@@ -86,9 +88,20 @@ export function ExpandableOrderSummaryRow({
           </Link>
         </TableCell>
         <TableCell>
-          <Badge variant="secondary">
-            {distributorPoStatusLabels[row.status] ?? row.status}
-          </Badge>
+          <div className="flex flex-col gap-1.5">
+            <Badge variant="secondary">
+              {distributorPoStatusLabels[row.status] ?? row.status}
+            </Badge>
+            {row.shippingBadges && row.shippingBadges.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1">
+                {row.shippingBadges.map((s) => (
+                  <Badge key={s.id} variant="outline" className="text-[10px] font-medium">
+                    {shippingStatusLabels[s.status] ?? s.status}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
         </TableCell>
         <TableCell className="text-muted-foreground text-xs">
           {new Date(row.createdAt).toLocaleDateString()}
@@ -113,6 +126,7 @@ export function ExpandableOrderSummaryRow({
                       imageKey={line.product.imageKey}
                       title={line.product.name}
                       subtitle={`Qty ${line.quantity} · ${line.product.defaultManufacturer.name}`}
+                      onEditProduct={onEditProduct ? () => onEditProduct(line.product) : undefined}
                       footer={
                         <p className="text-start font-mono text-[10px] leading-tight text-muted-foreground">
                           {line.product.sku}

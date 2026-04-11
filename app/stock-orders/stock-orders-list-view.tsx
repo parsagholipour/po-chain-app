@@ -1,9 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/axios";
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,8 +25,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { Plus } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { Manufacturer, PurchaseOrderSummary } from "@/lib/types/api";
+import type { Manufacturer, Product, PurchaseOrderSummary } from "@/lib/types/api";
 import {
   distributorPoStatusLabels,
   distributorPoStatuses,
@@ -34,12 +36,15 @@ import {
   ExpandableOrderSummaryRow,
   ExpandableOrderSummaryTableHead,
 } from "@/components/po/order-list-expandable-row";
+import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
+import type { ProductFormValues } from "@/components/po/products/product-form";
 
 import { PO_LIST_ALL_SCOPE_ID } from "../purchase-orders/purchase-orders-list-view";
 
 const soListKey = ["stock-orders", "list"] as const;
 const soOpenCountsKey = ["stock-orders", "open-counts"] as const;
 const manufacturersKey = ["manufacturers"] as const;
+const productsKey = ["products"] as const;
 
 function EntityTabRow({
   items,
@@ -147,6 +152,7 @@ function SoListFiltersAndTable({
   data,
   emptyNoScopeMessage,
   emptyFilteredMessage,
+  onEditProduct,
 }: {
   q: string;
   onQChange: (value: string) => void;
@@ -157,6 +163,7 @@ function SoListFiltersAndTable({
   data: PurchaseOrderSummary[];
   emptyNoScopeMessage: string;
   emptyFilteredMessage: string;
+  onEditProduct?: (product: Product) => void;
 }) {
   return (
     <>
@@ -220,7 +227,7 @@ function SoListFiltersAndTable({
               </TableRow>
             ) : (
               data.map((row) => (
-                <ExpandableOrderSummaryRow key={row.id} row={row} apiScope="stock-orders" />
+                <ExpandableOrderSummaryRow key={row.id} row={row} apiScope="stock-orders" onEditProduct={onEditProduct} />
               ))
             )}
           </TableBody>
@@ -231,12 +238,15 @@ function SoListFiltersAndTable({
 }
 
 export function StockOrdersListView() {
+  const qc = useQueryClient();
   const [selectedManufacturerId, setSelectedManufacturerId] = useState<string>(
     PO_LIST_ALL_SCOPE_ID,
   );
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [productEditOpen, setProductEditOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -293,6 +303,47 @@ export function StockOrdersListView() {
     },
   });
 
+  const updateProduct = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
+      const { data } = await api.patch<Product>(`/api/products/${id}`, body);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: productsKey });
+      qc.invalidateQueries({ queryKey: soListKey });
+      toast.success("Product updated");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  async function saveProduct(payload: {
+    id?: string;
+    values: ProductFormValues;
+    patchImageKey: boolean;
+    patchBarcodeKey: boolean;
+    patchPackagingKey: boolean;
+  }) {
+    if (!payload.id) return;
+    const body: Record<string, unknown> = {
+      name: payload.values.name,
+      sku: payload.values.sku,
+      defaultManufacturerId: payload.values.defaultManufacturerId,
+      verified: payload.values.verified,
+    };
+    if (payload.patchImageKey) body.imageKey = payload.values.imageKey;
+    if (payload.patchBarcodeKey) body.barcodeKey = payload.values.barcodeKey;
+    if (payload.patchPackagingKey) body.packagingKey = payload.values.packagingKey;
+    await updateProduct.mutateAsync({ id: payload.id, body });
+  }
+
+  const onEditProduct =
+    manufacturers.length > 0
+      ? (product: Product) => {
+          setEditingProduct(product);
+          setProductEditOpen(true);
+        }
+      : undefined;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -333,9 +384,21 @@ export function StockOrdersListView() {
                 ? "No stock orders match your filters."
                 : "No stock orders for this manufacturer match your filters."
             }
+            onEditProduct={onEditProduct}
           />
         </div>
       </div>
+
+      <ProductUpsertDialog
+        open={productEditOpen}
+        onOpenChange={(o) => {
+          setProductEditOpen(o);
+          if (!o) setEditingProduct(null);
+        }}
+        editing={editingProduct}
+        manufacturers={manufacturers}
+        onSave={saveProduct}
+      />
     </div>
   );
 }

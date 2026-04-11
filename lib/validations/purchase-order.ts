@@ -8,6 +8,7 @@ export const moManufacturerStatusSchema = z.enum([
   "manufacturing",
   "balance_paid",
   "ready_to_pickup",
+  "picked_up",
 ]);
 
 const optionalIsoDateTime = z.union([z.string().datetime(), z.null()]).optional();
@@ -47,6 +48,7 @@ export const purchaseOrderPatchSchema = z.object({
 export const stockOrderCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   documentKey: z.string().min(1).nullable().optional(),
+  saleChannelId: z.uuid(),
   lines: z
     .array(
       z.object({
@@ -61,6 +63,7 @@ export const stockOrderPatchSchema = z.object({
   name: z.string().min(1).optional(),
   status: purchaseOrderStatusSchema.optional(),
   documentKey: z.string().min(1).nullable().optional(),
+  saleChannelId: z.uuid().optional(),
 });
 
 export const purchaseOrderLineCreateSchema = z.object({

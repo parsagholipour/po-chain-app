@@ -10,6 +10,7 @@ import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
+import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
 
 export const runtime = "nodejs";
 
@@ -58,6 +59,28 @@ export async function GET(request: Request) {
       status: true,
       createdAt: true,
       updatedAt: true,
+      lines: {
+        select: {
+          manufacturingOrderLines: {
+            select: {
+              manufacturerId: true,
+            },
+            take: 1,
+          },
+        },
+      },
+      purchaseOrderShippings: {
+        select: {
+          shipping: {
+            select: {
+              id: true,
+              status: true,
+              type: true,
+              trackingNumber: true,
+            },
+          },
+        },
+      },
     },
   });
   return NextResponse.json(
@@ -67,7 +90,23 @@ export async function GET(request: Request) {
       name: r.name,
       status: r.status,
       createdAt: r.createdAt,
-      manufacturers: [] as { manufacturerId: string; name: string; status: string }[],
+      manufacturers: Array.from(
+        new Set(
+          r.lines
+            .flatMap((line) => line.manufacturingOrderLines.map((mol) => mol.manufacturerId))
+            .filter((id): id is string => id != null)
+        )
+      ).map((manufacturerId) => ({
+        manufacturerId,
+        name: "",
+        status: "",
+      })),
+      shippingBadges: r.purchaseOrderShippings.map((s) => ({
+        id: s.shipping.id,
+        status: s.shipping.status,
+        type: s.shipping.type,
+        trackingNumber: s.shipping.trackingNumber,
+      })),
     })),
   );
 }
@@ -132,7 +171,9 @@ export async function POST(request: Request) {
       where: { id: result },
       include: purchaseOrderDetailInclude,
     });
-    return NextResponse.json(full, { status: 201 });
+    return NextResponse.json(full ? purchaseOrderDetailFromPrisma(full) : null, {
+      status: 201,
+    });
   } catch (e) {
     if (e instanceof Error) {
       if (e.message === "SALE_CHANNEL_NOT_FOUND") {

@@ -6,6 +6,7 @@ import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_STOCK } from "@/lib/purchase-order-type";
+import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
 
 export const runtime = "nodejs";
 
@@ -27,7 +28,7 @@ export async function GET(
     include: purchaseOrderDetailInclude,
   });
   if (!row) return jsonError("Not found", 404);
-  return NextResponse.json(row);
+  return NextResponse.json(purchaseOrderDetailFromPrisma(row));
 }
 
 export async function PATCH(
@@ -72,7 +73,7 @@ export async function PATCH(
       where: { id: pid.data.id, type: PURCHASE_ORDER_TYPE_STOCK },
       include: purchaseOrderDetailInclude,
     });
-    return NextResponse.json(row);
+    return NextResponse.json(row ? purchaseOrderDetailFromPrisma(row) : null);
   } catch (e) {
     const j = jsonFromPrisma(e);
     if (j) return j;

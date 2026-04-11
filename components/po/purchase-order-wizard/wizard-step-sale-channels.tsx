@@ -28,7 +28,7 @@ export function WizardStepSaleChannels({ saleChannels, value, onChange }: Props)
   );
 
   if (saleChannels.length === 0) {
-    return <p className="text-sm text-muted-foreground">No sale channels yet.</p>;
+    return <p className="text-sm text-muted-foreground">No sale channels available.</p>;
   }
 
   return (
@@ -51,7 +51,7 @@ export function WizardStepSaleChannels({ saleChannels, value, onChange }: Props)
         </SelectContent>
       </Select>
       <p className="text-xs text-muted-foreground">
-        Each purchase order is tied to exactly one sale channel.
+        Each order is tied to exactly one sale channel.
       </p>
     </div>
   );

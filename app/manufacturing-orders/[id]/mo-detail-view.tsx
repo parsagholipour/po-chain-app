@@ -16,9 +16,9 @@ import type {
 } from "@/lib/types/api";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
-import { AddShipmentDialog } from "@/components/po/purchase-order/add-shipment-dialog";
 import { InvoiceUpsertDialog } from "@/components/po/purchase-order/invoice-upsert-dialog";
 import { PoManufacturersSection } from "@/components/po/purchase-order/po-manufacturers-section";
+import { StatusChangeDialog, EditPivotDetailsDialog, type StatusChangeTarget } from "@/components/po/purchase-order/status-change-dialog";
 import { PoShipmentsSection } from "@/components/po/purchase-order/po-shipments-section";
 import { MoDetailHeader } from "@/components/po/manufacturing-order/mo-detail-header";
 import { CollapsibleSection } from "@/components/ui/collapsible-section";
@@ -271,33 +271,6 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
 
-  const addShip = useMutation({
-    mutationFn: async (body: {
-      trackingNumber: string;
-      shippedAt: string;
-      invoiceDocumentKey?: string | null;
-    }) => {
-      const { data } = await api.post<ManufacturingOrderDetail>(
-        `/api/manufacturing-orders/${manufacturingOrderId}/shippings`,
-        body,
-      );
-      return data;
-    },
-    onSuccess: setMoData,
-    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
-  });
-
-  const deleteShip = useMutation({
-    mutationFn: async (shippingId: string) => {
-      const { data } = await api.delete<ManufacturingOrderDetail>(
-        `/api/manufacturing-orders/${manufacturingOrderId}/shippings/${shippingId}`,
-      );
-      return data;
-    },
-    onSuccess: setMoData,
-    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
-  });
-
   const updateProduct = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
       const { data } = await api.patch<Product>(`/api/products/${id}`, body);
@@ -311,12 +284,14 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
 
+  const [statusChangeTarget, setStatusChangeTarget] = useState<StatusChangeTarget | null>(null);
+  const [editStepRow, setEditStepRow] = useState<MoManufacturerPivot | null>(null);
+
   const [invoiceTarget, setInvoiceTarget] = useState<{
     row: MoManufacturerPivot;
     mode: "create" | "edit";
   } | null>(null);
   const [allocOpen, setAllocOpen] = useState(false);
-  const [shipOpen, setShipOpen] = useState(false);
   const [productEditOpen, setProductEditOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
@@ -371,11 +346,6 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     }
     await updateProduct.mutateAsync({ id: payload.id, body });
   }
-
-  const shippingsFlat = useMemo(() => {
-    if (!mo) return [];
-    return mo.manufacturingOrderShippings.map((r) => r.manufacturingShipping);
-  }, [mo]);
 
   if (isPending) {
     return <MoDetailSkeleton />;
@@ -464,9 +434,9 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
       : `${mo.lineAllocations.length} line${mo.lineAllocations.length === 1 ? "" : "s"}`;
 
   const shipmentsSummary =
-    shippingsFlat.length === 0
+    mo.shippings.length === 0
       ? "No shipments"
-      : `${shippingsFlat.length} shipment${shippingsFlat.length === 1 ? "" : "s"}`;
+      : `${mo.shippings.length} shipment${mo.shippings.length === 1 ? "" : "s"}`;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 pb-10 sm:px-6">
@@ -517,11 +487,13 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         <PoManufacturersSection
           manufacturers={mo.manufacturers}
           hideHeading
-          onPivotStatusChange={(manufacturerId, status) =>
-            patchMf.mutate({ manufacturerId, body: { status } })
-          }
+          onPivotStatusChange={(manufacturerId, status) => {
+            const row = mo.manufacturers.find((m) => m.manufacturerId === manufacturerId);
+            if (row) setStatusChangeTarget({ row, targetStatus: status });
+          }}
           onCreateInvoice={(row) => setInvoiceTarget({ row, mode: "create" })}
           onEditInvoice={(row) => setInvoiceTarget({ row, mode: "edit" })}
+          onEditStepDetails={(row) => setEditStepRow(row)}
         />
       </CollapsibleSection>
 
@@ -555,20 +527,32 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         title="Shipments"
         summary={shipmentsSummary}
         description="Tracking and shipping documents for this manufacturing order."
-        headerActions={
-          <Button type="button" size="sm" onClick={() => setShipOpen(true)}>
-            <Plus className="size-4" />
-            Add shipment
-          </Button>
-        }
       >
         <PoShipmentsSection
-          shippings={shippingsFlat}
-          onAdd={() => setShipOpen(true)}
-          onDelete={(id) => deleteShip.mutate(id)}
+          shippings={mo.shippings}
+          orderType="manufacturing_order"
+          orderId={manufacturingOrderId}
           hideToolbar
         />
       </CollapsibleSection>
+
+      <EditPivotDetailsDialog
+        open={!!editStepRow}
+        onOpenChange={(o) => { if (!o) setEditStepRow(null); }}
+        row={editStepRow}
+        onSave={async (manufacturerId, body) => {
+          await patchMf.mutateAsync({ manufacturerId, body });
+        }}
+      />
+
+      <StatusChangeDialog
+        open={!!statusChangeTarget}
+        onOpenChange={(o) => { if (!o) setStatusChangeTarget(null); }}
+        target={statusChangeTarget}
+        onConfirm={async (manufacturerId, body) => {
+          await patchMf.mutateAsync({ manufacturerId, body });
+        }}
+      />
 
       <InvoiceUpsertDialog
         open={!!invoiceTarget}
@@ -588,14 +572,6 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         mo={mo}
         onSubmit={async (v) => {
           await addAlloc.mutateAsync(v);
-        }}
-      />
-
-      <AddShipmentDialog
-        open={shipOpen}
-        onOpenChange={setShipOpen}
-        onSubmit={async (body) => {
-          await addShip.mutateAsync(body);
         }}
       />
 

@@ -10,6 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -23,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import type { ManufacturingOrderDetail } from "@/lib/types/api";
-import { moStatusLabels, moStatuses } from "@/lib/po/status-labels";
+import { moStatusLabels, moStatuses, shippingStatusLabels } from "@/lib/po/status-labels";
 import { PoDocumentLink } from "@/components/po/purchase-order/po-document-link";
 import { ChevronLeft, Factory, FileStack, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -61,7 +62,7 @@ export function MoDetailHeader({
 }: Props) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const mfrCount = mo.manufacturers.length;
-  const shipCount = mo.manufacturingOrderShippings.length;
+  const shipCount = mo.shippings.length;
   const lineAllocCount = mo.lineAllocations.length;
   const poCount = mo.purchaseOrders.length;
   return (
@@ -107,6 +108,17 @@ export function MoDetailHeader({
                 {poCount} PO{poCount === 1 ? "" : "s"} linked
               </span>
             </div>
+            {mo.shippings.length > 0 ? (
+              <div className="flex flex-wrap gap-2 pt-2">
+                {mo.shippings.map((shipping) => (
+                  <Badge key={shipping.id} variant="outline" className="text-xs font-medium">
+                    {shippingStatusLabels[shipping.status] ?? shipping.status}
+                    {" · "}
+                    {shipping.trackingNumber}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
             <Label htmlFor="mo-status" className="text-xs text-muted-foreground">

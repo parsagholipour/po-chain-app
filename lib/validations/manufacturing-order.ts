@@ -1,20 +1,19 @@
 import { z } from "zod";
 import {
   invoiceUpsertSchema,
-  shippingCreateSchema,
-  shippingPatchSchema,
 } from "@/lib/validations/purchase-order";
+import { shippingCreateSchema, shippingPatchSchema } from "@/lib/validations/shipping";
 
 export const manufacturingOrderStatusSchema = z.enum([
   "open",
   "ready_to_ship",
   "shipped",
-  "in_transit",
-  "delivered",
   "invoiced",
   "paid",
   "closed",
 ]);
+
+const optionalIsoDateTime = z.union([z.string().datetime(), z.null()]).optional();
 
 export const moManufacturerPatchSchema = z.object({
   status: z
@@ -24,9 +23,25 @@ export const moManufacturerPatchSchema = z.object({
       "manufacturing",
       "balance_paid",
       "ready_to_pickup",
+      "picked_up",
     ])
     .optional(),
   invoice: invoiceUpsertSchema.optional(),
+
+  depositPaidAt: optionalIsoDateTime,
+  depositPaidAmount: z.number().nonnegative().nullable().optional(),
+  depositTrackingNumber: z.string().nullable().optional(),
+  depositDocumentKey: z.string().nullable().optional(),
+
+  manufacturingStartedAt: optionalIsoDateTime,
+
+  balancePaidAt: optionalIsoDateTime,
+  balancePaidAmount: z.number().nonnegative().nullable().optional(),
+  balanceTrackingNumber: z.string().nullable().optional(),
+  balanceDocumentKey: z.string().nullable().optional(),
+
+  readyAt: optionalIsoDateTime,
+  pickedUpAt: optionalIsoDateTime,
 });
 
 export const manufacturingOrderCreateSchema = z.object({
@@ -45,6 +60,7 @@ export const manufacturingOrderCreateSchema = z.object({
             "manufacturing",
             "balance_paid",
             "ready_to_pickup",
+            "picked_up",
           ])
           .optional(),
       }),

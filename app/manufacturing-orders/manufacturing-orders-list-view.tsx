@@ -1,9 +1,10 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/axios";
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,19 +25,23 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { Plus } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { Manufacturer, ManufacturingOrderSummary } from "@/lib/types/api";
+import type { Manufacturer, ManufacturingOrderSummary, Product } from "@/lib/types/api";
 import { moStatusLabels, moStatuses } from "@/lib/po/status-labels";
 import {
   ExpandableManufacturingOrderSummaryRow,
   ExpandableMoTableHead,
 } from "@/components/po/mo-list-expandable-row";
+import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
+import type { ProductFormValues } from "@/components/po/products/product-form";
 
 export type { ManufacturingOrderSummary } from "@/lib/types/api";
 
 const moListKey = ["manufacturing-orders", "list"] as const;
 const moOpenCountsKey = ["manufacturing-orders", "open-counts"] as const;
 const manufacturersKey = ["manufacturers"] as const;
+const productsKey = ["products"] as const;
 
 /** Subtab value: all manufacturers (no scope filter). */
 export const PO_LIST_ALL_SCOPE_ID = "__all__";
@@ -188,6 +193,7 @@ function MoListFiltersAndTable({
   data,
   emptyNoScopeMessage,
   emptyFilteredMessage,
+  onEditProduct,
 }: {
   q: string;
   onQChange: (value: string) => void;
@@ -198,6 +204,7 @@ function MoListFiltersAndTable({
   data: ManufacturingOrderSummary[];
   emptyNoScopeMessage: string;
   emptyFilteredMessage: string;
+  onEditProduct?: (product: Product) => void;
 }) {
   return (
     <>
@@ -261,7 +268,7 @@ function MoListFiltersAndTable({
               </TableRow>
             ) : (
               data.map((row) => (
-                <ExpandableManufacturingOrderSummaryRow key={row.id} row={row} />
+                <ExpandableManufacturingOrderSummaryRow key={row.id} row={row} onEditProduct={onEditProduct} />
               ))
             )}
           </TableBody>
@@ -272,12 +279,15 @@ function MoListFiltersAndTable({
 }
 
 export function ManufacturingOrdersListView() {
+  const qc = useQueryClient();
   const [selectedManufacturerId, setSelectedManufacturerId] = useState<string>(
     PO_LIST_ALL_SCOPE_ID,
   );
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<string>("all");
   const [debouncedQ, setDebouncedQ] = useState("");
+  const [productEditOpen, setProductEditOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQ(q), 300);
@@ -339,6 +349,47 @@ export function ManufacturingOrdersListView() {
     },
   });
 
+  const updateProduct = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
+      const { data } = await api.patch<Product>(`/api/products/${id}`, body);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: productsKey });
+      qc.invalidateQueries({ queryKey: moListKey });
+      toast.success("Product updated");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  async function saveProduct(payload: {
+    id?: string;
+    values: ProductFormValues;
+    patchImageKey: boolean;
+    patchBarcodeKey: boolean;
+    patchPackagingKey: boolean;
+  }) {
+    if (!payload.id) return;
+    const body: Record<string, unknown> = {
+      name: payload.values.name,
+      sku: payload.values.sku,
+      defaultManufacturerId: payload.values.defaultManufacturerId,
+      verified: payload.values.verified,
+    };
+    if (payload.patchImageKey) body.imageKey = payload.values.imageKey;
+    if (payload.patchBarcodeKey) body.barcodeKey = payload.values.barcodeKey;
+    if (payload.patchPackagingKey) body.packagingKey = payload.values.packagingKey;
+    await updateProduct.mutateAsync({ id: payload.id, body });
+  }
+
+  const onEditProduct =
+    manufacturers.length > 0
+      ? (product: Product) => {
+          setEditingProduct(product);
+          setProductEditOpen(true);
+        }
+      : undefined;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -381,9 +432,21 @@ export function ManufacturingOrdersListView() {
                 ? "No manufacturing orders match your filters."
                 : "No manufacturing orders for this manufacturer match your filters."
             }
+            onEditProduct={onEditProduct}
           />
         </div>
       </div>
+
+      <ProductUpsertDialog
+        open={productEditOpen}
+        onOpenChange={(o) => {
+          setProductEditOpen(o);
+          if (!o) setEditingProduct(null);
+        }}
+        editing={editingProduct}
+        manufacturers={manufacturers}
+        onSave={saveProduct}
+      />
     </div>
   );
 }

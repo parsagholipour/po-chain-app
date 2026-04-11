@@ -6,6 +6,7 @@ import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-include";
 import { manufacturerOnManufacturingOrder } from "@/lib/mo-line-guard";
+import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 
 export const runtime = "nodejs";
 
@@ -73,7 +74,7 @@ export async function PATCH(
       where: { id: pid.data.id },
       include: manufacturingOrderDetailInclude,
     });
-    return NextResponse.json(full);
+    return NextResponse.json(full ? manufacturingOrderDetailFromPrisma(full) : null);
   } catch (e) {
     const j = jsonFromPrisma(e);
     if (j) return j;
@@ -116,7 +117,7 @@ export async function DELETE(
       where: { id: pid.data.id },
       include: manufacturingOrderDetailInclude,
     });
-    return NextResponse.json(full);
+    return NextResponse.json(full ? manufacturingOrderDetailFromPrisma(full) : null);
   } catch (e) {
     const j = jsonFromPrisma(e);
     if (j) return j;

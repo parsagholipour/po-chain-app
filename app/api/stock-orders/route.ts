@@ -10,6 +10,7 @@ import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_STOCK } from "@/lib/purchase-order-type";
+import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,28 @@ export async function GET(request: Request) {
       status: true,
       createdAt: true,
       updatedAt: true,
+      lines: {
+        select: {
+          manufacturingOrderLines: {
+            select: {
+              manufacturerId: true,
+            },
+            take: 1,
+          },
+        },
+      },
+      purchaseOrderShippings: {
+        select: {
+          shipping: {
+            select: {
+              id: true,
+              status: true,
+              type: true,
+              trackingNumber: true,
+            },
+          },
+        },
+      },
     },
   });
   return NextResponse.json(
@@ -62,7 +85,23 @@ export async function GET(request: Request) {
       name: r.name,
       status: r.status,
       createdAt: r.createdAt,
-      manufacturers: [] as { manufacturerId: string; name: string; status: string }[],
+      manufacturers: Array.from(
+        new Set(
+          r.lines
+            .flatMap((line) => line.manufacturingOrderLines.map((mol) => mol.manufacturerId))
+            .filter((id): id is string => id != null)
+        )
+      ).map((manufacturerId) => ({
+        manufacturerId,
+        name: "",
+        status: "",
+      })),
+      shippingBadges: r.purchaseOrderShippings.map((s) => ({
+        id: s.shipping.id,
+        status: s.shipping.status,
+        type: s.shipping.type,
+        trackingNumber: s.shipping.trackingNumber,
+      })),
     })),
   );
 }
@@ -82,7 +121,7 @@ export async function POST(request: Request) {
   const parsed = stockOrderCreateSchema.safeParse(body);
   if (!parsed.success) return jsonFromZod(parsed.error);
 
-  const { name, documentKey, lines } = parsed.data;
+  const { name, documentKey, saleChannelId, lines } = parsed.data;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -94,12 +133,15 @@ export async function POST(request: Request) {
         }
       }
 
+      const sc = await tx.saleChannel.findUnique({ where: { id: saleChannelId }, select: { id: true } });
+      if (!sc) throw new Error("SALE_CHANNEL_NOT_FOUND");
+
       const po = await tx.purchaseOrder.create({
         data: {
           name,
           type: PURCHASE_ORDER_TYPE_STOCK,
           documentKey: documentKey ?? null,
-          saleChannelId: null,
+          saleChannelId,
           createdById: userId,
         },
       });
@@ -122,11 +164,16 @@ export async function POST(request: Request) {
       where: { id: result, type: PURCHASE_ORDER_TYPE_STOCK },
       include: purchaseOrderDetailInclude,
     });
-    return NextResponse.json(full, { status: 201 });
+    return NextResponse.json(full ? purchaseOrderDetailFromPrisma(full) : null, {
+      status: 201,
+    });
   } catch (e) {
     if (e instanceof Error) {
       if (e.message === "PRODUCT_NOT_FOUND") {
         return jsonError("One or more products were not found", 400);
+      }
+      if (e.message === "SALE_CHANNEL_NOT_FOUND") {
+        return jsonError("Sale channel not found", 400);
       }
     }
     const j = jsonFromPrisma(e);

@@ -19,4 +19,26 @@ export const purchaseOrderDetailInclude = {
       },
     },
   },
+  purchaseOrderShippings: {
+    include: {
+      shipping: {
+        include: {
+          logisticsPartner: true,
+          purchaseOrderShippings: {
+            include: {
+              purchaseOrder: {
+                select: {
+                  id: true,
+                  number: true,
+                  name: true,
+                  status: true,
+                  type: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
 } as const;

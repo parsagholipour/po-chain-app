@@ -50,7 +50,52 @@ export async function PATCH(
 
   try {
     await prisma.$transaction(async (tx) => {
+      // --- status + step-specific fields ---
+      const pivotUpdate: Record<string, unknown> = {};
+
       if (parsed.data.status !== undefined) {
+        pivotUpdate.status = parsed.data.status;
+
+        // "NOW" auto-fill: set the timestamp only when it is still null in DB
+        const now = new Date();
+        const nowMap: Record<string, string> = {
+          deposit_paid: "depositPaidAt",
+          manufacturing: "manufacturingStartedAt",
+          balance_paid: "balancePaidAt",
+          ready_to_pickup: "readyAt",
+          picked_up: "pickedUpAt",
+        };
+        const tsField = nowMap[parsed.data.status];
+        if (tsField) {
+          const current = pivot[tsField as keyof typeof pivot];
+          if (current == null) {
+            pivotUpdate[tsField] = parsed.data[tsField as keyof typeof parsed.data] ?? now;
+          }
+        }
+      }
+
+      // Merge any explicitly-provided step fields
+      const stepFields = [
+        "depositPaidAt",
+        "depositPaidAmount",
+        "depositTrackingNumber",
+        "depositDocumentKey",
+        "manufacturingStartedAt",
+        "balancePaidAt",
+        "balancePaidAmount",
+        "balanceTrackingNumber",
+        "balanceDocumentKey",
+        "readyAt",
+        "pickedUpAt",
+      ] as const;
+      for (const f of stepFields) {
+        const v = parsed.data[f];
+        if (v !== undefined && !(f in pivotUpdate)) {
+          pivotUpdate[f] = v === null ? null : (f.endsWith("At") ? new Date(v as string) : v);
+        }
+      }
+
+      if (Object.keys(pivotUpdate).length > 0) {
         await tx.manufacturingOrderManufacturer.update({
           where: {
             manufacturingOrderId_manufacturerId: {
@@ -58,7 +103,7 @@ export async function PATCH(
               manufacturerId: pid.data.manufacturerId,
             },
           },
-          data: { status: parsed.data.status },
+          data: pivotUpdate,
         });
       }
 

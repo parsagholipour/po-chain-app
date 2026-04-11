@@ -17,6 +17,17 @@ export type SaleChannel = {
   createdAt: string;
 };
 
+export type LogisticsPartner = {
+  id: string;
+  name: string;
+  logoKey: string | null;
+  contactNumber: string | null;
+  link: string | null;
+  type: "freight_forwarder" | "carrier";
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -35,6 +46,13 @@ export type PurchaseOrderSummaryManufacturer = {
   status: string;
 };
 
+export type ShippingStatusBadge = {
+  id: string;
+  status: string;
+  type: "manufacturing_order" | "purchase_order" | "stock_order";
+  trackingNumber: string;
+};
+
 export type PurchaseOrderSummary = {
   id: string;
   number: number;
@@ -42,6 +60,7 @@ export type PurchaseOrderSummary = {
   status: string;
   createdAt: string;
   manufacturers: PurchaseOrderSummaryManufacturer[];
+  shippingBadges: ShippingStatusBadge[];
 };
 
 export type LinkedManufacturingOrderRef = {
@@ -57,12 +76,29 @@ export type PoLineRow = {
   product: Product;
 };
 
-export type PoShippingRow = {
+export type ShippingOrderRef = {
   id: string;
-  trackingNumber: string;
-  shippedAt: string;
-  invoiceDocumentKey: string | null;
+  number: number;
+  name: string;
+  status: string;
+  orderType: "manufacturing_order" | "purchase_order" | "stock_order";
 };
+
+export type ShippingRow = {
+  id: string;
+  type: "manufacturing_order" | "purchase_order" | "stock_order";
+  status: string;
+  trackingNumber: string;
+  shippedAt: string | null;
+  trackingLink: string | null;
+  notes: string | null;
+  invoiceDocumentKey: string | null;
+  logisticsPartnerId: string | null;
+  logisticsPartner: LogisticsPartner | null;
+  orders: ShippingOrderRef[];
+};
+
+export type PoShippingRow = ShippingRow;
 
 type PurchaseOrderDetailBase = {
   id: string;
@@ -74,6 +110,7 @@ type PurchaseOrderDetailBase = {
   manufacturingOrderPurchaseOrders: {
     manufacturingOrder: LinkedManufacturingOrderRef;
   }[];
+  shippings: ShippingRow[];
 };
 
 export type PurchaseOrderDetail =
@@ -84,8 +121,8 @@ export type PurchaseOrderDetail =
     })
   | (PurchaseOrderDetailBase & {
       type: "stock";
-      saleChannelId: null;
-      saleChannel: null;
+      saleChannelId: string | null;
+      saleChannel: { id: string; name: string; type: string; logoKey: string | null } | null;
     });
 
 /** Manufacturer pivot on a manufacturing order (invoices / production status). */
@@ -104,6 +141,21 @@ export type MoManufacturerPivot = {
     depositPaidAt: string | null;
     balancePaidAt: string | null;
   };
+
+  depositPaidAt: string | null;
+  depositPaidAmount: string | number | null;
+  depositTrackingNumber: string | null;
+  depositDocumentKey: string | null;
+
+  manufacturingStartedAt: string | null;
+
+  balancePaidAt: string | null;
+  balancePaidAmount: string | number | null;
+  balanceTrackingNumber: string | null;
+  balanceDocumentKey: string | null;
+
+  readyAt: string | null;
+  pickedUpAt: string | null;
 };
 
 export type ManufacturingOrderSummaryManufacturer = {
@@ -119,6 +171,7 @@ export type ManufacturingOrderSummary = {
   status: string;
   createdAt: string;
   manufacturers: ManufacturingOrderSummaryManufacturer[];
+  shippingBadges: ShippingStatusBadge[];
 };
 
 export type MoLineAllocationRow = {
@@ -156,5 +209,5 @@ export type ManufacturingOrderDetail = {
     };
   }[];
   lineAllocations: MoLineAllocationRow[];
-  manufacturingOrderShippings: { manufacturingShipping: PoShippingRow }[];
+  shippings: ShippingRow[];
 };

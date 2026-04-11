@@ -12,6 +12,7 @@ import {
   Menu,
   Package,
   Radio,
+  Truck,
   Warehouse,
 } from "lucide-react";
 
@@ -30,7 +31,6 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/manufacturing-orders", label: "Manufacturing orders", icon: FileText },
   {
     href: "/purchase-orders-overview",
     label: "Purchase orders",
@@ -41,8 +41,11 @@ const nav = [
     label: "Stock orders",
     icon: Warehouse,
   },
+  { href: "/manufacturing-orders", label: "Manufacturing orders", icon: FileText },
   { href: "/manufacturers", label: "Manufacturers", icon: Factory },
   { href: "/sale-channels", label: "Sale channels", icon: Radio },
+  { href: "/logistics-partners", label: "Logistics Partners", icon: Truck },
+  { href: "/shipping", label: "Shipping", icon: Package },
   { href: "/products", label: "Products", icon: Boxes },
 ] as const;
 

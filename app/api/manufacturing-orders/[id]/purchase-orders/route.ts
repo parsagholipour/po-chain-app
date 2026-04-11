@@ -4,6 +4,11 @@ import { getSessionUserId } from "@/lib/session-user";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-include";
+import {
+  findLinesMissingProductAssets,
+  formatMissingProductAssetsError,
+} from "@/lib/mo-product-assets";
+import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 
 export const runtime = "nodejs";
 
@@ -43,18 +48,43 @@ export async function POST(
 
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.manufacturingOrderPurchaseOrder.create({
-        data: {
-          manufacturingOrderId: pid.data.id,
-          purchaseOrderId: parsed.data.purchaseOrderId,
-        },
-      });
-
       const poLines = await tx.purchaseOrderLine.findMany({
         where: { purchaseOrderId: parsed.data.purchaseOrderId },
         select: {
           id: true,
-          product: { select: { defaultManufacturerId: true } },
+          product: {
+            select: {
+              defaultManufacturerId: true,
+              name: true,
+              sku: true,
+              barcodeKey: true,
+              packagingKey: true,
+            },
+          },
+          purchaseOrder: {
+            select: {
+              number: true,
+              name: true,
+              type: true,
+            },
+          },
+        },
+      });
+
+      const missingProductAssets = findLinesMissingProductAssets(poLines);
+      if (missingProductAssets.length > 0) {
+        throw new Error(
+          formatMissingProductAssetsError(
+            missingProductAssets,
+            "Cannot link this order",
+          ),
+        );
+      }
+
+      await tx.manufacturingOrderPurchaseOrder.create({
+        data: {
+          manufacturingOrderId: pid.data.id,
+          purchaseOrderId: parsed.data.purchaseOrderId,
         },
       });
 
@@ -97,8 +127,13 @@ export async function POST(
       where: { id: pid.data.id },
       include: manufacturingOrderDetailInclude,
     });
-    return NextResponse.json(full, { status: 201 });
+    return NextResponse.json(full ? manufacturingOrderDetailFromPrisma(full) : null, {
+      status: 201,
+    });
   } catch (e) {
+    if (e instanceof Error && e.message.startsWith("Cannot link this order")) {
+      return jsonError(e.message, 400);
+    }
     const j = jsonFromPrisma(e);
     if (j) return j;
     throw e;

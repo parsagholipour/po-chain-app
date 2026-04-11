@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
+import { uploadFileToStorage } from "@/lib/upload-client";
 import type { Manufacturer, Product, PurchaseOrderDetail, SaleChannel } from "@/lib/types/api";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
@@ -14,6 +15,7 @@ import { AddPoLineDialog } from "@/components/po/purchase-order/add-po-line-dial
 import { PoDetailHeader } from "@/components/po/purchase-order/po-detail-header";
 import { PoLinesSection } from "@/components/po/purchase-order/po-lines-section";
 import { PoLinkedMosSection } from "@/components/po/purchase-order/po-linked-mos-section";
+import { PoShipmentsSection } from "@/components/po/purchase-order/po-shipments-section";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -71,6 +73,10 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
       return data;
     },
   });
+
+  const distributorSaleChannelOptions = saleChannelOptions.filter(
+    (sc) => sc.type === "distributor",
+  );
 
   const { data: manufacturers = [] } = useQuery({
     queryKey: ["manufacturers"] as const,
@@ -165,6 +171,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
   const [lineOpen, setLineOpen] = useState(false);
   const [productEditOpen, setProductEditOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isDocumentSaving, setIsDocumentSaving] = useState(false);
 
   async function saveProductFromPo(payload: {
     id?: string;
@@ -190,6 +197,22 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
       body.packagingKey = payload.values.packagingKey;
     }
     await updateProduct.mutateAsync({ id: payload.id, body });
+  }
+
+  async function uploadDocument(file: File) {
+    setIsDocumentSaving(true);
+    try {
+      const documentKey = await uploadFileToStorage(file, "purchase-orders");
+      await patchPo.mutateAsync({ documentKey });
+      toast.success("Document uploaded");
+    } catch (e) {
+      if (!axios.isAxiosError(e)) {
+        toast.error(e instanceof Error ? e.message : "Upload failed");
+      }
+      throw e;
+    } finally {
+      setIsDocumentSaving(false);
+    }
   }
 
   const linkedMos = po?.manufacturingOrderPurchaseOrders.map(
@@ -279,10 +302,12 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
     <div className="space-y-8">
       <PoDetailHeader
         po={po}
-        saleChannelOptions={saleChannelOptions}
+        saleChannelOptions={distributorSaleChannelOptions}
         onStatusChange={(s) => patchPo.mutate({ status: s })}
         onSaleChannelChange={(saleChannelId) => patchPo.mutate({ saleChannelId })}
+        onDocumentUpload={uploadDocument}
         isSaving={patchPo.isPending}
+        isDocumentSaving={isDocumentSaving}
         onDelete={() => deletePo.mutateAsync()}
         isDeleting={deletePo.isPending}
       />
@@ -304,6 +329,12 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
       />
 
       <PoLinkedMosSection manufacturingOrders={linkedMos} />
+
+      <PoShipmentsSection
+        shippings={po.shippings}
+        orderType="purchase_order"
+        orderId={purchaseOrderId}
+      />
 
       <AddPoLineDialog
         open={lineOpen}

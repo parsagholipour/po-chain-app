@@ -2,12 +2,18 @@
 
 import { useMemo, useState, type ComponentType, type Dispatch, type SetStateAction } from "react";
 import Link from "next/link";
+import { api } from "@/lib/axios";
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import type { ManufacturingOrderDetail } from "@/lib/types/api";
+import type { ManufacturingOrderDetail, PurchaseOrderDetail } from "@/lib/types/api";
 import { distributorPoStatusLabels } from "@/lib/po/status-labels";
+import {
+  findLinesMissingProductAssets,
+  formatMissingProductAssetsError,
+} from "@/lib/mo-product-assets";
 import {
   Select,
   SelectContent,
@@ -16,7 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useConfirm } from "@/components/confirm-provider";
-import { FileText, Package2, Plus, X } from "lucide-react";
+import { FileText, Loader2, Package2, Plus, X } from "lucide-react";
+import { toast } from "sonner";
 
 export type MoLinkableOrder = {
   id: string;
@@ -128,14 +135,16 @@ function AddLinkPanel({
   setSelectValue: (v: string) => void;
   selectItems: { value: string; label: string }[];
   pending: boolean;
-  onConfirm: (id: string) => void;
+  onConfirm: (id: string) => Promise<boolean | void> | boolean | void;
   chooseLabel: string;
   placeholder: string;
   emptyMessage: string;
   toggleAriaLabelOpen: string;
   toggleAriaLabelClose: string;
 }) {
+  const [isConfirming, setIsConfirming] = useState(false);
   const available = selectItems.length;
+  const busy = pending || isConfirming;
 
   return (
     <div className="space-y-3 rounded-xl border border-border/60 bg-muted/15 p-4">
@@ -159,7 +168,7 @@ function AddLinkPanel({
             type="button"
             variant={pickerOpen ? "secondary" : "outline"}
             size="icon-sm"
-            disabled={pending}
+            disabled={busy}
             aria-expanded={pickerOpen}
             aria-label={pickerOpen ? toggleAriaLabelClose : toggleAriaLabelOpen}
             onClick={() => {
@@ -186,7 +195,7 @@ function AddLinkPanel({
                 <Select
                   value={selectValue}
                   items={selectItems}
-                  disabled={pending}
+                  disabled={busy}
                   onValueChange={(v) => setSelectValue(v ?? "")}
                 >
                   <SelectTrigger className="min-w-0 w-full">
@@ -206,7 +215,7 @@ function AddLinkPanel({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  disabled={pending}
+                  disabled={busy}
                   onClick={() => {
                     setSelectValue("");
                     setPickerOpen(false);
@@ -217,15 +226,23 @@ function AddLinkPanel({
                 <Button
                   type="button"
                   size="sm"
-                  disabled={pending || !selectValue}
+                  disabled={busy || !selectValue}
                   onClick={() => {
                     if (!selectValue) return;
-                    onConfirm(selectValue);
-                    setSelectValue("");
-                    setPickerOpen(false);
+                    void (async () => {
+                      setIsConfirming(true);
+                      try {
+                        const ok = await onConfirm(selectValue);
+                        if (ok === false) return;
+                        setSelectValue("");
+                        setPickerOpen(false);
+                      } finally {
+                        setIsConfirming(false);
+                      }
+                    })();
                   }}
                 >
-                  Link
+                  {isConfirming ? <Loader2 className="size-4 animate-spin" /> : "Link"}
                 </Button>
               </div>
             </div>
@@ -289,6 +306,38 @@ export function MoLinksSection({
   const soCount = linkedByType.sos.length;
   const totalLinked = poCount + soCount;
 
+  async function handleAddPurchaseOrder(purchaseOrderId: string) {
+    const order = linkableOrders.find((o) => o.id === purchaseOrderId);
+    if (!order) {
+      onAddPurchaseOrder(purchaseOrderId);
+      return true;
+    }
+
+    try {
+      const endpoint =
+        order.type === "stock"
+          ? `/api/stock-orders/${purchaseOrderId}`
+          : `/api/purchase-orders/${purchaseOrderId}`;
+      const { data } = await api.get<PurchaseOrderDetail>(endpoint);
+      const missingProductAssets = findLinesMissingProductAssets(data.lines);
+      if (missingProductAssets.length > 0) {
+        const prefix = order.type === "stock" ? "SO" : "PO";
+        toast.error(
+          formatMissingProductAssetsError(
+            missingProductAssets,
+            `Cannot link ${prefix} #${order.number}`,
+          ),
+        );
+        return false;
+      }
+      onAddPurchaseOrder(purchaseOrderId);
+      return true;
+    } catch (e) {
+      toast.error(apiErrorMessage(e));
+      return false;
+    }
+  }
+
   const body = (
     <>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
@@ -303,7 +352,7 @@ export function MoLinksSection({
               setSelectValue={setPoToAdd}
               selectItems={poSelectItems}
               pending={pending}
-              onConfirm={onAddPurchaseOrder}
+              onConfirm={handleAddPurchaseOrder}
               chooseLabel="Select PO"
               placeholder="Choose a purchase order…"
               emptyMessage="No POs left to add from this list (already linked or none loaded)."
@@ -322,7 +371,7 @@ export function MoLinksSection({
               setSelectValue={setSoToAdd}
               selectItems={soSelectItems}
               pending={pending}
-              onConfirm={onAddPurchaseOrder}
+              onConfirm={handleAddPurchaseOrder}
               chooseLabel="Select stock order"
               placeholder="Choose a stock order…"
               emptyMessage="No stock orders left to add from this list (already linked or none loaded)."
