@@ -28,7 +28,7 @@ export function ShippingView() {
   const [upsertOpen, setUpsertOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  const { data: shippings, isLoading } = useQuery({
+  const { data: shippings, isPending } = useQuery({
     queryKey: ["shipping", activeTab],
     queryFn: async () => {
       const { data } = await api.get<ShippingRow[]>(`/api/shipping?type=${activeTab}`);
@@ -92,8 +92,6 @@ export function ShippingView() {
     })();
   };
 
-  if (isLoading) return <div>Loading...</div>;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -139,6 +137,7 @@ export function ShippingView() {
             <div className="p-5 pt-4">
               <ShippingTable
                 shippings={shippings || []}
+                isPending={isPending}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />

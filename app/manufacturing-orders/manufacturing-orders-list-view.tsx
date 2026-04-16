@@ -54,6 +54,7 @@ function EntityTabRow({
   label,
   allOpenCount,
   allCountLabel,
+  entitiesLoading = false,
 }: {
   items: { id: string; name: string; logoKey: string | null; openCount: number | null }[];
   selectedId: string;
@@ -64,6 +65,8 @@ function EntityTabRow({
   allOpenCount?: number | null;
   /** e.g. "all sale channels" for aria/title. */
   allCountLabel: string;
+  /** When true, do not show the empty-state message (list length is unknown while fetching). */
+  entitiesLoading?: boolean;
 }) {
   const allActive = selectedId === PO_LIST_ALL_SCOPE_ID;
   const allCountPhrase =
@@ -174,7 +177,7 @@ function EntityTabRow({
           );
         })}
       </div>
-      {items.length === 0 ? (
+      {!entitiesLoading && items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-6 text-center">
           <p className="text-sm text-muted-foreground">{emptyMessage}</p>
         </div>
@@ -241,8 +244,8 @@ function MoListFiltersAndTable({
           <TableHeader>
             <TableRow>
               <ExpandableMoTableHead />
-              <TableHead className="w-24">#</TableHead>
               <TableHead>Name</TableHead>
+              <TableHead className="min-w-[11rem] max-w-[22rem]">Orders</TableHead>
               <TableHead className="min-w-[12rem]">Status</TableHead>
               <TableHead className="w-40">Created</TableHead>
             </TableRow>
@@ -294,7 +297,7 @@ export function ManufacturingOrdersListView() {
     return () => clearTimeout(t);
   }, [q]);
 
-  const { data: manufacturers = [] } = useQuery({
+  const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: manufacturersKey,
     queryFn: async () => {
       const { data: rows } = await api.get<Manufacturer[]>("/api/manufacturers");
@@ -368,8 +371,8 @@ export function ManufacturingOrdersListView() {
     patchImageKey: boolean;
     patchBarcodeKey: boolean;
     patchPackagingKey: boolean;
-  }) {
-    if (!payload.id) return;
+  }): Promise<string> {
+    if (!payload.id) return "";
     const body: Record<string, unknown> = {
       name: payload.values.name,
       sku: payload.values.sku,
@@ -380,10 +383,11 @@ export function ManufacturingOrdersListView() {
     if (payload.patchBarcodeKey) body.barcodeKey = payload.values.barcodeKey;
     if (payload.patchPackagingKey) body.packagingKey = payload.values.packagingKey;
     await updateProduct.mutateAsync({ id: payload.id, body });
+    return payload.id;
   }
 
   const onEditProduct =
-    manufacturers.length > 0
+    !manufacturersPending && manufacturers.length > 0
       ? (product: Product) => {
           setEditingProduct(product);
           setProductEditOpen(true);
@@ -417,6 +421,7 @@ export function ManufacturingOrdersListView() {
             emptyMessage="No manufacturers yet. Add one under Manufacturers."
             label="Manufacturer"
             allCountLabel="all manufacturers"
+            entitiesLoading={manufacturersPending}
           />
           <MoListFiltersAndTable
             q={q}

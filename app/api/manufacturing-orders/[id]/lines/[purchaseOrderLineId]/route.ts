@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session-user";
 import { moLineAllocationPatchSchema } from "@/lib/validations/manufacturing-order";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-include";
 import { manufacturerOnManufacturingOrder } from "@/lib/mo-line-guard";
 import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
+import { requireStoreContext } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
@@ -19,8 +19,9 @@ export async function PATCH(
   request: Request,
   ctx: { params: Promise<{ id: string; purchaseOrderLineId: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const params = await ctx.params;
   const pid = paramsSchema.safeParse(params);
@@ -39,18 +40,18 @@ export async function PATCH(
     return jsonError("No fields to update", 400);
   }
 
-  const existing = await prisma.manufacturingOrderPurchaseOrderLine.findUnique({
+  const existing = await prisma.manufacturingOrderPurchaseOrderLine.findFirst({
     where: {
-      manufacturingOrderId_purchaseOrderLineId: {
-        manufacturingOrderId: pid.data.id,
-        purchaseOrderLineId: pid.data.purchaseOrderLineId,
-      },
+      manufacturingOrderId: pid.data.id,
+      purchaseOrderLineId: pid.data.purchaseOrderLineId,
+      storeId,
     },
   });
   if (!existing) return jsonError("Line allocation not found", 404);
 
   if (parsed.data.manufacturerId !== undefined) {
     const onMo = await manufacturerOnManufacturingOrder(
+      storeId,
       pid.data.id,
       parsed.data.manufacturerId,
     );
@@ -70,8 +71,8 @@ export async function PATCH(
       data: parsed.data,
     });
 
-    const full = await prisma.manufacturingOrder.findUnique({
-      where: { id: pid.data.id },
+    const full = await prisma.manufacturingOrder.findFirst({
+      where: { id: pid.data.id, storeId },
       include: manufacturingOrderDetailInclude,
     });
     return NextResponse.json(full ? manufacturingOrderDetailFromPrisma(full) : null);
@@ -86,19 +87,19 @@ export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string; purchaseOrderLineId: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const params = await ctx.params;
   const pid = paramsSchema.safeParse(params);
   if (!pid.success) return jsonFromZod(pid.error);
 
-  const existing = await prisma.manufacturingOrderPurchaseOrderLine.findUnique({
+  const existing = await prisma.manufacturingOrderPurchaseOrderLine.findFirst({
     where: {
-      manufacturingOrderId_purchaseOrderLineId: {
-        manufacturingOrderId: pid.data.id,
-        purchaseOrderLineId: pid.data.purchaseOrderLineId,
-      },
+      manufacturingOrderId: pid.data.id,
+      purchaseOrderLineId: pid.data.purchaseOrderLineId,
+      storeId,
     },
   });
   if (!existing) return jsonError("Line allocation not found", 404);
@@ -113,8 +114,8 @@ export async function DELETE(
       },
     });
 
-    const full = await prisma.manufacturingOrder.findUnique({
-      where: { id: pid.data.id },
+    const full = await prisma.manufacturingOrder.findFirst({
+      where: { id: pid.data.id, storeId },
       include: manufacturingOrderDetailInclude,
     });
     return NextResponse.json(full ? manufacturingOrderDetailFromPrisma(full) : null);

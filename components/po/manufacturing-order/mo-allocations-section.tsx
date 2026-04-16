@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
+import { MoLinkedOrderLabel } from "@/components/po/mo-linked-order-label";
 import type { MoLineAllocationRow, MoManufacturerPivot } from "@/lib/types/api";
 import { Plus, Trash2 } from "lucide-react";
 
@@ -103,12 +104,15 @@ export function MoAllocationsSection({
                         objectFit="contain"
                       />
                       <div className="min-w-0 text-sm">
-                        <div className="truncate text-xs text-muted-foreground">
-                          <span className="font-mono">
-                            {row.purchaseOrderLine.purchaseOrder.type === "stock" ? "SO" : "PO"} #
-                            {row.purchaseOrderLine.purchaseOrder.number}
-                          </span>{" "}
-                          <span>{row.purchaseOrderLine.purchaseOrder.name}</span>
+                        <div className="min-w-0 text-xs text-muted-foreground">
+                          <MoLinkedOrderLabel
+                            type={row.purchaseOrderLine.purchaseOrder.type}
+                            name={row.purchaseOrderLine.purchaseOrder.name}
+                            saleChannelName={
+                              row.purchaseOrderLine.purchaseOrder.saleChannel?.name ?? null
+                            }
+                            className="text-xs text-muted-foreground"
+                          />
                         </div>
                         <div className="font-medium">{row.purchaseOrderLine.product.name}</div>
                         <div className="text-xs text-muted-foreground font-mono">
@@ -148,13 +152,12 @@ export function MoAllocationsSection({
                         onCheckedChange={(c) =>
                           onPatch(row.purchaseOrderLineId, { verified: c === true })
                         }
+                        label={
+                          <span className="text-xs font-normal">
+                            Verified
+                          </span>
+                        }
                       />
-                      <Label
-                        htmlFor={`ver-${row.purchaseOrderLineId}`}
-                        className="text-xs font-normal"
-                      >
-                        Verified
-                      </Label>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -167,9 +170,16 @@ export function MoAllocationsSection({
                         void (async () => {
                           const orderPrefix =
                             row.purchaseOrderLine.purchaseOrder.type === "stock" ? "SO" : "PO";
+                          const po = row.purchaseOrderLine.purchaseOrder;
+                          const poLabel = [
+                            `${orderPrefix} ${po.name}`,
+                            po.saleChannel?.name,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ");
                           const ok = await confirm({
                             title: "Delete this allocation?",
-                            description: `${orderPrefix} #${row.purchaseOrderLine.purchaseOrder.number} - ${row.purchaseOrderLine.product.name}`,
+                            description: `${poLabel} — ${row.purchaseOrderLine.product.name}`,
                             confirmLabel: "Delete",
                             variant: "destructive",
                           });

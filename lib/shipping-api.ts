@@ -20,6 +20,8 @@ type ShippingLike = {
   id: string;
   type: "manufacturing_order" | "purchase_order" | "stock_order";
   status: string;
+  cost: { toNumber(): number } | number | string | null;
+  deliveryDutiesPaid: boolean;
   trackingNumber: string;
   shippedAt: Date | null;
   trackingLink: string | null;
@@ -72,10 +74,19 @@ export function shippingRowFromPrisma(row: ShippingLike) {
     orderType: shippingOrderTypeFromPurchaseOrderType(item.purchaseOrder.type),
   }));
 
+  const costJson =
+    row.cost == null
+      ? null
+      : typeof row.cost === "object" && row.cost !== null && "toNumber" in row.cost
+        ? row.cost.toNumber()
+        : Number(row.cost);
+
   return {
     id: row.id,
     type: row.type,
     status: row.status,
+    cost: Number.isFinite(costJson) ? costJson : null,
+    deliveryDutiesPaid: row.deliveryDutiesPaid ?? false,
     trackingNumber: row.trackingNumber,
     shippedAt: row.shippedAt?.toISOString() ?? null,
     trackingLink: row.trackingLink ?? null,

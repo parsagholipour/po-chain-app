@@ -19,7 +19,12 @@ import {
   type ShippingType,
 } from "@/lib/shipping";
 
-type OrderOption = { id: string; number: number; name: string };
+type OrderOption = {
+  id: string;
+  number: number;
+  name: string;
+  linkedSaleChannels?: string[];
+};
 
 interface ShippingUpsertDialogProps {
   open: boolean;
@@ -130,11 +135,13 @@ export function ShippingUpsertDialog({
     onError: (err) => toast.error(apiErrorMessage(err)),
   });
 
-  const handleSubmit = (values: ShippingFormValues) => {
+  const handleSubmit = async (values: ShippingFormValues): Promise<string> => {
     if (editingId) {
-      updateMut.mutate({ id: editingId, values });
+      const row = await updateMut.mutateAsync({ id: editingId, values });
+      return row.id;
     } else {
-      createMut.mutate(values);
+      const row = await createMut.mutateAsync(values);
+      return row.id;
     }
   };
 
@@ -159,6 +166,8 @@ export function ShippingUpsertDialog({
     ? {
         type: shipping.type,
         status: shipping.status as ShippingFormValues["status"],
+        cost: shipping.cost == null ? null : Number(shipping.cost),
+        deliveryDutiesPaid: shipping.deliveryDutiesPaid,
         trackingNumber: shipping.trackingNumber,
         shippedAt: shipping.shippedAt ?? null,
         trackingLink: shipping.trackingLink,
@@ -174,6 +183,8 @@ export function ShippingUpsertDialog({
       }
     : {
         type: defaultType,
+        cost: null,
+        deliveryDutiesPaid: false,
         manufacturingOrderIds: requiredManufacturingOrderIds,
         purchaseOrderIds: requiredPurchaseOrderIds,
       };
@@ -198,6 +209,7 @@ export function ShippingUpsertDialog({
           <ShippingForm
             key={formKey}
             defaultValues={defaultFormValues}
+            editingId={editingId}
             onSubmit={handleSubmit}
             isSubmitting={isSubmitting}
             availableManufacturingOrders={manufacturingOrders ?? []}

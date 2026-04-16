@@ -9,7 +9,7 @@ import { XIcon } from "lucide-react"
 
 function isDialogSectionChild(
   child: React.ReactNode,
-  component: React.JSXElementConstructor<unknown>
+  component: React.ElementType
 ) {
   return React.isValidElement(child) && child.type === component
 }

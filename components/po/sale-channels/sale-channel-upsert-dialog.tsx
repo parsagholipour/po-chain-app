@@ -13,7 +13,7 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: SaleChannel | null;
-  onSave: (payload: { id?: string; values: SaleChannelFormValues }) => Promise<void>;
+  onSave: (payload: { id?: string; values: SaleChannelFormValues }) => Promise<string>;
 };
 
 export function SaleChannelUpsertDialog({ open, onOpenChange, editing, onSave }: Props) {
@@ -31,10 +31,12 @@ export function SaleChannelUpsertDialog({ open, onOpenChange, editing, onSave }:
         <SaleChannelForm
           key={open ? resetKey : "idle"}
           defaultValues={defaultValues}
+          editingId={editing?.id}
           onCancel={() => onOpenChange(false)}
           onSubmit={async (values) => {
-            await onSave({ id: editing?.id, values });
+            const entityId = await onSave({ id: editing?.id, values });
             onOpenChange(false);
+            return entityId;
           }}
         />
       </DialogContent>

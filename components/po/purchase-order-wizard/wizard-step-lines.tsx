@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -45,6 +46,8 @@ type Props = {
   onRemoveLine: (index: number) => void;
   /** PO wizard: no per-line manufacturer (set on manufacturing order later). */
   hideManufacturer?: boolean;
+  /** When true, empty `products` means still loading — do not show the empty catalog message. */
+  isPending?: boolean;
 };
 
 export function WizardStepLines({
@@ -55,12 +58,14 @@ export function WizardStepLines({
   onUpdateLine,
   onRemoveLine,
   hideManufacturer = false,
+  isPending = false,
 }: Props) {
-  const productItems = useMemo(
+  const productSelectItems = useMemo(
     () =>
       products.map((p) => ({
         value: p.id,
         label: `${p.name} (${p.sku})`,
+        keywords: p.sku,
       })),
     [products],
   );
@@ -73,6 +78,10 @@ export function WizardStepLines({
       }),
     [manufacturerIdList, manufacturers],
   );
+
+  if (isPending) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
 
   if (products.length === 0) {
     return <p className="text-sm text-muted-foreground">Add products first.</p>;
@@ -96,24 +105,13 @@ export function WizardStepLines({
               return (
                 <TableRow key={i}>
                   <TableCell>
-                    <Select
+                    <SearchableSelect
+                      className="w-full min-w-[160px]"
+                      items={productSelectItems}
                       value={line.productId}
-                      items={productItems}
-                      onValueChange={(v) => {
-                        if (v) onUpdateLine(i, { productId: v });
-                      }}
-                    >
-                      <SelectTrigger className="w-full min-w-[160px]">
-                        <SelectValue placeholder="Select product" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {products.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({p.sku})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="Select product"
+                      onValueChange={(productId) => onUpdateLine(i, { productId })}
+                    />
                   </TableCell>
                   <TableCell>
                     <Input

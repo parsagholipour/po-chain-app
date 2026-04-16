@@ -9,6 +9,7 @@ import { ManufacturerUpsertDialog } from "@/components/po/manufacturers/manufact
 import { ManufacturersTable } from "@/components/po/manufacturers/manufacturers-table";
 import type { ManufacturerFormValues } from "@/components/po/manufacturers/manufacturer-form";
 import { Button } from "@/components/ui/button";
+import { TableContainer } from "@/components/ui/table-container";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 
@@ -64,11 +65,13 @@ export function ManufacturersView() {
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
 
-  async function handleSave(payload: { id?: string; values: ManufacturerFormValues }) {
+  async function handleSave(payload: { id?: string; values: ManufacturerFormValues }): Promise<string> {
     if (payload.id) {
       await updateMut.mutateAsync({ id: payload.id, values: payload.values });
+      return payload.id;
     } else {
-      await createMut.mutateAsync(payload.values);
+      const row = await createMut.mutateAsync(payload.values);
+      return row.id;
     }
   }
 
@@ -91,15 +94,17 @@ export function ManufacturersView() {
         </Button>
       </div>
 
-      <ManufacturersTable
-        rows={data}
-        isPending={isPending}
-        onEdit={(row) => {
-          setEditing(row);
-          setOpen(true);
-        }}
-        onDelete={(row) => deleteMut.mutate(row.id)}
-      />
+      <TableContainer>
+        <ManufacturersTable
+          rows={data}
+          isPending={isPending}
+          onEdit={(row) => {
+            setEditing(row);
+            setOpen(true);
+          }}
+          onDelete={(row) => deleteMut.mutate(row.id)}
+        />
+      </TableContainer>
 
       <ManufacturerUpsertDialog
         open={open}

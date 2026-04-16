@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId, requireAppUserId } from "@/lib/session-user";
+import { requireStoreContext } from "@/lib/store-context";
 import {
   shippingCreateSchema,
   shippingCreateToPrisma,
@@ -23,17 +23,17 @@ export const runtime = "nodejs";
 
 type ShippingValidationDb = {
   logisticsPartner: {
-    findUnique(args: {
-      where: { id: string };
+    findFirst(args: {
+      where: { id: string; storeId: string };
       select: { type: true };
     }): Promise<{ type: "freight_forwarder" | "carrier" } | null>;
   };
   manufacturingOrder: {
-    count(args: { where: { id: { in: string[] } } }): Promise<number>;
+    count(args: { where: { id: { in: string[] }; storeId: string } }): Promise<number>;
   };
   purchaseOrder: {
     count(args: {
-      where: { id: { in: string[] }; type: "distributor" | "stock" };
+      where: { id: { in: string[] }; storeId: string; type: "distributor" | "stock" };
     }): Promise<number>;
   };
 };
@@ -45,11 +45,13 @@ function uniqueIds(ids: string[] | undefined) {
 async function validateShippingWrite(
   db: ShippingValidationDb,
   {
+    storeId,
     type,
     logisticsPartnerId,
     manufacturingOrderIds,
     purchaseOrderIds,
   }: {
+    storeId: string;
     type: ShippingType;
     logisticsPartnerId?: string | null;
     manufacturingOrderIds?: string[];
@@ -60,8 +62,8 @@ async function validateShippingWrite(
   const normalizedPurchaseOrderIds = uniqueIds(purchaseOrderIds);
 
   if (logisticsPartnerId) {
-    const partner = await db.logisticsPartner.findUnique({
-      where: { id: logisticsPartnerId },
+    const partner = await db.logisticsPartner.findFirst({
+      where: { id: logisticsPartnerId, storeId },
       select: { type: true },
     });
     if (!partner) {
@@ -78,7 +80,7 @@ async function validateShippingWrite(
     }
     if (normalizedManufacturingOrderIds.length > 0) {
       const count = await db.manufacturingOrder.count({
-        where: { id: { in: normalizedManufacturingOrderIds } },
+        where: { id: { in: normalizedManufacturingOrderIds }, storeId },
       });
       if (count !== normalizedManufacturingOrderIds.length) {
         throw new Error("ORDER_NOT_FOUND");
@@ -102,6 +104,7 @@ async function validateShippingWrite(
     const count = await db.purchaseOrder.count({
       where: {
         id: { in: normalizedPurchaseOrderIds },
+        storeId,
         type: purchaseOrderType,
       },
     });
@@ -117,17 +120,19 @@ async function validateShippingWrite(
 }
 
 export async function GET(request: Request) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { searchParams } = new URL(request.url);
   const typeRaw = searchParams.get("type");
   const q = searchParams.get("q")?.trim() ?? "";
 
   const where: {
+    storeId: string;
     type?: ShippingType;
     OR?: Array<Record<string, unknown>>;
-  } = {};
+  } = { storeId };
 
   if (typeRaw) {
     const parsedType = shippingTypeSchema.safeParse(typeRaw);
@@ -151,9 +156,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const authz = await requireAppUserId();
+  const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
-  const userId = authz.userId;
+  const { userId, storeId } = authz.context;
 
   let body: unknown;
   try {
@@ -168,6 +173,7 @@ export async function POST(request: Request) {
   try {
     const result = await prisma.$transaction(async (tx) => {
       const { manufacturingOrderIds, purchaseOrderIds } = await validateShippingWrite(tx, {
+        storeId,
         type: parsed.data.type,
         logisticsPartnerId: parsed.data.logisticsPartnerId,
         manufacturingOrderIds: parsed.data.manufacturingOrderIds,
@@ -177,6 +183,7 @@ export async function POST(request: Request) {
       const shipping = await tx.shipping.create({
         data: {
           ...shippingCreateToPrisma(parsed.data),
+          storeId,
           createdById: userId,
         },
       });
@@ -186,6 +193,7 @@ export async function POST(request: Request) {
           data: manufacturingOrderIds.map((manufacturingOrderId) => ({
             manufacturingOrderId,
             shippingId: shipping.id,
+            storeId,
           })),
         });
       }
@@ -195,11 +203,13 @@ export async function POST(request: Request) {
           data: purchaseOrderIds.map((purchaseOrderId) => ({
             purchaseOrderId,
             shippingId: shipping.id,
+            storeId,
           })),
         });
       }
 
       await syncLinkedOrderStatusesForShipping(tx, {
+        storeId,
         manufacturingOrderIds,
         purchaseOrderIds,
       });
@@ -207,8 +217,8 @@ export async function POST(request: Request) {
       return shipping.id;
     });
 
-    const full = await prisma.shipping.findUnique({
-      where: { id: result },
+    const full = await prisma.shipping.findFirst({
+      where: { id: result, storeId },
       include: shippingDetailInclude,
     });
     return NextResponse.json(full ? shippingRowFromPrisma(full) : null, { status: 201 });

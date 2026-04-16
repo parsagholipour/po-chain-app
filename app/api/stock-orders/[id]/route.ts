@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session-user";
 import { stockOrderPatchSchema } from "@/lib/validations/purchase-order";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_STOCK } from "@/lib/purchase-order-type";
 import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
+import { requireStoreContext } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
@@ -16,15 +16,16 @@ export async function GET(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
   if (!pid.success) return jsonFromZod(pid.error);
 
   const row = await prisma.purchaseOrder.findFirst({
-    where: { id: pid.data.id, type: PURCHASE_ORDER_TYPE_STOCK },
+    where: { id: pid.data.id, storeId, type: PURCHASE_ORDER_TYPE_STOCK },
     include: purchaseOrderDetailInclude,
   });
   if (!row) return jsonError("Not found", 404);
@@ -35,8 +36,9 @@ export async function PATCH(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -57,7 +59,7 @@ export async function PATCH(
 
   try {
     const existing = await prisma.purchaseOrder.findFirst({
-      where: { id: pid.data.id, type: PURCHASE_ORDER_TYPE_STOCK },
+      where: { id: pid.data.id, storeId, type: PURCHASE_ORDER_TYPE_STOCK },
       select: { id: true },
     });
     if (!existing) {
@@ -70,7 +72,7 @@ export async function PATCH(
     });
 
     const row = await prisma.purchaseOrder.findFirst({
-      where: { id: pid.data.id, type: PURCHASE_ORDER_TYPE_STOCK },
+      where: { id: pid.data.id, storeId, type: PURCHASE_ORDER_TYPE_STOCK },
       include: purchaseOrderDetailInclude,
     });
     return NextResponse.json(row ? purchaseOrderDetailFromPrisma(row) : null);
@@ -85,8 +87,9 @@ export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -94,7 +97,7 @@ export async function DELETE(
 
   try {
     const deleted = await prisma.purchaseOrder.deleteMany({
-      where: { id: pid.data.id, type: PURCHASE_ORDER_TYPE_STOCK },
+      where: { id: pid.data.id, storeId, type: PURCHASE_ORDER_TYPE_STOCK },
     });
     if (deleted.count === 0) return jsonError("Not found", 404);
     return new NextResponse(null, { status: 204 });

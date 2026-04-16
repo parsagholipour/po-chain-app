@@ -5,11 +5,11 @@ ALTER TYPE "ManufacturingOrderManufacturerStatus" ADD VALUE 'picked_up';
 ALTER TABLE "ManufacturingOrderManufacturer" ADD COLUMN     "balance_document_key" TEXT,
 ADD COLUMN     "balance_paid_amount" DECIMAL(12,2),
 ADD COLUMN     "balance_paid_at" TIMESTAMP(3),
-ADD COLUMN     "balance_tracking_number" TEXT,
+ADD COLUMN     "balance_ref_number" TEXT,
 ADD COLUMN     "deposit_document_key" TEXT,
 ADD COLUMN     "deposit_paid_amount" DECIMAL(12,2),
 ADD COLUMN     "deposit_paid_at" TIMESTAMP(3),
-ADD COLUMN     "deposit_tracking_number" TEXT,
+ADD COLUMN     "deposit_ref_number" TEXT,
 ADD COLUMN     "manufacturing_started_at" TIMESTAMP(3),
 ADD COLUMN     "picked_up_at" TIMESTAMP(3),
 ADD COLUMN     "ready_at" TIMESTAMP(3);

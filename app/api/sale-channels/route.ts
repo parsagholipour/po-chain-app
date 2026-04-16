@@ -1,24 +1,27 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session-user";
 import { saleChannelCreateSchema } from "@/lib/validations/master-data";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
+import { requireStoreContext } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const rows = await prisma.saleChannel.findMany({
+    where: { storeId },
     orderBy: { name: "asc" },
   });
   return NextResponse.json(rows);
 }
 
 export async function POST(request: Request) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { userId, storeId } = authz.context;
 
   let body: unknown;
   try {
@@ -36,6 +39,7 @@ export async function POST(request: Request) {
         name: parsed.data.name,
         logoKey: parsed.data.logoKey ?? null,
         type: parsed.data.type,
+        storeId,
         createdById: userId,
       },
     });

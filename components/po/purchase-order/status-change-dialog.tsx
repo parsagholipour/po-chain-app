@@ -55,16 +55,17 @@ const statusFieldMap: Record<string, FieldSpec[]> = {
   deposit_paid: [
     { key: "depositPaidAt", label: "Paid at", type: "datetime" },
     { key: "depositPaidAmount", label: "Paid amount", type: "number" },
-    { key: "depositTrackingNumber", label: "Tracking number", type: "text" },
+    { key: "depositRefNumber", label: "Ref number", type: "text" },
     { key: "depositDocumentKey", label: "Document", type: "file" },
   ],
   manufacturing: [
     { key: "manufacturingStartedAt", label: "Started at", type: "datetime" },
+    { key: "estimatedCompletionAt", label: "Estimated Completion Time", type: "datetime" },
   ],
   balance_paid: [
     { key: "balancePaidAt", label: "Paid at", type: "datetime" },
     { key: "balancePaidAmount", label: "Paid amount", type: "number" },
-    { key: "balanceTrackingNumber", label: "Tracking number", type: "text" },
+    { key: "balanceRefNumber", label: "Ref number", type: "text" },
     { key: "balanceDocumentKey", label: "Document", type: "file" },
   ],
   ready_to_pickup: [
@@ -105,18 +106,6 @@ function getExistingDatetime(
     return toLocalIso(new Date(existing));
   }
   return "";
-}
-
-function fieldsUpToStatus(status: string): FieldSpec[] {
-  const idx = statusOrder.indexOf(status as (typeof statusOrder)[number]);
-  if (idx < 0) return [];
-  const result: FieldSpec[] = [];
-  for (let i = 0; i <= idx; i++) {
-    const s = statusOrder[i];
-    const group = statusFieldMap[s];
-    if (group) result.push(...group);
-  }
-  return result;
 }
 
 type StatusFieldGroup = {

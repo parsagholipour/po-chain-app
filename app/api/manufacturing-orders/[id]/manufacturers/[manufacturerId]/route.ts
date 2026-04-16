@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session-user";
 import { invoicePayloadToPrisma } from "@/lib/validations/purchase-order";
 import { moManufacturerPatchSchema } from "@/lib/validations/manufacturing-order";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
+import { requireStoreContext } from "@/lib/store-context";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -17,8 +17,9 @@ export async function PATCH(
   request: Request,
   ctx: { params: Promise<{ id: string; manufacturerId: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { userId, storeId } = authz.context;
 
   const params = await ctx.params;
   const pid = paramsSchema.safeParse(params);
@@ -37,12 +38,11 @@ export async function PATCH(
     return jsonError("No fields to update", 400);
   }
 
-  const pivot = await prisma.manufacturingOrderManufacturer.findUnique({
+  const pivot = await prisma.manufacturingOrderManufacturer.findFirst({
     where: {
-      manufacturingOrderId_manufacturerId: {
-        manufacturingOrderId: pid.data.id,
-        manufacturerId: pid.data.manufacturerId,
-      },
+      manufacturingOrderId: pid.data.id,
+      manufacturerId: pid.data.manufacturerId,
+      storeId,
     },
     include: { invoice: true },
   });
@@ -78,12 +78,13 @@ export async function PATCH(
       const stepFields = [
         "depositPaidAt",
         "depositPaidAmount",
-        "depositTrackingNumber",
+        "depositRefNumber",
         "depositDocumentKey",
         "manufacturingStartedAt",
+        "estimatedCompletionAt",
         "balancePaidAt",
         "balancePaidAmount",
-        "balanceTrackingNumber",
+        "balanceRefNumber",
         "balanceDocumentKey",
         "readyAt",
         "pickedUpAt",
@@ -118,6 +119,7 @@ export async function PATCH(
           const inv = await tx.invoice.create({
             data: {
               ...invData,
+              storeId,
               createdById: userId,
             },
           });
@@ -134,12 +136,11 @@ export async function PATCH(
       }
     });
 
-    const row = await prisma.manufacturingOrderManufacturer.findUnique({
+    const row = await prisma.manufacturingOrderManufacturer.findFirst({
       where: {
-        manufacturingOrderId_manufacturerId: {
-          manufacturingOrderId: pid.data.id,
-          manufacturerId: pid.data.manufacturerId,
-        },
+        manufacturingOrderId: pid.data.id,
+        manufacturerId: pid.data.manufacturerId,
+        storeId,
       },
       include: { manufacturer: true, invoice: true },
     });

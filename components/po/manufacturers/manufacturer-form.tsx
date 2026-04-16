@@ -1,10 +1,11 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { useForm, useFormState } from "react-hook-form";
+import { useRef, useState } from "react";
+import { useForm, useFormState, useWatch, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { uploadFileToStorage } from "@/lib/upload-client";
+import { manufacturerCreateSchema } from "@/lib/validations/master-data";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -16,34 +17,48 @@ import {
 } from "@/components/ui/field";
 import { ImageFileInput } from "@/components/ui/image-file-input";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  CustomFieldsRenderer,
+  type CustomFieldsHandle,
+} from "@/components/po/custom-fields/custom-fields-renderer";
 
-const schema = z.object({
-  name: z.string().min(1, "Required"),
-  region: z.string().min(1, "Required"),
-  logoKey: z.string().nullable().optional(),
-});
+export type ManufacturerFormValues = z.infer<typeof manufacturerCreateSchema>;
 
-export type ManufacturerFormValues = z.infer<typeof schema>;
+export function emptyManufacturerFormValues(): ManufacturerFormValues {
+  return {
+    name: "",
+    region: "",
+    logoKey: null,
+    contactNumber: "",
+    address: "",
+    email: "",
+    link: "",
+    notes: "",
+  };
+}
 
 type Props = {
   defaultValues: ManufacturerFormValues;
-  /** Bump when opening the dialog for a different row so fields reset. */
-  onSubmit: (values: ManufacturerFormValues) => Promise<void>;
+  editingId?: string | null;
+  onSubmit: (values: ManufacturerFormValues) => Promise<string>;
   onCancel: () => void;
 };
 
-export function ManufacturerForm({ defaultValues, onSubmit, onCancel }: Props) {
+export function ManufacturerForm({ defaultValues, editingId, onSubmit, onCancel }: Props) {
+  const customFieldsRef = useRef<CustomFieldsHandle>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [removeStoredLogo, setRemoveStoredLogo] = useState(false);
 
   const form = useForm<ManufacturerFormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(manufacturerCreateSchema) as Resolver<ManufacturerFormValues>,
     defaultValues,
   });
   const { isSubmitting } = useFormState({ control: form.control });
+  const watchedValues = useWatch({ control: form.control });
 
   const storedLogoKey =
     removeStoredLogo || logoFile ? null : (defaultValues.logoKey ?? null);
@@ -62,7 +77,10 @@ export function ManufacturerForm({ defaultValues, onSubmit, onCancel }: Props) {
     } else {
       logoKey = defaultValues.logoKey ?? null;
     }
-    await onSubmit({ ...values, logoKey });
+    const entityId = await onSubmit({ ...values, logoKey });
+    if (customFieldsRef.current?.hasFields) {
+      await customFieldsRef.current.save(entityId);
+    }
   }
 
   return (
@@ -81,6 +99,41 @@ export function ManufacturerForm({ defaultValues, onSubmit, onCancel }: Props) {
             <FieldContent>
               <Input id="mf-region" {...form.register("region")} />
               <FieldError errors={[form.formState.errors.region]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.contactNumber} className="gap-1.5">
+            <FieldLabel htmlFor="mf-contact">Contact number</FieldLabel>
+            <FieldContent>
+              <Input id="mf-contact" {...form.register("contactNumber")} placeholder="+971…" />
+              <FieldError errors={[form.formState.errors.contactNumber]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.email} className="gap-1.5">
+            <FieldLabel htmlFor="mf-email">Email</FieldLabel>
+            <FieldContent>
+              <Input id="mf-email" type="email" {...form.register("email")} placeholder="name@example.com" />
+              <FieldError errors={[form.formState.errors.email]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.link} className="gap-1.5">
+            <FieldLabel htmlFor="mf-link">Link</FieldLabel>
+            <FieldContent>
+              <Input id="mf-link" {...form.register("link")} placeholder="https://…" />
+              <FieldError errors={[form.formState.errors.link]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.address} className="gap-1.5">
+            <FieldLabel htmlFor="mf-address">Address</FieldLabel>
+            <FieldContent>
+              <Textarea id="mf-address" rows={3} {...form.register("address")} placeholder="Street, city…" />
+              <FieldError errors={[form.formState.errors.address]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.notes} className="gap-1.5">
+            <FieldLabel htmlFor="mf-notes">Notes</FieldLabel>
+            <FieldContent>
+              <Textarea id="mf-notes" rows={3} {...form.register("notes")} />
+              <FieldError errors={[form.formState.errors.notes]} />
             </FieldContent>
           </Field>
           <Field className="gap-1.5">
@@ -109,6 +162,13 @@ export function ManufacturerForm({ defaultValues, onSubmit, onCancel }: Props) {
               }
             />
           </Field>
+          <CustomFieldsRenderer
+            ref={customFieldsRef}
+            entityType="manufacturer"
+            entityId={editingId}
+            disabled={isSubmitting}
+            nativeValues={watchedValues as Record<string, unknown>}
+          />
         </FieldGroup>
       </FieldSet>
       <DialogFooter className="mt-4 border-0 bg-transparent">

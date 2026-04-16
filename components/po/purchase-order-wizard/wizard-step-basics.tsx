@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Download, Loader2 } from "lucide-react";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DocumentDownloadLink } from "@/components/ui/document-download-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
-import { presignedFileUrl } from "@/lib/upload-client";
-import { cn } from "@/lib/utils";
 
 export function documentDisplayName(documentKey: string | null, docFile: File | null): string | null {
   if (docFile?.name) return docFile.name;
@@ -34,27 +32,6 @@ export function WizardStepBasics({
   onRetryDocUpload,
 }: Props) {
   const displayName = documentDisplayName(documentKey, docFile);
-  const [downloadState, setDownloadState] = useState<{
-    documentKey: string;
-    href: string | null;
-  } | null>(null);
-  const downloadHref =
-    downloadState?.documentKey === documentKey ? downloadState.href : null;
-
-  useEffect(() => {
-    if (!documentKey) return;
-    let cancelled = false;
-    presignedFileUrl(documentKey)
-      .then((u) => {
-        if (!cancelled) setDownloadState({ documentKey, href: u });
-      })
-      .catch(() => {
-        if (!cancelled) setDownloadState({ documentKey, href: null });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [documentKey]);
 
   return (
     <div className="space-y-4">
@@ -91,23 +68,7 @@ export function WizardStepBasics({
             <span className="text-muted-foreground">File:</span>
             <span className="font-medium break-all">{displayName}</span>
             {documentKey ? (
-              downloadHref ? (
-                <a
-                  href={downloadHref}
-                  download={displayName}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={cn(
-                    buttonVariants({ variant: "outline", size: "sm" }),
-                    "h-8 gap-1.5",
-                  )}
-                >
-                  <Download className="size-3.5" />
-                  Download
-                </a>
-              ) : (
-                <span className="text-xs text-muted-foreground">Preparing link…</span>
-              )
+              <DocumentDownloadLink documentKey={documentKey} fileName={displayName} fallback={null} />
             ) : null}
           </div>
         ) : null}

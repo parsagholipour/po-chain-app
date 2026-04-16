@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session-user";
 import { purchaseOrderPatchSchema } from "@/lib/validations/purchase-order";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
+import { requireStoreContext } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
@@ -16,15 +16,20 @@ export async function GET(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
   if (!pid.success) return jsonFromZod(pid.error);
 
   const row = await prisma.purchaseOrder.findFirst({
-    where: { id: pid.data.id, type: PURCHASE_ORDER_TYPE_DISTRIBUTOR },
+    where: {
+      id: pid.data.id,
+      storeId,
+      type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+    },
     include: purchaseOrderDetailInclude,
   });
   if (!row) return jsonError("Not found", 404);
@@ -35,8 +40,9 @@ export async function PATCH(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -60,7 +66,11 @@ export async function PATCH(
   try {
     await prisma.$transaction(async (tx) => {
       const existing = await tx.purchaseOrder.findFirst({
-        where: { id: pid.data.id, type: PURCHASE_ORDER_TYPE_DISTRIBUTOR },
+        where: {
+          id: pid.data.id,
+          storeId,
+          type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+        },
         select: { id: true },
       });
       if (!existing) {
@@ -68,7 +78,10 @@ export async function PATCH(
       }
 
       if (saleChannelId !== undefined) {
-        const sc = await tx.saleChannel.findUnique({ where: { id: saleChannelId } });
+        const sc = await tx.saleChannel.findFirst({
+          where: { id: saleChannelId, storeId },
+          select: { id: true },
+        });
         if (!sc) {
           throw new Error("SALE_CHANNEL_NOT_FOUND");
         }
@@ -76,9 +89,7 @@ export async function PATCH(
 
       const data = {
         ...rest,
-        ...(saleChannelId !== undefined
-          ? { saleChannel: { connect: { id: saleChannelId } } }
-          : {}),
+        ...(saleChannelId !== undefined ? { saleChannelId } : {}),
       };
       if (Object.keys(data).length > 0) {
         await tx.purchaseOrder.update({
@@ -89,7 +100,11 @@ export async function PATCH(
     });
 
     const row = await prisma.purchaseOrder.findFirst({
-      where: { id: pid.data.id, type: PURCHASE_ORDER_TYPE_DISTRIBUTOR },
+      where: {
+        id: pid.data.id,
+        storeId,
+        type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+      },
       include: purchaseOrderDetailInclude,
     });
     if (!row) return jsonError("Not found", 404);
@@ -111,8 +126,9 @@ export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -120,7 +136,11 @@ export async function DELETE(
 
   try {
     const deleted = await prisma.purchaseOrder.deleteMany({
-      where: { id: pid.data.id, type: PURCHASE_ORDER_TYPE_DISTRIBUTOR },
+      where: {
+        id: pid.data.id,
+        storeId,
+        type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+      },
     });
     if (deleted.count === 0) return jsonError("Not found", 404);
     return new NextResponse(null, { status: 204 });

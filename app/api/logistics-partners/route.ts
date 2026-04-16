@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId, requireAppUserId } from "@/lib/session-user";
+import { requireStoreContext } from "@/lib/store-context";
 import {
   logisticsPartnerCreateSchema,
   logisticsPartnerTypeSchema,
@@ -10,8 +10,9 @@ import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { searchParams } = new URL(request.url);
   const typeRaw = searchParams.get("type");
@@ -21,22 +22,23 @@ export async function GET(request: Request) {
     if (!parsedType.success) return jsonFromZod(parsedType.error);
 
     const rows = await prisma.logisticsPartner.findMany({
-      where: { type: parsedType.data },
+      where: { storeId, type: parsedType.data },
       orderBy: { name: "asc" },
     });
     return NextResponse.json(rows);
   }
 
   const rows = await prisma.logisticsPartner.findMany({
+    where: { storeId },
     orderBy: { name: "asc" },
   });
   return NextResponse.json(rows);
 }
 
 export async function POST(request: Request) {
-  const authz = await requireAppUserId();
+  const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
-  const userId = authz.userId;
+  const { userId, storeId } = authz.context;
 
   let body: unknown;
   try {
@@ -58,6 +60,7 @@ export async function POST(request: Request) {
         contactNumber: contactNumber ?? null,
         link: link ?? null,
         type,
+        storeId,
         createdById: userId,
       },
     });

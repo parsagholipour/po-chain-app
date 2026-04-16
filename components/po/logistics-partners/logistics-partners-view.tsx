@@ -76,8 +76,6 @@ export function LogisticsPartnersView() {
     setEditing(null);
   };
 
-  if (isPending) return <div>Loading...</div>;
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -117,6 +115,7 @@ export function LogisticsPartnersView() {
             <div className="p-5 pt-4">
               <LogisticsPartnersTable
                 partners={data}
+                isPending={isPending}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />

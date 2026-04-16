@@ -47,10 +47,23 @@ const optionalNullableUrl = z.preprocess(
   z.string().url().nullable().optional(),
 );
 
+function emptyOrNaNToNullMoney(value: unknown) {
+  if (value === "" || value === undefined) return null;
+  if (typeof value === "number" && Number.isNaN(value)) return null;
+  return value;
+}
+
+const optionalShippingCost = z.preprocess(
+  emptyOrNaNToNullMoney,
+  z.number().nonnegative("Must be zero or greater").nullable().optional(),
+);
+
 export const shippingCreateSchema = z.object({
   type: shippingTypeSchema,
   status: shippingStatusSchema,
-  trackingNumber: z.string().trim().min(1, "Tracking number is required"),
+  cost: optionalShippingCost,
+  deliveryDutiesPaid: z.boolean().optional(),
+  trackingNumber: z.string().trim(),
   shippedAt: optionalDateTime,
   trackingLink: optionalNullableUrl,
   notes: optionalNullableString,
@@ -77,6 +90,8 @@ export function shippingCreateToPrisma(data: z.infer<typeof shippingCreateSchema
   return {
     type: data.type,
     status: data.status,
+    ...(data.cost !== undefined ? { cost: data.cost } : {}),
+    deliveryDutiesPaid: data.deliveryDutiesPaid ?? false,
     trackingNumber: data.trackingNumber.trim(),
     shippedAt: data.shippedAt === undefined ? undefined : toPrismaDate(data.shippedAt),
     trackingLink: trimNullable(data.trackingLink),
@@ -89,6 +104,8 @@ export function shippingCreateToPrisma(data: z.infer<typeof shippingCreateSchema
 export function shippingPatchToPrisma(data: z.infer<typeof shippingPatchSchema>) {
   const out: {
     status?: z.infer<typeof shippingStatusSchema>;
+    cost?: number | null;
+    deliveryDutiesPaid?: boolean;
     trackingNumber?: string;
     shippedAt?: Date | null;
     trackingLink?: string | null;
@@ -98,6 +115,8 @@ export function shippingPatchToPrisma(data: z.infer<typeof shippingPatchSchema>)
   } = {};
 
   if (data.status !== undefined) out.status = data.status;
+  if (data.cost !== undefined) out.cost = data.cost;
+  if (data.deliveryDutiesPaid !== undefined) out.deliveryDutiesPaid = data.deliveryDutiesPaid;
   if (data.trackingNumber !== undefined) out.trackingNumber = data.trackingNumber.trim();
   if (data.shippedAt !== undefined) out.shippedAt = toPrismaDate(data.shippedAt);
   if (data.trackingLink !== undefined) out.trackingLink = trimNullable(data.trackingLink);

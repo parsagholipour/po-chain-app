@@ -3,7 +3,7 @@ export const purchaseOrderDetailInclude = {
   saleChannel: true,
   lines: {
     include: {
-      product: { include: { defaultManufacturer: true } },
+      product: { include: { defaultManufacturer: true, category: true } },
     },
     orderBy: { createdAt: "asc" as const },
   },

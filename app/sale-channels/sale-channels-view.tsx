@@ -9,6 +9,7 @@ import { SaleChannelUpsertDialog } from "@/components/po/sale-channels/sale-chan
 import { SaleChannelsTable } from "@/components/po/sale-channels/sale-channels-table";
 import type { SaleChannelFormValues } from "@/components/po/sale-channels/sale-channel-form";
 import { Button } from "@/components/ui/button";
+import { TableContainer } from "@/components/ui/table-container";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 
@@ -64,11 +65,13 @@ export function SaleChannelsView() {
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
 
-  async function handleSave(payload: { id?: string; values: SaleChannelFormValues }) {
+  async function handleSave(payload: { id?: string; values: SaleChannelFormValues }): Promise<string> {
     if (payload.id) {
       await updateMut.mutateAsync({ id: payload.id, values: payload.values });
+      return payload.id;
     } else {
-      await createMut.mutateAsync(payload.values);
+      const row = await createMut.mutateAsync(payload.values);
+      return row.id;
     }
   }
 
@@ -91,15 +94,17 @@ export function SaleChannelsView() {
         </Button>
       </div>
 
-      <SaleChannelsTable
-        rows={data}
-        isPending={isPending}
-        onEdit={(row) => {
-          setEditing(row);
-          setOpen(true);
-        }}
-        onDelete={(row) => deleteMut.mutate(row.id)}
-      />
+      <TableContainer>
+        <SaleChannelsTable
+          rows={data}
+          isPending={isPending}
+          onEdit={(row) => {
+            setEditing(row);
+            setOpen(true);
+          }}
+          onDelete={(row) => deleteMut.mutate(row.id)}
+        />
+      </TableContainer>
 
       <SaleChannelUpsertDialog
         open={open}

@@ -1,4 +1,4 @@
-type ProductAssetMissingField = "barcode" | "packaging";
+type ProductAssetMissingField = "barcode" | "packaging" | "verified";
 
 export type ProductAssetValidationLine = {
   product: {
@@ -6,6 +6,7 @@ export type ProductAssetValidationLine = {
     sku: string;
     barcodeKey: string | null;
     packagingKey: string | null;
+    verified: boolean;
   };
   purchaseOrder?: {
     number: number;
@@ -35,6 +36,7 @@ export function findLinesMissingProductAssets<T extends ProductAssetValidationLi
     const missingFields: ProductAssetMissingField[] = [];
     if (!line.product.barcodeKey) missingFields.push("barcode");
     if (!line.product.packagingKey) missingFields.push("packaging");
+    if (!line.product.verified) missingFields.push("verified");
     return missingFields.length > 0 ? [{ ...line, missingFields }] : [];
   });
 }
@@ -50,5 +52,5 @@ export function formatMissingProductAssetsError<T extends ProductAssetValidation
     return `${order ? `${order} / ` : ""}${product} (${missing})`;
   });
   const extra = missingLines.length > preview.length ? `; +${missingLines.length - preview.length} more` : "";
-  return `${actionLabel} because order line products must include barcode and packaging. Missing: ${preview.join("; ")}${extra}.`;
+  return `${actionLabel} because order line products must include barcode, packaging, and verified status. Missing: ${preview.join("; ")}${extra}.`;
 }

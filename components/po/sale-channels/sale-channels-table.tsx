@@ -27,8 +27,7 @@ export function SaleChannelsTable({ rows, isPending, onEdit, onDelete }: Props) 
   const confirm = useConfirm();
 
   return (
-    <div className="rounded-xl border border-border/80">
-      <Table>
+    <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="w-14">Logo</TableHead>
@@ -101,6 +100,5 @@ export function SaleChannelsTable({ rows, isPending, onEdit, onDelete }: Props) 
           )}
         </TableBody>
       </Table>
-    </div>
   );
 }

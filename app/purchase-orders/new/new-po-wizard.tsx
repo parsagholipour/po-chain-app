@@ -43,7 +43,7 @@ export function NewPurchaseOrderWizard() {
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [isFinishing, setIsFinishing] = useState(false);
 
-  const { data: saleChannels = [] } = useQuery({
+  const { data: saleChannels = [], isPending: saleChannelsPending } = useQuery({
     queryKey: ["sale-channels"],
     queryFn: async () => {
       const { data } = await api.get<SaleChannel[]>("/api/sale-channels");
@@ -51,13 +51,17 @@ export function NewPurchaseOrderWizard() {
     },
   });
 
-  useEffect(() => {
-    if (saleChannelId === "" && saleChannels.length === 1) {
-      setSaleChannelId(saleChannels[0].id);
-    }
-  }, [saleChannelId, saleChannels]);
+  const distributorChannels = saleChannels.filter(
+    (sc) => sc.type === "distributor",
+  );
 
-  const { data: products = [] } = useQuery({
+  useEffect(() => {
+    if (saleChannelId === "" && distributorChannels.length === 1) {
+      setSaleChannelId(distributorChannels[0].id);
+    }
+  }, [saleChannelId, distributorChannels]);
+
+  const { data: products = [], isPending: productsPending } = useQuery({
     queryKey: ["products"],
     queryFn: async () => {
       const { data } = await api.get<Product[]>("/api/products");
@@ -229,7 +233,8 @@ export function NewPurchaseOrderWizard() {
 
           {step === 1 ? (
             <WizardStepSaleChannels
-              saleChannels={saleChannels}
+              isPending={saleChannelsPending}
+              saleChannels={distributorChannels}
               value={saleChannelId}
               onChange={setSaleChannelId}
             />
@@ -237,6 +242,7 @@ export function NewPurchaseOrderWizard() {
 
           {step === 2 ? (
             <WizardStepLines
+              isPending={productsPending}
               products={products}
               manufacturers={[]}
               manufacturerIdList={[]}
@@ -252,6 +258,7 @@ export function NewPurchaseOrderWizard() {
               name={name}
               hasDocument={!!(documentKey || docFile)}
               documentName={documentDisplayName(documentKey, docFile)}
+              documentKey={documentKey}
               saleChannelName={saleChannelName}
               manufacturerNames={[]}
               lines={filledLines(lines)}

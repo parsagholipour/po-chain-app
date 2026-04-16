@@ -65,11 +65,13 @@ export function LogisticsPartnerUpsertDialog({
     onError: (err) => toast.error(apiErrorMessage(err)),
   });
 
-  const handleSubmit = (values: LogisticsPartnerFormValues) => {
+  const handleSubmit = async (values: LogisticsPartnerFormValues): Promise<string> => {
     if (editing) {
-      updateMut.mutate({ id: editing.id, values });
+      const row = await updateMut.mutateAsync({ id: editing.id, values });
+      return row.id;
     } else {
-      createMut.mutate(values);
+      const row = await createMut.mutateAsync(values);
+      return row.id;
     }
   };
 
@@ -90,6 +92,7 @@ export function LogisticsPartnerUpsertDialog({
         <LogisticsPartnerForm
           key={formKey}
           defaultValues={editing || undefined}
+          editingId={editing?.id}
           defaultType={editing?.type ?? defaultType}
           onSubmit={handleSubmit}
           isSubmitting={isSubmitting}

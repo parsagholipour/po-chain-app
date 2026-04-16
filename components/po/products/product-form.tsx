@@ -2,7 +2,11 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRef, useState } from "react";
-import { Controller, useForm, useFormState } from "react-hook-form";
+import { Controller, useForm, useFormState, useWatch, type Resolver } from "react-hook-form";
+import {
+  CustomFieldsRenderer,
+  type CustomFieldsHandle,
+} from "@/components/po/custom-fields/custom-fields-renderer";
 import { z } from "zod";
 import { uploadFileToStorage } from "@/lib/upload-client";
 import { useConfirm } from "@/components/confirm-provider";
@@ -18,6 +22,7 @@ import {
 } from "@/components/ui/field";
 import { ImageFileInput } from "@/components/ui/image-file-input";
 import { Input } from "@/components/ui/input";
+import { PriceField } from "@/components/ui/price-field";
 import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import {
   Select,
@@ -27,15 +32,35 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DialogFooter } from "@/components/ui/dialog";
-import type { Manufacturer } from "@/lib/types/api";
+import type { Manufacturer, ProductCategory } from "@/lib/types/api";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
+function emptyToMoney(value: unknown): unknown {
+  if (value === "" || value === undefined) return null;
+  if (typeof value === "number" && Number.isNaN(value)) return null;
+  return value;
+}
+
+function noneToNull(value: unknown): unknown {
+  if (value === "none") return null;
+  return value;
+}
+
 const schema = z.object({
   name: z.string().min(1, "Required"),
   sku: z.string().min(1, "Required"),
+  cost: z.preprocess(
+    emptyToMoney,
+    z.number().nonnegative("Must be zero or greater").nullable().optional(),
+  ),
+  price: z.preprocess(
+    emptyToMoney,
+    z.number().nonnegative("Must be zero or greater").nullable().optional(),
+  ),
   defaultManufacturerId: z.string().uuid(),
+  categoryId: z.preprocess(noneToNull, z.string().uuid().nullable().optional()),
   verified: z.boolean(),
   imageKey: z.string().nullable().optional(),
   barcodeKey: z.string().nullable().optional(),
@@ -46,7 +71,9 @@ export type ProductFormValues = z.infer<typeof schema>;
 
 type Props = {
   manufacturers: Manufacturer[];
+  categories: ProductCategory[];
   defaultValues: ProductFormValues;
+  editingId?: string | null;
   onSubmit: (
     values: ProductFormValues,
     meta: {
@@ -54,17 +81,20 @@ type Props = {
       barcodeChanged: boolean;
       packagingChanged: boolean;
     },
-  ) => Promise<void>;
+  ) => Promise<string>;
   onCancel: () => void;
 };
 
 export function ProductForm({
   manufacturers,
+  categories,
   defaultValues,
+  editingId,
   onSubmit,
   onCancel,
 }: Props) {
   const confirm = useConfirm();
+  const customFieldsRef = useRef<CustomFieldsHandle>(null);
   const packagingInputRef = useRef<HTMLInputElement>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [removeStoredImage, setRemoveStoredImage] = useState(false);
@@ -74,10 +104,11 @@ export function ProductForm({
   const [removeStoredPackaging, setRemoveStoredPackaging] = useState(false);
 
   const form = useForm<ProductFormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as Resolver<ProductFormValues>,
     defaultValues,
   });
   const { isSubmitting } = useFormState({ control: form.control });
+  const watchedValues = useWatch({ control: form.control });
 
   const storedImageKey =
     removeStoredImage || imageFile ? null : (defaultValues.imageKey ?? null);
@@ -133,14 +164,27 @@ export function ProductForm({
       packagingKey = defaultValues.packagingKey ?? null;
     }
 
-    await onSubmit(
-      { ...values, imageKey, barcodeKey, packagingKey },
+    const payloadValues = { ...values };
+    if (payloadValues.categoryId === "none") {
+      payloadValues.categoryId = null;
+    }
+
+    const entityId = await onSubmit(
+      {
+        ...payloadValues,
+        imageKey,
+        barcodeKey,
+        packagingKey,
+      },
       {
         imageChanged: imageFile !== null || removeStoredImage,
         barcodeChanged: barcodeFile !== null || removeStoredBarcode,
         packagingChanged: packagingFile !== null || removeStoredPackaging,
       },
     );
+    if (customFieldsRef.current?.hasFields) {
+      await customFieldsRef.current.save(entityId);
+    }
   }
 
   return (
@@ -159,6 +203,28 @@ export function ProductForm({
             <FieldContent>
               <Input id="pf-sku" {...form.register("sku")} />
               <FieldError errors={[form.formState.errors.sku]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.cost} className="gap-1.5">
+            <FieldLabel htmlFor="pf-cost">Cost</FieldLabel>
+            <FieldContent>
+              <PriceField
+                id="pf-cost"
+                placeholder="Optional"
+                {...form.register("cost", { valueAsNumber: true })}
+              />
+              <FieldError errors={[form.formState.errors.cost]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.price} className="gap-1.5">
+            <FieldLabel htmlFor="pf-price">Price</FieldLabel>
+            <FieldContent>
+              <PriceField
+                id="pf-price"
+                placeholder="Optional"
+                {...form.register("price", { valueAsNumber: true })}
+              />
+              <FieldError errors={[form.formState.errors.price]} />
             </FieldContent>
           </Field>
           <Field data-invalid={!!form.formState.errors.defaultManufacturerId} className="gap-1.5">
@@ -192,6 +258,41 @@ export function ProductForm({
               <FieldError errors={[form.formState.errors.defaultManufacturerId]} />
             </FieldContent>
           </Field>
+          <Field data-invalid={!!form.formState.errors.categoryId} className="gap-1.5">
+            <FieldLabel>Category</FieldLabel>
+            <FieldContent>
+              <Controller
+                control={form.control}
+                name="categoryId"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? undefined}
+                    onValueChange={field.onChange}
+                    items={[
+                      { value: "none", label: "No category" },
+                      ...categories.map((c) => ({
+                        value: c.id,
+                        label: c.name,
+                      })),
+                    ]}
+                  >
+                    <SelectTrigger className="w-full min-w-0">
+                      <SelectValue placeholder="Category (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No category</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <FieldError errors={[form.formState.errors.categoryId]} />
+            </FieldContent>
+          </Field>
           <Field orientation="horizontal" className="gap-2">
             <Controller
               control={form.control}
@@ -200,10 +301,10 @@ export function ProductForm({
                 <Checkbox
                   checked={field.value}
                   onCheckedChange={(v) => field.onChange(v === true)}
+                  label={<span className="font-normal">Verified</span>}
                 />
               )}
             />
-            <FieldLabel className="font-normal">Verified</FieldLabel>
           </Field>
           <Field className="gap-1.5">
             <ImageFileInput
@@ -328,6 +429,13 @@ export function ProductForm({
               </div>
             </FieldContent>
           </Field>
+          <CustomFieldsRenderer
+            ref={customFieldsRef}
+            entityType="product"
+            entityId={editingId}
+            disabled={isSubmitting}
+            nativeValues={watchedValues as Record<string, unknown>}
+          />
         </FieldGroup>
       </FieldSet>
       <DialogFooter className="mt-4 border-0 bg-transparent">

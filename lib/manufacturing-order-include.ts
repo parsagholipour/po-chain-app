@@ -8,8 +8,16 @@ export const manufacturingOrderDetailInclude = {
     include: {
       purchaseOrderLine: {
         include: {
-          product: { include: { defaultManufacturer: true } },
-          purchaseOrder: { select: { id: true, number: true, name: true, type: true } },
+          product: { include: { defaultManufacturer: true, category: true } },
+          purchaseOrder: {
+            select: {
+              id: true,
+              number: true,
+              name: true,
+              type: true,
+              saleChannel: { select: { name: true } },
+            },
+          },
         },
       },
       manufacturer: true,

@@ -61,6 +61,7 @@ function EntityTabRow({
   label,
   allOpenCount,
   allCountLabel,
+  entitiesLoading = false,
 }: {
   items: { id: string; name: string; logoKey: string | null; openCount: number | null }[];
   selectedId: string;
@@ -71,6 +72,8 @@ function EntityTabRow({
   allOpenCount?: number | null;
   /** e.g. "all sale channels" for aria/title. */
   allCountLabel: string;
+  /** When true, do not show the empty-state message (list length is unknown while fetching). */
+  entitiesLoading?: boolean;
 }) {
   const allActive = selectedId === PO_LIST_ALL_SCOPE_ID;
   const allCountPhrase =
@@ -181,7 +184,7 @@ function EntityTabRow({
           );
         })}
       </div>
-      {items.length === 0 ? (
+      {!entitiesLoading && items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-6 text-center">
           <p className="text-sm text-muted-foreground">{emptyMessage}</p>
         </div>
@@ -201,6 +204,8 @@ function PoListFiltersAndTable({
   emptyNoScopeMessage,
   emptyFilteredMessage,
   onEditProduct,
+  onDeleteOrder,
+  deletingOrderId,
 }: {
   q: string;
   onQChange: (value: string) => void;
@@ -212,6 +217,8 @@ function PoListFiltersAndTable({
   emptyNoScopeMessage: string;
   emptyFilteredMessage: string;
   onEditProduct?: (product: Product) => void;
+  onDeleteOrder?: (id: string) => Promise<void>;
+  deletingOrderId?: string | undefined;
 }) {
   return (
     <>
@@ -248,28 +255,32 @@ function PoListFiltersAndTable({
           <TableHeader>
             <TableRow>
               <ExpandableOrderSummaryTableHead />
-              <TableHead className="w-24">#</TableHead>
               <TableHead>Name</TableHead>
+              <TableHead>Sale Channel</TableHead>
+              <TableHead className="min-w-[12rem]">Manufacturing Status</TableHead>
               <TableHead className="min-w-[12rem]">Status</TableHead>
               <TableHead className="w-40">Created</TableHead>
+              <TableHead className="w-12">
+                <span className="sr-only">Actions</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {!filterReady ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
                   {emptyNoScopeMessage}
                 </TableCell>
               </TableRow>
             ) : isPending ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
                   Loading…
                 </TableCell>
               </TableRow>
             ) : data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
                   {emptyFilteredMessage}
                 </TableCell>
               </TableRow>
@@ -280,6 +291,8 @@ function PoListFiltersAndTable({
                   row={row}
                   apiScope="purchase-orders"
                   onEditProduct={onEditProduct}
+                  onDelete={onDeleteOrder}
+                  isDeleting={deletingOrderId === row.id}
                 />
               ))
             )}
@@ -310,7 +323,7 @@ export function PurchaseOrdersListView() {
     return () => clearTimeout(t);
   }, [q]);
 
-  const { data: saleChannels = [] } = useQuery({
+  const { data: saleChannels = [], isPending: saleChannelsPending } = useQuery({
     queryKey: saleChannelsKey,
     queryFn: async () => {
       const { data: rows } = await api.get<SaleChannel[]>("/api/sale-channels");
@@ -318,7 +331,7 @@ export function PurchaseOrdersListView() {
     },
   });
 
-  const { data: manufacturers = [] } = useQuery({
+  const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: manufacturersKey,
     queryFn: async () => {
       const { data: rows } = await api.get<Manufacturer[]>("/api/manufacturers");
@@ -409,14 +422,29 @@ export function PurchaseOrdersListView() {
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
 
+  const deletePo = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/api/purchase-orders/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      qc.invalidateQueries({ queryKey: ["manufacturing-orders"] });
+      qc.invalidateQueries({ queryKey: ["manufacturing-order"] });
+      toast.success("Purchase order deleted");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const deletingPoId = deletePo.isPending ? deletePo.variables : undefined;
+
   async function saveProduct(payload: {
     id?: string;
     values: ProductFormValues;
     patchImageKey: boolean;
     patchBarcodeKey: boolean;
     patchPackagingKey: boolean;
-  }) {
-    if (!payload.id) return;
+  }): Promise<string> {
+    if (!payload.id) return "";
     const body: Record<string, unknown> = {
       name: payload.values.name,
       sku: payload.values.sku,
@@ -433,10 +461,11 @@ export function PurchaseOrdersListView() {
       body.packagingKey = payload.values.packagingKey;
     }
     await updateProduct.mutateAsync({ id: payload.id, body });
+    return payload.id;
   }
 
   const onEditProduct =
-    manufacturers.length > 0
+    !manufacturersPending && manufacturers.length > 0
       ? (product: Product) => {
           setEditingProduct(product);
           setProductEditOpen(true);
@@ -497,6 +526,7 @@ export function PurchaseOrdersListView() {
                 label="Sale channel"
                 allOpenCount={saleChannelAllOpenCount}
                 allCountLabel="all sale channels"
+                entitiesLoading={saleChannelsPending}
               />
               <PoListFiltersAndTable
                 q={q}
@@ -513,6 +543,8 @@ export function PurchaseOrdersListView() {
                     : "No purchase orders for this channel match your filters."
                 }
                 onEditProduct={onEditProduct}
+                onDeleteOrder={(id) => deletePo.mutateAsync(id)}
+                deletingOrderId={deletingPoId}
               />
             </div>
           </TabsContent>
@@ -526,6 +558,7 @@ export function PurchaseOrdersListView() {
                 emptyMessage="No manufacturers yet. Add one under Manufacturers."
                 label="Manufacturer"
                 allCountLabel="all manufacturers"
+                entitiesLoading={manufacturersPending}
               />
               <PoListFiltersAndTable
                 q={q}
@@ -542,6 +575,8 @@ export function PurchaseOrdersListView() {
                     : "No purchase orders for this manufacturer match your filters."
                 }
                 onEditProduct={onEditProduct}
+                onDeleteOrder={(id) => deletePo.mutateAsync(id)}
+                deletingOrderId={deletingPoId}
               />
             </div>
           </TabsContent>

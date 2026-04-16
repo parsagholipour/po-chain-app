@@ -1,13 +1,17 @@
 type ShippingStatusSyncDb = {
   manufacturingOrder: {
     updateMany(args: {
-      where: { id: { in: string[] }; status: { in: Array<"open" | "ready_to_ship"> } };
+      where: {
+        id: { in: string[] };
+        storeId: string;
+        status: { in: Array<"open" | "ready_to_ship"> };
+      };
       data: { status: "shipped" };
     }): Promise<unknown>;
   };
   purchaseOrder: {
     updateMany(args: {
-      where: { id: { in: string[] }; status: "open" };
+      where: { id: { in: string[] }; storeId: string; status: "open" };
       data: { status: "in_transit" };
     }): Promise<unknown>;
   };
@@ -20,9 +24,11 @@ function uniqueIds(ids: string[] | undefined) {
 export async function syncLinkedOrderStatusesForShipping(
   db: ShippingStatusSyncDb,
   {
+    storeId,
     manufacturingOrderIds,
     purchaseOrderIds,
   }: {
+    storeId: string;
     manufacturingOrderIds?: string[];
     purchaseOrderIds?: string[];
   },
@@ -34,6 +40,7 @@ export async function syncLinkedOrderStatusesForShipping(
     await db.manufacturingOrder.updateMany({
       where: {
         id: { in: normalizedManufacturingOrderIds },
+        storeId,
         status: { in: ["open", "ready_to_ship"] },
       },
       data: { status: "shipped" },
@@ -45,6 +52,7 @@ export async function syncLinkedOrderStatusesForShipping(
     await db.purchaseOrder.updateMany({
       where: {
         id: { in: normalizedPurchaseOrderIds },
+        storeId,
         status: "open",
       },
       data: { status: "in_transit" },

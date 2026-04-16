@@ -1,8 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { useForm, useFormState, type Resolver } from "react-hook-form";
+import { useRef, useState } from "react";
+import { useForm, useFormState, useWatch, type Resolver } from "react-hook-form";
 import { z } from "zod";
 import { logisticsPartnerCreateSchema } from "@/lib/validations/master-data";
 import { uploadFileToStorage } from "@/lib/upload-client";
@@ -20,13 +20,18 @@ import { type LogisticsPartnerType } from "@/lib/shipping";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  CustomFieldsRenderer,
+  type CustomFieldsHandle,
+} from "@/components/po/custom-fields/custom-fields-renderer";
 
 export type LogisticsPartnerFormValues = z.infer<typeof logisticsPartnerCreateSchema>;
 
 interface LogisticsPartnerFormProps {
   defaultValues?: Partial<LogisticsPartnerFormValues>;
+  editingId?: string | null;
   defaultType?: LogisticsPartnerType;
-  onSubmit: (values: LogisticsPartnerFormValues) => void | Promise<void>;
+  onSubmit: (values: LogisticsPartnerFormValues) => Promise<string>;
   isSubmitting?: boolean;
 }
 
@@ -45,10 +50,12 @@ function getDefaultFormValues(
 
 export function LogisticsPartnerForm({
   defaultValues,
+  editingId,
   defaultType = "freight_forwarder",
   onSubmit,
   isSubmitting = false,
 }: LogisticsPartnerFormProps) {
+  const customFieldsRef = useRef<CustomFieldsHandle>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [removeStoredLogo, setRemoveStoredLogo] = useState(false);
 
@@ -57,6 +64,7 @@ export function LogisticsPartnerForm({
     defaultValues: getDefaultFormValues(defaultValues, defaultType),
   });
   const { isSubmitting: formSubmitting } = useFormState({ control: form.control });
+  const watchedValues = useWatch({ control: form.control });
 
   const storedLogoKey =
     removeStoredLogo || logoFile ? null : (defaultValues?.logoKey ?? null);
@@ -74,12 +82,15 @@ export function LogisticsPartnerForm({
       logoKey = null;
     }
 
-    await onSubmit({
+    const entityId = await onSubmit({
       ...values,
       logoKey,
       contactNumber: values.contactNumber ?? null,
       link: values.link ?? null,
     });
+    if (customFieldsRef.current?.hasFields) {
+      await customFieldsRef.current.save(entityId);
+    }
   }
 
   return (
@@ -135,6 +146,14 @@ export function LogisticsPartnerForm({
           </FieldContent>
           <FieldError>{form.formState.errors.link?.message}</FieldError>
         </Field>
+
+        <CustomFieldsRenderer
+          ref={customFieldsRef}
+          entityType="logistics_partner"
+          entityId={editingId}
+          disabled={isSubmitting || formSubmitting}
+          nativeValues={watchedValues as Record<string, unknown>}
+        />
       </FieldSet>
 
       <DialogFooter>

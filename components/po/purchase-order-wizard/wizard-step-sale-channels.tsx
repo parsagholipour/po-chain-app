@@ -15,9 +15,11 @@ type Props = {
   saleChannels: SaleChannel[];
   value: string;
   onChange: (saleChannelId: string) => void;
+  /** When true, empty `saleChannels` means still loading — do not show the empty catalog message. */
+  isPending?: boolean;
 };
 
-export function WizardStepSaleChannels({ saleChannels, value, onChange }: Props) {
+export function WizardStepSaleChannels({ saleChannels, value, onChange, isPending = false }: Props) {
   const saleChannelItems = useMemo(
     () =>
       saleChannels.map((sc) => ({
@@ -26,6 +28,10 @@ export function WizardStepSaleChannels({ saleChannels, value, onChange }: Props)
       })),
     [saleChannels],
   );
+
+  if (isPending) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
 
   if (saleChannels.length === 0) {
     return <p className="text-sm text-muted-foreground">No sale channels available.</p>;

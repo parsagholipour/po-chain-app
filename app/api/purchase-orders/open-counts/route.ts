@@ -1,18 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session-user";
-import { jsonError } from "@/lib/json-error";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
+import { requireStoreContext } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
 export async function GET() {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const bySaleChannel = await prisma.purchaseOrder.groupBy({
     by: ["saleChannelId"],
     where: {
+      storeId,
       type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
       status: { not: "closed" },
       saleChannelId: { not: null },
@@ -28,7 +29,10 @@ export async function GET() {
 
   const byManufacturer = await prisma.manufacturingOrderManufacturer.groupBy({
     by: ["manufacturerId"],
-    where: { manufacturingOrder: { status: { not: "closed" } } },
+    where: {
+      storeId,
+      manufacturingOrder: { status: { not: "closed" } },
+    },
     _count: { _all: true },
   });
 

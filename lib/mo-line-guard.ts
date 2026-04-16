@@ -2,20 +2,20 @@ import { prisma } from "@/lib/prisma";
 
 /** True if the PO that owns `purchaseOrderLineId` is linked to this manufacturing order. */
 export async function purchaseOrderLineLinkedToMo(
+  storeId: string,
   manufacturingOrderId: string,
   purchaseOrderLineId: string,
 ): Promise<boolean> {
-  const line = await prisma.purchaseOrderLine.findUnique({
-    where: { id: purchaseOrderLineId },
+  const line = await prisma.purchaseOrderLine.findFirst({
+    where: { id: purchaseOrderLineId, storeId },
     select: { purchaseOrderId: true },
   });
   if (!line) return false;
-  const link = await prisma.manufacturingOrderPurchaseOrder.findUnique({
+  const link = await prisma.manufacturingOrderPurchaseOrder.findFirst({
     where: {
-      manufacturingOrderId_purchaseOrderId: {
-        manufacturingOrderId,
-        purchaseOrderId: line.purchaseOrderId,
-      },
+      storeId,
+      manufacturingOrderId,
+      purchaseOrderId: line.purchaseOrderId,
     },
   });
   return !!link;
@@ -23,12 +23,15 @@ export async function purchaseOrderLineLinkedToMo(
 
 /** True if `manufacturerId` is on the manufacturing order manufacturer pivot. */
 export async function manufacturerOnManufacturingOrder(
+  storeId: string,
   manufacturingOrderId: string,
   manufacturerId: string,
 ): Promise<boolean> {
-  const row = await prisma.manufacturingOrderManufacturer.findUnique({
+  const row = await prisma.manufacturingOrderManufacturer.findFirst({
     where: {
-      manufacturingOrderId_manufacturerId: { manufacturingOrderId, manufacturerId },
+      storeId,
+      manufacturingOrderId,
+      manufacturerId,
     },
   });
   return !!row;

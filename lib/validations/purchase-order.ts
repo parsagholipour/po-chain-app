@@ -11,15 +11,10 @@ export const moManufacturerStatusSchema = z.enum([
   "picked_up",
 ]);
 
-const optionalIsoDateTime = z.union([z.string().datetime(), z.null()]).optional();
 
 export const invoiceUpsertSchema = z.object({
   invoiceNumber: z.string().min(1),
   documentKey: z.string().min(1).nullable().optional(),
-  orderDate: optionalIsoDateTime,
-  estimatedCompletionDate: optionalIsoDateTime,
-  depositPaidAt: optionalIsoDateTime,
-  balancePaidAt: optionalIsoDateTime,
 });
 
 export const invoicePatchSchema = invoiceUpsertSchema.partial();
@@ -84,26 +79,13 @@ export const shippingCreateSchema = z.object({
 
 export const shippingPatchSchema = shippingCreateSchema.partial();
 
-function toPrismaDate(v: string | null): Date | null {
-  if (v === null) return null;
-  return new Date(v);
-}
 
 export function invoicePayloadToPrisma(data: z.infer<typeof invoiceUpsertSchema>) {
   const out: {
     invoiceNumber: string;
     documentKey?: string | null;
-    orderDate?: Date | null;
-    estimatedCompletionDate?: Date | null;
-    depositPaidAt?: Date | null;
-    balancePaidAt?: Date | null;
   } = { invoiceNumber: data.invoiceNumber };
   if (data.documentKey !== undefined) out.documentKey = data.documentKey;
-  if (data.orderDate !== undefined) out.orderDate = toPrismaDate(data.orderDate);
-  if (data.estimatedCompletionDate !== undefined)
-    out.estimatedCompletionDate = toPrismaDate(data.estimatedCompletionDate);
-  if (data.depositPaidAt !== undefined) out.depositPaidAt = toPrismaDate(data.depositPaidAt);
-  if (data.balancePaidAt !== undefined) out.balancePaidAt = toPrismaDate(data.balancePaidAt);
   return out;
 }
 
@@ -111,17 +93,8 @@ export function invoicePatchToPrisma(data: z.infer<typeof invoicePatchSchema>) {
   const out: {
     invoiceNumber?: string;
     documentKey?: string | null;
-    orderDate?: Date | null;
-    estimatedCompletionDate?: Date | null;
-    depositPaidAt?: Date | null;
-    balancePaidAt?: Date | null;
   } = {};
   if (data.invoiceNumber !== undefined) out.invoiceNumber = data.invoiceNumber;
   if (data.documentKey !== undefined) out.documentKey = data.documentKey;
-  if (data.orderDate !== undefined) out.orderDate = toPrismaDate(data.orderDate);
-  if (data.estimatedCompletionDate !== undefined)
-    out.estimatedCompletionDate = toPrismaDate(data.estimatedCompletionDate);
-  if (data.depositPaidAt !== undefined) out.depositPaidAt = toPrismaDate(data.depositPaidAt);
-  if (data.balancePaidAt !== undefined) out.balancePaidAt = toPrismaDate(data.balancePaidAt);
   return out;
 }

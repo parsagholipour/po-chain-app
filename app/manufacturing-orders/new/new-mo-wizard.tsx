@@ -12,13 +12,16 @@ import {
 } from "@/lib/mo-product-assets";
 import { uploadFileToStorage } from "@/lib/upload-client";
 import { useWizardDocumentUpload } from "@/lib/use-wizard-document-upload";
-import type { Manufacturer, PurchaseOrderDetail } from "@/lib/types/api";
-import { WizardStepBasics } from "@/components/po/purchase-order-wizard/wizard-step-basics";
+import type { Manufacturer, PurchaseOrderDetail, PurchaseOrderSummary } from "@/lib/types/api";
+import { WizardStepBasics, documentDisplayName } from "@/components/po/purchase-order-wizard/wizard-step-basics";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { DocumentDownloadLink } from "@/components/ui/document-download-link";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { distributorPoStatusLabels } from "@/lib/po/status-labels";
+import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const STEPS = ["Basics", "POs & stock orders", "Manufacturers", "Review"] as const;
@@ -27,6 +30,9 @@ type WizardOrderRow = {
   id: string;
   number: number;
   name: string;
+  status: string;
+  createdAt: string;
+  saleChannel: { id: string; name: string; type: string; logoKey: string | null } | null;
   kind: "distributor" | "stock";
 };
 
@@ -52,32 +58,34 @@ export function NewManufacturingOrderWizard() {
     [purchaseOrderIds],
   );
 
-  const { data: purchaseOrders = [] } = useQuery({
+  const { data: purchaseOrders = [], isPending: purchaseOrdersPending } = useQuery({
     queryKey: ["purchase-orders", "all-for-mo-wizard"],
     queryFn: async () => {
-      const { data } = await api.get<{ id: string; number: number; name: string }[]>(
+      const { data } = await api.get<PurchaseOrderSummary[]>(
         "/api/purchase-orders",
       );
       return data;
     },
   });
 
-  const { data: stockOrders = [] } = useQuery({
+  const { data: stockOrders = [], isPending: stockOrdersPending } = useQuery({
     queryKey: ["stock-orders", "all-for-mo-wizard"],
     queryFn: async () => {
-      const { data } = await api.get<{ id: string; number: number; name: string }[]>(
+      const { data } = await api.get<PurchaseOrderSummary[]>(
         "/api/stock-orders",
       );
       return data;
     },
   });
 
+  const ordersCatalogPending = purchaseOrdersPending || stockOrdersPending;
+
   const mergedOrders = useMemo((): WizardOrderRow[] => {
     const rows: WizardOrderRow[] = [
       ...purchaseOrders.map((o) => ({ ...o, kind: "distributor" as const })),
       ...stockOrders.map((o) => ({ ...o, kind: "stock" as const })),
     ];
-    rows.sort((a, b) => a.number - b.number);
+    rows.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return rows;
   }, [purchaseOrders, stockOrders]);
 
@@ -105,7 +113,6 @@ export function NewManufacturingOrderWizard() {
           return data;
         },
         enabled: kind === "distributor" || kind === "stock",
-        staleTime: 60_000,
       };
     }),
   });
@@ -139,7 +146,7 @@ export function NewManufacturingOrderWizard() {
   const allSelectedManufacturerIds = new Set(requiredManufacturerIds);
   for (const id of extraManufacturerIds) allSelectedManufacturerIds.add(id);
 
-  const { data: manufacturers = [] } = useQuery({
+  const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: ["manufacturers"],
     queryFn: async () => {
       const { data } = await api.get<Manufacturer[]>("/api/manufacturers");
@@ -291,7 +298,9 @@ export function NewManufacturingOrderWizard() {
             <div className="space-y-3">
               <p className="text-sm font-medium">Orders</p>
               <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-border/60 p-3">
-                {mergedOrders.length === 0 ? (
+                {ordersCatalogPending && mergedOrders.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Loading…</p>
+                ) : mergedOrders.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No purchase or stock orders yet. Create them from their respective lists.
                   </p>
@@ -299,16 +308,38 @@ export function NewManufacturingOrderWizard() {
                   mergedOrders.map((o) => (
                     <label
                       key={o.id}
-                      className="flex cursor-pointer items-center gap-2 text-sm"
+                      htmlFor={`order-${o.id}`}
+                      className="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-muted/50"
                     >
                       <Checkbox
+                        id={`order-${o.id}`}
                         checked={purchaseOrderIds.has(o.id)}
                         onCheckedChange={() => toggleSet(setPurchaseOrderIds, o.id)}
                       />
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {o.kind === "stock" ? "SO" : "PO"} #{o.number}
-                      </span>
-                      {o.name}
+                      <div className="flex flex-1 items-center gap-2 text-sm">
+                        <Badge variant="outline" className="text-[10px] font-medium shrink-0">
+                          {o.kind === "stock" ? "Stock" : "PO"}
+                        </Badge>
+                        <span className="font-medium truncate">{o.name}</span>
+                        {o.saleChannel ? (
+                          <span className="text-xs text-muted-foreground truncate">{o.saleChannel.name}</span>
+                        ) : null}
+                        <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                          {new Date(o.createdAt).toLocaleDateString()}
+                        </span>
+                        <Badge variant="secondary" className="text-[10px] shrink-0">
+                          {distributorPoStatusLabels[o.status] ?? o.status}
+                        </Badge>
+                        <a
+                          href={o.kind === "stock" ? `/stock-orders/${o.id}` : `/purchase-orders/${o.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="shrink-0 text-muted-foreground hover:text-foreground"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      </div>
                     </label>
                   ))
                 )}
@@ -321,11 +352,11 @@ export function NewManufacturingOrderWizard() {
               {missingProductAssetLines.length > 0 ? (
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-destructive">
-                    Selected order line products need barcode and packaging before creating an MO:
+                    Selected order line products need barcode, packaging, and verified status before creating an MO:
                   </p>
                   <ul className="text-xs text-destructive/80 list-disc list-inside">
-                    {missingProductAssetLines.slice(0, 5).map((line) => (
-                      <li key={`${line.product.sku}`}>
+                    {missingProductAssetLines.slice(0, 5).map((line, i) => (
+                      <li key={`${line.product.sku}-${i}`}>
                         {line.product.sku} - {line.product.name} ({line.missingFields.join(" and ")})
                       </li>
                     ))}
@@ -350,34 +381,42 @@ export function NewManufacturingOrderWizard() {
                 </p>
               ) : null}
               <div className="grid gap-2 sm:grid-cols-2">
-                {manufacturers.map((m) => {
-                  const required = requiredManufacturerIds.has(m.id);
-                  const checked = required || extraManufacturerIds.has(m.id);
-                  return (
-                    <label
-                      key={m.id}
-                      className={cn(
-                        "flex items-center gap-2 rounded-lg border border-border/60 p-3 text-sm",
-                        required ? "cursor-default bg-muted/40" : "cursor-pointer",
-                      )}
-                    >
-                      <Checkbox
-                        checked={checked}
-                        disabled={required}
-                        onCheckedChange={() => {
-                          if (required) return;
-                          toggleSet(setExtraManufacturerIds, m.id);
-                        }}
-                      />
-                      <span>
-                        <span className="font-medium">{m.name}</span>
-                        <span className="block text-xs text-muted-foreground">
-                          {required ? "Required from linked line(s)" : m.region}
+                {manufacturersPending && manufacturers.length === 0 ? (
+                  <p className="col-span-full text-sm text-muted-foreground">Loading…</p>
+                ) : !manufacturersPending && manufacturers.length === 0 ? (
+                  <p className="col-span-full text-sm text-muted-foreground">
+                    No manufacturers yet. Add one under Manufacturers.
+                  </p>
+                ) : (
+                  manufacturers.map((m) => {
+                    const required = requiredManufacturerIds.has(m.id);
+                    const checked = required || extraManufacturerIds.has(m.id);
+                    return (
+                      <label
+                        key={m.id}
+                        className={cn(
+                          "flex items-center gap-2 rounded-lg border border-border/60 p-3 text-sm",
+                          required ? "cursor-default bg-muted/40" : "cursor-pointer",
+                        )}
+                      >
+                        <Checkbox
+                          checked={checked}
+                          disabled={required}
+                          onCheckedChange={() => {
+                            if (required) return;
+                            toggleSet(setExtraManufacturerIds, m.id);
+                          }}
+                        />
+                        <span>
+                          <span className="font-medium">{m.name}</span>
+                          <span className="block text-xs text-muted-foreground">
+                            {required ? "Required from linked line(s)" : m.region}
+                          </span>
                         </span>
-                      </span>
-                    </label>
-                  );
-                })}
+                      </label>
+                    );
+                  })
+                )}
               </div>
             </div>
           ) : null}
@@ -388,22 +427,85 @@ export function NewManufacturingOrderWizard() {
                 <span className="text-muted-foreground">Name: </span>
                 <span className="font-medium">{name.trim()}</span>
               </div>
-              <div>
-                <span className="text-muted-foreground">Document: </span>
-                {documentKey || docFile ? "Yes" : "No"}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-muted-foreground">Document:</span>
+                {documentKey || docFile ? (
+                  documentDisplayName(documentKey, docFile) ? (
+                    <>
+                      <span className="font-medium break-all">{documentDisplayName(documentKey, docFile)}</span>
+                      {documentKey ? (
+                        <DocumentDownloadLink documentKey={documentKey} fileName={documentDisplayName(documentKey, docFile)} fallback={null} />
+                      ) : null}
+                    </>
+                  ) : "Yes"
+                ) : "No"}
               </div>
               <div>
                 <span className="text-muted-foreground">Linked orders: </span>
-                {purchaseOrderIds.size === 0 ? "None" : `${purchaseOrderIds.size} selected`}
+                {purchaseOrderIds.size === 0 ? (
+                  "None"
+                ) : (
+                  <ul className="mt-2 space-y-2">
+                    {purchaseOrderIdList.map((id) => {
+                      const o = mergedOrders.find((m) => m.id === id);
+                      if (!o) return null;
+                      return (
+                        <li key={id} className="flex items-center gap-2 rounded-md border border-border/60 p-2 text-sm">
+                          <Badge variant="outline" className="text-[10px] font-medium shrink-0">
+                            {o.kind === "stock" ? "Stock" : "PO"}
+                          </Badge>
+                          <span className="font-medium">{o.name}</span>
+                          {o.saleChannel ? (
+                            <span className="text-xs text-muted-foreground truncate">
+                              {o.saleChannel.name}
+                            </span>
+                          ) : null}
+                          <span className="text-xs text-muted-foreground ml-auto shrink-0">
+                            {new Date(o.createdAt).toLocaleDateString()}
+                          </span>
+                          <Badge variant="secondary" className="text-[10px] shrink-0">
+                            {distributorPoStatusLabels[o.status] ?? o.status}
+                          </Badge>
+                          <a
+                            href={o.kind === "stock" ? `/stock-orders/${o.id}` : `/purchase-orders/${o.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                          >
+                            <ExternalLink className="size-3.5" />
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
               <div>
                 <span className="text-muted-foreground">Manufacturers: </span>
-                {allSelectedManufacturerIds.size === 0
-                  ? "None"
-                  : [...allSelectedManufacturerIds]
-                      .map((id) => manufacturers.find((m) => m.id === id)?.name)
-                      .filter(Boolean)
-                      .join(", ")}
+                {allSelectedManufacturerIds.size === 0 ? (
+                  "None"
+                ) : (
+                  <ul className="mt-2 space-y-2">
+                    {[...allSelectedManufacturerIds].map((id) => {
+                      const m = manufacturers.find((m) => m.id === id);
+                      if (!m) return null;
+                      return (
+                        <li key={id} className="flex items-center gap-2 rounded-md border border-border/60 p-2 text-sm">
+                          <span className="font-medium">{m.name}</span>
+                          <span className="text-xs text-muted-foreground ml-auto">{m.region}</span>
+                          <a
+                            href={`/manufacturers/${m.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-muted-foreground hover:text-foreground"
+                          >
+                            <ExternalLink className="size-3.5" />
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
               {requiredManufacturerIds.size > 0 ? (
                 <p className="text-xs text-muted-foreground">

@@ -7,10 +7,20 @@ import { api } from "@/lib/axios";
 import { LineItemCard, LineItemsGrid } from "@/components/po/line-items/line-items-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
 import type { PoLineRow, Product, PurchaseOrderSummary } from "@/lib/types/api";
-import { distributorPoStatusLabels, shippingStatusLabels } from "@/lib/po/status-labels";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { distributorPoStatusLabels, moStatusLabels, shippingStatusLabels } from "@/lib/po/status-labels";
+import { ChevronDown, ChevronRight, Loader2, Trash2 } from "lucide-react";
 
 export type OrderListLinesApiScope = "purchase-orders" | "stock-orders";
 
@@ -38,13 +48,20 @@ export function ExpandableOrderSummaryRow({
   row,
   apiScope,
   onEditProduct,
+  onDelete,
+  isDeleting = false,
 }: {
   row: PurchaseOrderSummary;
   apiScope: OrderListLinesApiScope;
   onEditProduct?: (product: Product) => void;
+  onDelete?: (id: string) => Promise<void>;
+  isDeleting?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const href = detailHref(apiScope, row.id);
+  const isStockList = apiScope === "stock-orders";
+  const orderKindLabel = isStockList ? "stock order" : "purchase order";
 
   const { data: lines, isPending, isError } = useQuery({
     queryKey: ["order-lines", "list-expand", apiScope, row.id] as const,
@@ -55,7 +72,8 @@ export function ExpandableOrderSummaryRow({
     enabled: open,
   });
 
-  const colSpan = 5;
+  const baseColumnCount = isStockList ? 5 : 6;
+  const colSpan = baseColumnCount + (onDelete ? 1 : 0);
 
   return (
     <>
@@ -77,16 +95,36 @@ export function ExpandableOrderSummaryRow({
             )}
           </Button>
         </TableCell>
-        <TableCell className="font-mono font-medium">
-          <Link href={href} className="text-primary underline-offset-4 hover:underline">
-            {row.number}
-          </Link>
-        </TableCell>
         <TableCell>
           <Link href={href} className="font-medium hover:underline">
             {row.name}
           </Link>
         </TableCell>
+        {!isStockList ? (
+          <>
+            <TableCell className="text-muted-foreground">
+              {row.saleChannel?.name ?? "—"}
+            </TableCell>
+            <TableCell>
+              {row.manufacturingOrders.length > 0 ? (
+                <div className="flex flex-col gap-1.5">
+                  {row.manufacturingOrders.map((mo) => (
+                    <div key={mo.id} className="flex items-center gap-1.5">
+                      <Link href={`/manufacturing-orders/${mo.id}`} className="text-xs hover:underline">
+                        {mo.name}
+                      </Link>
+                      <Badge variant="outline" className="text-[10px] font-medium">
+                        {moStatusLabels[mo.status] ?? mo.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </TableCell>
+          </>
+        ) : null}
         <TableCell>
           <div className="flex flex-col gap-1.5">
             <Badge variant="secondary">
@@ -106,6 +144,60 @@ export function ExpandableOrderSummaryRow({
         <TableCell className="text-muted-foreground text-xs">
           {new Date(row.createdAt).toLocaleDateString()}
         </TableCell>
+        {onDelete ? (
+          <TableCell className="w-12 p-1 align-middle">
+            <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+              <AlertDialogTrigger
+                nativeButton
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    disabled={isDeleting}
+                  />
+                }
+              >
+                <Trash2 className="size-4" aria-hidden />
+                <span className="sr-only">Delete {orderKindLabel}</span>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this {orderKindLabel}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {`This permanently removes "${row.name}" and all its line items. Links from manufacturing orders and MO line allocations for those lines are removed. Manufacturing orders themselves are kept.`}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={isDeleting}
+                    onClick={async () => {
+                      try {
+                        await onDelete(row.id);
+                        setDeleteOpen(false);
+                      } catch {
+                        /* toast from mutation */
+                      }
+                    }}
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 className="mr-2 size-4 animate-spin" aria-hidden />
+                        Deleting…
+                      </>
+                    ) : (
+                      "Delete"
+                    )}
+                  </Button>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </TableCell>
+        ) : null}
       </TableRow>
       {open ? (
         <TableRow className="hover:bg-transparent">

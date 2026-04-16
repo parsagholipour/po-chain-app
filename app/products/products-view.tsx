@@ -9,6 +9,7 @@ import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dia
 import { ProductsTable } from "@/components/po/products/products-table";
 import type { ProductFormValues } from "@/components/po/products/product-form";
 import { Button } from "@/components/ui/button";
+import { TableContainer } from "@/components/ui/table-container";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 
@@ -22,7 +23,7 @@ export function ProductsView() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
 
-  const { data: manufacturers = [] } = useQuery({
+  const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: manufacturersKey,
     queryFn: async () => {
       const { data: rows } = await api.get<Manufacturer[]>("/api/manufacturers");
@@ -43,7 +44,10 @@ export function ProductsView() {
       const { data: row } = await api.post<Product>("/api/products", {
         name: values.name,
         sku: values.sku,
+        cost: values.cost ?? null,
+        price: values.price ?? null,
         defaultManufacturerId: values.defaultManufacturerId,
+        categoryId: values.categoryId,
         verified: values.verified,
         imageKey: values.imageKey,
         barcodeKey: values.barcodeKey,
@@ -87,12 +91,15 @@ export function ProductsView() {
     patchImageKey: boolean;
     patchBarcodeKey: boolean;
     patchPackagingKey: boolean;
-  }) {
+  }): Promise<string> {
     if (payload.id) {
       const body: Record<string, unknown> = {
         name: payload.values.name,
         sku: payload.values.sku,
+        cost: payload.values.cost ?? null,
+        price: payload.values.price ?? null,
         defaultManufacturerId: payload.values.defaultManufacturerId,
+        categoryId: payload.values.categoryId,
         verified: payload.values.verified,
       };
       if (payload.patchImageKey) {
@@ -105,8 +112,10 @@ export function ProductsView() {
         body.packagingKey = payload.values.packagingKey;
       }
       await updateMut.mutateAsync({ id: payload.id, body });
+      return payload.id;
     } else {
-      await createMut.mutateAsync(payload.values);
+      const row = await createMut.mutateAsync(payload.values);
+      return row.id;
     }
   }
 
@@ -123,27 +132,29 @@ export function ProductsView() {
             setEditing(null);
             setOpen(true);
           }}
-          disabled={manufacturers.length === 0}
+          disabled={manufacturersPending || manufacturers.length === 0}
         >
           <Plus className="size-4" />
           Add product
         </Button>
       </div>
-      {manufacturers.length === 0 ? (
+      {!manufacturersPending && manufacturers.length === 0 ? (
         <p className="text-sm text-amber-600 dark:text-amber-400">
           Create at least one manufacturer before adding products.
         </p>
       ) : null}
 
-      <ProductsTable
-        rows={data}
-        isPending={isPending}
-        onEdit={(row) => {
-          setEditing(row);
-          setOpen(true);
-        }}
-        onDelete={(row) => deleteMut.mutate(row.id)}
-      />
+      <TableContainer>
+        <ProductsTable
+          rows={data}
+          isPending={isPending}
+          onEdit={(row) => {
+            setEditing(row);
+            setOpen(true);
+          }}
+          onDelete={(row) => deleteMut.mutate(row.id)}
+        />
+      </TableContainer>
 
       <ProductUpsertDialog
         open={open}

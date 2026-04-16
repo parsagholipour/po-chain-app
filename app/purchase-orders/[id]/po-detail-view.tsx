@@ -78,7 +78,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
     (sc) => sc.type === "distributor",
   );
 
-  const { data: manufacturers = [] } = useQuery({
+  const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: ["manufacturers"] as const,
     queryFn: async () => {
       const { data } = await api.get<Manufacturer[]>("/api/manufacturers");
@@ -179,8 +179,8 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
     patchImageKey: boolean;
     patchBarcodeKey: boolean;
     patchPackagingKey: boolean;
-  }) {
-    if (!payload.id) return;
+  }): Promise<string> {
+    if (!payload.id) return "";
     const body: Record<string, unknown> = {
       name: payload.values.name,
       sku: payload.values.sku,
@@ -197,6 +197,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
       body.packagingKey = payload.values.packagingKey;
     }
     await updateProduct.mutateAsync({ id: payload.id, body });
+    return payload.id;
   }
 
   async function uploadDocument(file: File) {
@@ -319,7 +320,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         onDeleteLine={(lineId) => deleteLine.mutate(lineId)}
         lineMutationPending={patchLine.isPending}
         onEditProduct={
-          manufacturers.length > 0
+          !manufacturersPending && manufacturers.length > 0
             ? (product) => {
                 setEditingProduct(product);
                 setProductEditOpen(true);

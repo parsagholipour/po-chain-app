@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session-user";
 import { invoicePatchSchema, invoicePatchToPrisma } from "@/lib/validations/purchase-order";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
+import { requireStoreContext } from "@/lib/store-context";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -13,15 +13,16 @@ export async function GET(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
   if (!pid.success) return jsonFromZod(pid.error);
 
-  const row = await prisma.invoice.findUnique({
-    where: { id: pid.data.id },
+  const row = await prisma.invoice.findFirst({
+    where: { id: pid.data.id, storeId },
     include: {
       manufacturingOrderManufacturer: {
         include: { manufacturer: true, manufacturingOrder: true },
@@ -36,8 +37,9 @@ export async function PATCH(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -62,6 +64,12 @@ export async function PATCH(
   }
 
   try {
+    const existing = await prisma.invoice.findFirst({
+      where: { id: pid.data.id, storeId },
+      select: { id: true },
+    });
+    if (!existing) return jsonError("Not found", 404);
+
     const row = await prisma.invoice.update({
       where: { id: pid.data.id },
       data,

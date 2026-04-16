@@ -17,6 +17,8 @@ import type {
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
 import { InvoiceUpsertDialog } from "@/components/po/purchase-order/invoice-upsert-dialog";
+import { ManufacturerUpsertDialog } from "@/components/po/manufacturers/manufacturer-upsert-dialog";
+import type { ManufacturerFormValues } from "@/components/po/manufacturers/manufacturer-form";
 import { PoManufacturersSection } from "@/components/po/purchase-order/po-manufacturers-section";
 import { StatusChangeDialog, EditPivotDetailsDialog, type StatusChangeTarget } from "@/components/po/purchase-order/status-change-dialog";
 import { PoShipmentsSection } from "@/components/po/purchase-order/po-shipments-section";
@@ -93,7 +95,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     },
   });
 
-  const { data: distributorPoList = [] } = useQuery({
+  const { data: distributorPoList = [], isPending: distributorPoListPending } = useQuery({
     queryKey: ["purchase-orders", "list-all-for-mo"],
     queryFn: async () => {
       const { data } = await api.get<{ id: string; number: number; name: string }[]>(
@@ -103,7 +105,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     },
   });
 
-  const { data: stockOrderList = [] } = useQuery({
+  const { data: stockOrderList = [], isPending: stockOrderListPending } = useQuery({
     queryKey: ["stock-orders", "list-all-for-mo"],
     queryFn: async () => {
       const { data } = await api.get<{ id: string; number: number; name: string }[]>(
@@ -271,6 +273,20 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
 
+  const updateManufacturer = useMutation({
+    mutationFn: async ({ id, values }: { id: string; values: ManufacturerFormValues }) => {
+      const { data } = await api.patch<Manufacturer>(`/api/manufacturers/${id}`, values);
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["manufacturers"] });
+      qc.invalidateQueries({ queryKey: moKey });
+      setManufacturerModal(null);
+      toast.success("Manufacturer updated");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
   const updateProduct = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
       const { data } = await api.patch<Product>(`/api/products/${id}`, body);
@@ -294,6 +310,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
   const [allocOpen, setAllocOpen] = useState(false);
   const [productEditOpen, setProductEditOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [manufacturerModal, setManufacturerModal] = useState<Manufacturer | null>(null);
 
   const invoiceDialogDefaults = useMemo(() => {
     if (!invoiceTarget) {
@@ -327,8 +344,8 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     patchImageKey: boolean;
     patchBarcodeKey: boolean;
     patchPackagingKey: boolean;
-  }) {
-    if (!payload.id) return;
+  }): Promise<string> {
+    if (!payload.id) return "";
     const body: Record<string, unknown> = {
       name: payload.values.name,
       sku: payload.values.sku,
@@ -345,6 +362,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
       body.packagingKey = payload.values.packagingKey;
     }
     await updateProduct.mutateAsync({ id: payload.id, body });
+    return payload.id;
   }
 
   if (isPending) {
@@ -413,10 +431,9 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
   const allocBusy =
     addAlloc.isPending || patchAlloc.isPending || deleteAlloc.isPending;
 
-  const openLinkedOrders = mo.purchaseOrders.filter((r) => r.purchaseOrder.status === "open");
-  const poCount = openLinkedOrders.filter((r) => r.purchaseOrder.type === "distributor").length;
-  const soCount = openLinkedOrders.filter((r) => r.purchaseOrder.type === "stock").length;
-  const linkedTotal = openLinkedOrders.length;
+  const poCount = mo.purchaseOrders.filter((r) => r.purchaseOrder.type === "distributor").length;
+  const soCount = mo.purchaseOrders.filter((r) => r.purchaseOrder.type === "stock").length;
+  const linkedTotal = mo.purchaseOrders.length;
 
   const linksSummary =
     linkedTotal === 0
@@ -471,6 +488,8 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         <MoLinksSection
           mo={mo}
           linkableOrders={linkableOrders}
+          poLinkCatalogPending={distributorPoListPending}
+          soLinkCatalogPending={stockOrderListPending}
           onAddPurchaseOrder={(id) => addPo.mutate(id)}
           onRemovePurchaseOrder={(id) => removePo.mutate(id)}
           pending={linksPending}
@@ -494,6 +513,11 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
           onCreateInvoice={(row) => setInvoiceTarget({ row, mode: "create" })}
           onEditInvoice={(row) => setInvoiceTarget({ row, mode: "edit" })}
           onEditStepDetails={(row) => setEditStepRow(row)}
+          onEditManufacturer={(manufacturerId) => {
+            const m = manufacturers.find((x) => x.id === manufacturerId);
+            if (m) setManufacturerModal(m);
+            else toast.error("Manufacturer not found");
+          }}
         />
       </CollapsibleSection>
 
@@ -584,6 +608,19 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         editing={editingProduct}
         manufacturers={manufacturers}
         onSave={saveProductFromMo}
+      />
+
+      <ManufacturerUpsertDialog
+        open={!!manufacturerModal}
+        onOpenChange={(o) => {
+          if (!o) setManufacturerModal(null);
+        }}
+        editing={manufacturerModal}
+        onSave={async (payload) => {
+          if (!payload.id) return "";
+          await updateManufacturer.mutateAsync({ id: payload.id, values: payload.values });
+          return payload.id;
+        }}
       />
     </div>
   );

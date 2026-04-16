@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId, requireAppUserId } from "@/lib/session-user";
+import { requireStoreContext } from "@/lib/store-context";
 import {
   manufacturingOrderCreateSchema,
   manufacturingOrderStatusSchema,
@@ -18,15 +18,16 @@ import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { searchParams } = new URL(request.url);
   const statusRaw = searchParams.get("status");
   const q = searchParams.get("q")?.trim() ?? "";
   const manufacturerIdRaw = searchParams.get("manufacturerId");
 
-  const where: Prisma.ManufacturingOrderWhereInput = {};
+  const where: Prisma.ManufacturingOrderWhereInput = { storeId };
   if (statusRaw) {
     const st = manufacturingOrderStatusSchema.safeParse(statusRaw);
     if (st.success) where.status = st.data;
@@ -73,34 +74,91 @@ export async function GET(request: Request) {
           },
         },
       },
+      purchaseOrders: {
+        select: {
+          purchaseOrder: {
+            select: {
+              id: true,
+              number: true,
+              name: true,
+              type: true,
+              saleChannel: { select: { name: true } },
+            },
+          },
+        },
+      },
     },
   });
   return NextResponse.json(
-    rows.map((r) => ({
-      id: r.id,
-      number: r.number,
-      name: r.name,
-      status: r.status,
-      createdAt: r.createdAt,
-      manufacturers: r.manufacturers.map((m) => ({
-        manufacturerId: m.manufacturerId,
-        name: m.manufacturer.name,
-        status: m.status,
-      })),
-      shippingBadges: r.manufacturingOrderShippings.map((s) => ({
-        id: s.shipping.id,
-        status: s.shipping.status,
-        type: s.shipping.type,
-        trackingNumber: s.shipping.trackingNumber,
-      })),
-    })),
+    rows.map((r) => {
+      const linkedSaleChannels = [
+        ...new Set(
+          r.purchaseOrders
+            .map((p) => p.purchaseOrder.saleChannel?.name)
+            .filter((n): n is string => Boolean(n)),
+        ),
+      ];
+      const byPoId = new Map<
+        string,
+        {
+          id: string;
+          number: number;
+          name: string;
+          type: "distributor" | "stock";
+          saleChannelName: string | null;
+        }
+      >();
+      for (const p of r.purchaseOrders) {
+        const po = p.purchaseOrder;
+        byPoId.set(po.id, {
+          id: po.id,
+          number: po.number,
+          name: po.name,
+          type: po.type,
+          saleChannelName: po.saleChannel?.name ?? null,
+        });
+      }
+      const linkedOrders = [...byPoId.values()]
+        .sort((a, b) => {
+          const ta = a.type === "distributor" ? 0 : 1;
+          const tb = b.type === "distributor" ? 0 : 1;
+          if (ta !== tb) return ta - tb;
+          return b.number - a.number;
+        })
+        .map(({ id, name, type, saleChannelName }) => ({
+          id,
+          name,
+          type,
+          saleChannelName,
+        }));
+      return {
+        id: r.id,
+        number: r.number,
+        name: r.name,
+        status: r.status,
+        createdAt: r.createdAt,
+        manufacturers: r.manufacturers.map((m) => ({
+          manufacturerId: m.manufacturerId,
+          name: m.manufacturer.name,
+          status: m.status,
+        })),
+        shippingBadges: r.manufacturingOrderShippings.map((s) => ({
+          id: s.shipping.id,
+          status: s.shipping.status,
+          type: s.shipping.type,
+          trackingNumber: s.shipping.trackingNumber,
+        })),
+        linkedSaleChannels,
+        linkedOrders,
+      };
+    }),
   );
 }
 
 export async function POST(request: Request) {
-  const authz = await requireAppUserId();
+  const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
-  const userId = authz.userId;
+  const { userId, storeId } = authz.context;
 
   let body: unknown;
   try {
@@ -123,7 +181,7 @@ export async function POST(request: Request) {
     const result = await prisma.$transaction(async (tx) => {
       if (purchaseOrderIds.length > 0) {
         const n = await tx.purchaseOrder.count({
-          where: { id: { in: purchaseOrderIds } },
+          where: { id: { in: purchaseOrderIds }, storeId },
         });
         if (n !== purchaseOrderIds.length) throw new Error("PO_NOT_FOUND");
       }
@@ -142,12 +200,13 @@ export async function POST(request: Request) {
           sku: string;
           barcodeKey: string | null;
           packagingKey: string | null;
+          verified: boolean;
         };
         purchaseOrder: { number: number; name: string; type: "distributor" | "stock" };
       }[] = [];
       if (purchaseOrderIds.length > 0) {
         poLines = await tx.purchaseOrderLine.findMany({
-          where: { purchaseOrderId: { in: purchaseOrderIds } },
+          where: { purchaseOrderId: { in: purchaseOrderIds }, storeId },
           select: {
             id: true,
             product: {
@@ -157,6 +216,7 @@ export async function POST(request: Request) {
                 sku: true,
                 barcodeKey: true,
                 packagingKey: true,
+                verified: true,
               },
             },
             purchaseOrder: {
@@ -187,7 +247,9 @@ export async function POST(request: Request) {
 
       const mergedManufacturerIds = [...manufacturerById.keys()];
       if (mergedManufacturerIds.length > 0) {
-        const n = await tx.manufacturer.count({ where: { id: { in: mergedManufacturerIds } } });
+        const n = await tx.manufacturer.count({
+          where: { id: { in: mergedManufacturerIds }, storeId },
+        });
         if (n !== mergedManufacturerIds.length) throw new Error("MANUFACTURER_NOT_FOUND");
       }
 
@@ -196,13 +258,18 @@ export async function POST(request: Request) {
           name,
           documentKey: documentKey ?? null,
           status: status ?? "open",
+          storeId,
           createdById: userId,
         },
       });
 
       for (const poId of purchaseOrderIds) {
         await tx.manufacturingOrderPurchaseOrder.create({
-          data: { manufacturingOrderId: mo.id, purchaseOrderId: poId },
+          data: {
+            manufacturingOrderId: mo.id,
+            purchaseOrderId: poId,
+            storeId,
+          },
         });
       }
       for (const [manufacturerId, meta] of manufacturerById) {
@@ -210,6 +277,7 @@ export async function POST(request: Request) {
           data: {
             manufacturingOrderId: mo.id,
             manufacturerId,
+            storeId,
             status: meta.status ?? "initial",
             createdById: userId,
           },
@@ -223,6 +291,7 @@ export async function POST(request: Request) {
             purchaseOrderLineId: line.id,
             manufacturerId: line.product.defaultManufacturerId,
             verified: false,
+            storeId,
             createdById: userId,
           })),
         });
@@ -231,8 +300,8 @@ export async function POST(request: Request) {
       return mo.id;
     });
 
-    const full = await prisma.manufacturingOrder.findUnique({
-      where: { id: result },
+    const full = await prisma.manufacturingOrder.findFirst({
+      where: { id: result, storeId },
       include: manufacturingOrderDetailInclude,
     });
     return NextResponse.json(full ? manufacturingOrderDetailFromPrisma(full) : null, {

@@ -17,12 +17,7 @@ import { formatInvoiceDate } from "@/lib/po/invoice-form";
 import { PoDocumentLink } from "@/components/po/purchase-order/po-document-link";
 import { moManufacturerStatuses, moStatusLabels } from "@/lib/po/status-labels";
 import { Pencil } from "lucide-react";
-
-function formatAmount(v: string | number | null): string {
-  if (v == null) return "—";
-  const n = typeof v === "string" ? parseFloat(v) : v;
-  return isNaN(n) ? "—" : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { PriceView } from "@/components/ui/price-view";
 
 function PivotStepDetails({ row, onEdit }: { row: MoManufacturerPivot; onEdit?: () => void }) {
   const entries: { label: string; value: React.ReactNode }[] = [];
@@ -31,10 +26,10 @@ function PivotStepDetails({ row, onEdit }: { row: MoManufacturerPivot; onEdit?: 
     entries.push({ label: "Deposit paid at", value: formatInvoiceDate(row.depositPaidAt) });
   }
   if (row.depositPaidAmount != null) {
-    entries.push({ label: "Deposit amount", value: formatAmount(row.depositPaidAmount) });
+    entries.push({ label: "Deposit amount", value: <PriceView value={row.depositPaidAmount} /> });
   }
-  if (row.depositTrackingNumber) {
-    entries.push({ label: "Deposit tracking #", value: row.depositTrackingNumber });
+  if (row.depositRefNumber) {
+    entries.push({ label: "Deposit ref #", value: row.depositRefNumber });
   }
   if (row.depositDocumentKey) {
     entries.push({ label: "Deposit document", value: <PoDocumentLink documentKey={row.depositDocumentKey} /> });
@@ -42,14 +37,17 @@ function PivotStepDetails({ row, onEdit }: { row: MoManufacturerPivot; onEdit?: 
   if (row.manufacturingStartedAt) {
     entries.push({ label: "Manufacturing started", value: formatInvoiceDate(row.manufacturingStartedAt) });
   }
+  if (row.estimatedCompletionAt) {
+    entries.push({ label: "Estimated completion", value: formatInvoiceDate(row.estimatedCompletionAt) });
+  }
   if (row.balancePaidAt) {
     entries.push({ label: "Balance paid at", value: formatInvoiceDate(row.balancePaidAt) });
   }
   if (row.balancePaidAmount != null) {
-    entries.push({ label: "Balance amount", value: formatAmount(row.balancePaidAmount) });
+    entries.push({ label: "Balance amount", value: <PriceView value={row.balancePaidAmount} /> });
   }
-  if (row.balanceTrackingNumber) {
-    entries.push({ label: "Balance tracking #", value: row.balanceTrackingNumber });
+  if (row.balanceRefNumber) {
+    entries.push({ label: "Balance ref #", value: row.balanceRefNumber });
   }
   if (row.balanceDocumentKey) {
     entries.push({ label: "Balance document", value: <PoDocumentLink documentKey={row.balanceDocumentKey} /> });
@@ -113,6 +111,8 @@ type Props = {
   onCreateInvoice: (row: MoManufacturerPivot) => void;
   onEditInvoice: (row: MoManufacturerPivot) => void;
   onEditStepDetails?: (row: MoManufacturerPivot) => void;
+  /** Edit manufacturer master record (e.g. from MO detail). */
+  onEditManufacturer?: (manufacturerId: string) => void;
   /** Hide the section H2 when a parent provides the title (e.g. collapsible). */
   hideHeading?: boolean;
 };
@@ -123,6 +123,7 @@ export function PoManufacturersSection({
   onCreateInvoice,
   onEditInvoice,
   onEditStepDetails,
+  onEditManufacturer,
   hideHeading = false,
 }: Props) {
   return (
@@ -145,8 +146,24 @@ export function PoManufacturersSection({
         {manufacturers.map((row) => (
           <Card key={row.manufacturerId} className="border-border/80">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">{row.manufacturer.name}</CardTitle>
-              <CardDescription>{row.manufacturer.region}</CardDescription>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <CardTitle className="text-base">{row.manufacturer.name}</CardTitle>
+                  <CardDescription>{row.manufacturer.region}</CardDescription>
+                </div>
+                {onEditManufacturer ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="shrink-0"
+                    onClick={() => onEditManufacturer(row.manufacturerId)}
+                    aria-label="Edit manufacturer"
+                  >
+                    <Pencil className="size-4" />
+                  </Button>
+                ) : null}
+              </div>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-1">
@@ -189,14 +206,6 @@ export function PoManufacturersSection({
                     <dd>
                       <PoDocumentLink documentKey={row.invoice.documentKey} />
                     </dd>
-                    <dt className="text-muted-foreground">Order date</dt>
-                    <dd>{formatInvoiceDate(row.invoice.orderDate)}</dd>
-                    <dt className="text-muted-foreground">Est. completion</dt>
-                    <dd>{formatInvoiceDate(row.invoice.estimatedCompletionDate)}</dd>
-                    <dt className="text-muted-foreground">Deposit paid</dt>
-                    <dd>{formatInvoiceDate(row.invoice.depositPaidAt)}</dd>
-                    <dt className="text-muted-foreground">Balance paid</dt>
-                    <dd>{formatInvoiceDate(row.invoice.balancePaidAt)}</dd>
                   </dl>
                 </div>
               ) : (

@@ -1,12 +1,18 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 import { useRef, useState } from "react";
-import { useForm, useWatch, type Resolver } from "react-hook-form";
+import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
+import {
+  CustomFieldsRenderer,
+  type CustomFieldsHandle,
+} from "@/components/po/custom-fields/custom-fields-renderer";
 import { z } from "zod";
 import { shippingCreateSchema } from "@/lib/validations/shipping";
 import { uploadFileToStorage } from "@/lib/upload-client";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Field,
   FieldContent,
@@ -15,6 +21,7 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PriceField } from "@/components/ui/price-field";
 import {
   Select,
   SelectContent,
@@ -33,10 +40,17 @@ import { shippingStatusLabels } from "@/lib/po/status-labels";
 import { Checkbox } from "@/components/ui/checkbox";
 import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export type ShippingFormValues = z.infer<typeof shippingCreateSchema>;
 
-type OrderOption = { id: string; number: number; name: string };
+type OrderOption = {
+  id: string;
+  number: number;
+  name: string;
+  /** From linked POs / stock orders (manufacturing orders only). */
+  linkedSaleChannels?: string[];
+};
 type LogisticsPartnerOption = {
   id: string;
   name: string;
@@ -45,7 +59,8 @@ type LogisticsPartnerOption = {
 
 interface ShippingFormProps {
   defaultValues?: Partial<ShippingFormValues>;
-  onSubmit: (values: ShippingFormValues) => void | Promise<void>;
+  editingId?: string | null;
+  onSubmit: (values: ShippingFormValues) => Promise<string>;
   isSubmitting?: boolean;
   availableManufacturingOrders?: OrderOption[];
   availablePurchaseOrders?: OrderOption[];
@@ -81,8 +96,16 @@ function formatDateTimeLocal(value: string | null | undefined) {
   return local.toISOString().slice(0, 16);
 }
 
+/** Current local date/time in `datetime-local` value form (YYYY-MM-DDTHH:mm). */
+function dateTimeLocalNow() {
+  const now = new Date();
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 export function ShippingForm({
   defaultValues,
+  editingId,
   onSubmit,
   isSubmitting = false,
   availableManufacturingOrders = [],
@@ -91,6 +114,7 @@ export function ShippingForm({
   requiredManufacturingOrderIds = [],
   requiredPurchaseOrderIds = [],
 }: ShippingFormProps) {
+  const customFieldsRef = useRef<CustomFieldsHandle>(null);
   const invoiceDocumentInputRef = useRef<HTMLInputElement>(null);
   const [invoiceDocumentFile, setInvoiceDocumentFile] = useState<File | null>(null);
   const [removeStoredInvoiceDocument, setRemoveStoredInvoiceDocument] = useState(false);
@@ -100,8 +124,11 @@ export function ShippingForm({
     defaultValues: {
       type: defaultValues?.type ?? "manufacturing_order",
       status: defaultValues?.status ?? "pending",
+      cost: defaultValues?.cost ?? null,
+      deliveryDutiesPaid: defaultValues?.deliveryDutiesPaid ?? false,
       trackingNumber: defaultValues?.trackingNumber ?? "",
-      shippedAt: defaultValues?.shippedAt ?? null,
+      shippedAt:
+        defaultValues?.shippedAt !== undefined ? defaultValues.shippedAt : dateTimeLocalNow(),
       trackingLink: defaultValues?.trackingLink ?? "",
       notes: defaultValues?.notes ?? "",
       invoiceDocumentKey: defaultValues?.invoiceDocumentKey ?? null,
@@ -116,6 +143,8 @@ export function ShippingForm({
       ]),
     },
   });
+
+  const allValues = useWatch({ control: form.control });
 
   const type =
     useWatch({ control: form.control, name: "type" }) ??
@@ -179,7 +208,7 @@ export function ShippingForm({
       invoiceDocumentKey = null;
     }
 
-    await onSubmit({
+    const entityId = await onSubmit({
       ...values,
       invoiceDocumentKey,
       manufacturingOrderIds: uniqueIds([
@@ -191,6 +220,9 @@ export function ShippingForm({
         ...requiredPurchaseOrderIds,
       ]),
     });
+    if (customFieldsRef.current?.hasFields) {
+      await customFieldsRef.current.save(entityId);
+    }
   }
 
   return (
@@ -248,6 +280,32 @@ export function ShippingForm({
         </Field>
 
         <Field>
+          <FieldLabel htmlFor="sf-cost">Cost</FieldLabel>
+          <FieldContent>
+            <PriceField
+              id="sf-cost"
+              placeholder="Optional"
+              {...form.register("cost", { valueAsNumber: true })}
+            />
+          </FieldContent>
+          <FieldError>{form.formState.errors.cost?.message}</FieldError>
+        </Field>
+
+        <Field orientation="horizontal" className="gap-2">
+          <Controller
+            control={form.control}
+            name="deliveryDutiesPaid"
+            render={({ field }) => (
+              <Checkbox
+                checked={field.value}
+                onCheckedChange={(v) => field.onChange(v === true)}
+                label={<span className="font-normal">Delivery duties paid (DDP)</span>}
+              />
+            )}
+          />
+        </Field>
+
+        <Field>
           <FieldLabel>{partnerLabel}</FieldLabel>
           <FieldContent>
             <Select
@@ -279,7 +337,7 @@ export function ShippingForm({
         <Field>
           <FieldLabel>Tracking Number</FieldLabel>
           <FieldContent>
-            <Input {...form.register("trackingNumber")} placeholder="Tracking number" />
+            <Input {...form.register("trackingNumber")} placeholder="Optional" />
           </FieldContent>
           <FieldError>{form.formState.errors.trackingNumber?.message}</FieldError>
         </Field>
@@ -390,29 +448,67 @@ export function ShippingForm({
                     const isRequired = requiredManufacturingOrderIds.includes(order.id);
                     const checked = selectedManufacturingOrderIds.includes(order.id) || isRequired;
 
+                    const moCheckboxId = `mo-${order.id}`;
+                    const channelText =
+                      order.linkedSaleChannels && order.linkedSaleChannels.length > 0
+                        ? order.linkedSaleChannels.join(", ")
+                        : null;
+
                     return (
-                      <div key={order.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`mo-${order.id}`}
-                          checked={checked}
-                          disabled={isRequired}
-                          onCheckedChange={(checkedValue) => {
-                            form.setValue(
-                              "manufacturingOrderIds",
-                              toggleIds(
-                                selectedManufacturingOrderIds,
-                                order.id,
-                                checkedValue === true,
-                                requiredManufacturingOrderIds,
-                              ),
-                              { shouldDirty: true, shouldValidate: true },
-                            );
-                          }}
-                        />
-                        <label htmlFor={`mo-${order.id}`} className="cursor-pointer text-sm">
-                          #{order.number} - {order.name}
-                          {isRequired ? " (Current order)" : ""}
+                      <div
+                        key={order.id}
+                        className="flex w-full min-w-0 items-center gap-1.5 rounded-sm py-0.5 sm:gap-2"
+                      >
+                        <label
+                          className={cn(
+                            "flex min-w-0 flex-1 cursor-pointer items-center gap-2",
+                            "has-[[data-slot=checkbox]:disabled]:cursor-not-allowed has-[[data-slot=checkbox]:disabled]:opacity-50",
+                          )}
+                        >
+                          <Checkbox
+                            id={moCheckboxId}
+                            checked={checked}
+                            disabled={isRequired}
+                            onCheckedChange={(checkedValue) => {
+                              form.setValue(
+                                "manufacturingOrderIds",
+                                toggleIds(
+                                  selectedManufacturingOrderIds,
+                                  order.id,
+                                  checkedValue === true,
+                                  requiredManufacturingOrderIds,
+                                ),
+                                { shouldDirty: true, shouldValidate: true },
+                              );
+                            }}
+                          />
+                          <span className="shrink-0 text-sm font-medium leading-snug">
+                            #{order.number} - {order.name}
+                            {isRequired ? " (Current order)" : ""}
+                          </span>
+                          {channelText ? (
+                            <span className="flex min-w-0 flex-1 items-center self-center">
+                              <span
+                                className="truncate text-xs leading-none text-muted-foreground"
+                                title={channelText}
+                              >
+                                {channelText}
+                              </span>
+                            </span>
+                          ) : null}
                         </label>
+                        <Link
+                          href={`/manufacturing-orders/${order.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={cn(
+                            buttonVariants({ variant: "ghost", size: "icon-xs" }),
+                            "shrink-0 self-center text-muted-foreground hover:text-primary",
+                          )}
+                          aria-label={`Open manufacturing order #${order.number} in new tab`}
+                        >
+                          <ExternalLink className="size-3.5" aria-hidden />
+                        </Link>
                       </div>
                     );
                   })
@@ -439,6 +535,12 @@ export function ShippingForm({
                           id={`po-${order.id}`}
                           checked={checked}
                           disabled={isRequired}
+                          label={
+                            <span className="text-sm">
+                              #{order.number} - {order.name}
+                              {isRequired ? " (Current order)" : ""}
+                            </span>
+                          }
                           onCheckedChange={(checkedValue) => {
                             form.setValue(
                               "purchaseOrderIds",
@@ -452,10 +554,6 @@ export function ShippingForm({
                             );
                           }}
                         />
-                        <label htmlFor={`po-${order.id}`} className="cursor-pointer text-sm">
-                          #{order.number} - {order.name}
-                          {isRequired ? " (Current order)" : ""}
-                        </label>
                       </div>
                     );
                   })
@@ -465,6 +563,14 @@ export function ShippingForm({
             <FieldError>{form.formState.errors.purchaseOrderIds?.message}</FieldError>
           </Field>
         )}
+
+        <CustomFieldsRenderer
+          ref={customFieldsRef}
+          entityType="shipping"
+          entityId={editingId}
+          disabled={isSubmitting}
+          nativeValues={allValues as Record<string, unknown>}
+        />
       </FieldSet>
 
       <DialogFooter>

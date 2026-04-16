@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId, requireAppUserId } from "@/lib/session-user";
 import { shippingPatchSchema, shippingPatchToPrisma } from "@/lib/validations/shipping";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
@@ -12,6 +11,7 @@ import {
   PURCHASE_ORDER_TYPE_DISTRIBUTOR,
   PURCHASE_ORDER_TYPE_STOCK,
 } from "@/lib/purchase-order-type";
+import { requireStoreContext } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
@@ -25,15 +25,16 @@ export async function GET(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
   if (!pid.success) return jsonFromZod(pid.error);
 
-  const row = await prisma.shipping.findUnique({
-    where: { id: pid.data.id },
+  const row = await prisma.shipping.findFirst({
+    where: { id: pid.data.id, storeId },
     include: shippingDetailInclude,
   });
   if (!row) return jsonError("Not found", 404);
@@ -44,8 +45,9 @@ export async function PATCH(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireAppUserId();
+  const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -66,8 +68,8 @@ export async function PATCH(
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const existing = await tx.shipping.findUnique({
-        where: { id: pid.data.id },
+      const existing = await tx.shipping.findFirst({
+        where: { id: pid.data.id, storeId },
         select: { id: true, type: true },
       });
       if (!existing) {
@@ -75,8 +77,8 @@ export async function PATCH(
       }
 
       if (parsed.data.logisticsPartnerId) {
-        const partner = await tx.logisticsPartner.findUnique({
-          where: { id: parsed.data.logisticsPartnerId },
+        const partner = await tx.logisticsPartner.findFirst({
+          where: { id: parsed.data.logisticsPartnerId, storeId },
           select: { type: true },
         });
         if (!partner) {
@@ -96,7 +98,7 @@ export async function PATCH(
         }
         if (manufacturingOrderIds.length > 0) {
           const count = await tx.manufacturingOrder.count({
-            where: { id: { in: manufacturingOrderIds } },
+            where: { id: { in: manufacturingOrderIds }, storeId },
           });
           if (count !== manufacturingOrderIds.length) {
             throw new Error("ORDER_NOT_FOUND");
@@ -110,6 +112,7 @@ export async function PATCH(
           const count = await tx.purchaseOrder.count({
             where: {
               id: { in: purchaseOrderIds },
+              storeId,
               type:
                 existing.type === "stock_order"
                   ? PURCHASE_ORDER_TYPE_STOCK
@@ -133,13 +136,14 @@ export async function PATCH(
 
       if (parsed.data.manufacturingOrderIds !== undefined) {
         await tx.manufacturingOrderShipping.deleteMany({
-          where: { shippingId: pid.data.id },
+          where: { shippingId: pid.data.id, storeId },
         });
         if (manufacturingOrderIds.length > 0) {
           await tx.manufacturingOrderShipping.createMany({
             data: manufacturingOrderIds.map((manufacturingOrderId) => ({
               manufacturingOrderId,
               shippingId: shipping.id,
+              storeId,
             })),
           });
         }
@@ -147,19 +151,21 @@ export async function PATCH(
 
       if (parsed.data.purchaseOrderIds !== undefined) {
         await tx.purchaseOrderShipping.deleteMany({
-          where: { shippingId: pid.data.id },
+          where: { shippingId: pid.data.id, storeId },
         });
         if (purchaseOrderIds.length > 0) {
           await tx.purchaseOrderShipping.createMany({
             data: purchaseOrderIds.map((purchaseOrderId) => ({
               purchaseOrderId,
               shippingId: shipping.id,
+              storeId,
             })),
           });
         }
       }
 
       await syncLinkedOrderStatusesForShipping(tx, {
+        storeId,
         manufacturingOrderIds:
           parsed.data.manufacturingOrderIds !== undefined ? manufacturingOrderIds : undefined,
         purchaseOrderIds:
@@ -169,8 +175,8 @@ export async function PATCH(
       return shipping.id;
     });
 
-    const full = await prisma.shipping.findUnique({
-      where: { id: result },
+    const full = await prisma.shipping.findFirst({
+      where: { id: result, storeId },
       include: shippingDetailInclude,
     });
     return NextResponse.json(full ? shippingRowFromPrisma(full) : null);
@@ -202,15 +208,21 @@ export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireAppUserId();
+  const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
   if (!pid.success) return jsonFromZod(pid.error);
 
   try {
-    await prisma.shipping.delete({ where: { id: pid.data.id } });
+    const deleted = await prisma.shipping.deleteMany({
+      where: { id: pid.data.id, storeId },
+    });
+    if (deleted.count === 0) {
+      return jsonError("Not found", 404);
+    }
     return new NextResponse(null, { status: 204 });
   } catch (e) {
     const j = jsonFromPrisma(e);

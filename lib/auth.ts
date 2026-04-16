@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import authConfig from "@/auth.config";
-import { prisma } from "@/lib/prisma";
+import { syncUserWithDefaultStore } from "@/lib/store";
 
 function emailFromProfile(sub: string, profile: Record<string, unknown>) {
   const raw = profile.email;
@@ -29,10 +29,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = emailFromProfile(sub, profile as Record<string, unknown>);
       const name = nameFromProfile(profile as Record<string, unknown>);
 
-      await prisma.user.upsert({
-        where: { keycloakSub: sub },
-        create: { keycloakSub: sub, email, name },
-        update: { email, name },
+      await syncUserWithDefaultStore({
+        keycloakSub: sub,
+        email,
+        name,
       });
 
       return true;
@@ -57,15 +57,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const name = profileRecord ? nameFromProfile(profileRecord) : null;
 
         try {
-          const row = await prisma.user.upsert({
-            where: { keycloakSub: sub },
-            create: { keycloakSub: sub, email, name },
-            update: profileRecord
-              ? {
-                  email: emailFromProfile(sub, profileRecord),
-                  name: nameFromProfile(profileRecord),
-                }
-              : {},
+          const row = await syncUserWithDefaultStore({
+            keycloakSub: sub,
+            email,
+            name,
           });
           token.appUserId = row.id;
         } catch (err) {

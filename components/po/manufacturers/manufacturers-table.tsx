@@ -25,26 +25,27 @@ export function ManufacturersTable({ rows, isPending, onEdit, onDelete }: Props)
   const confirm = useConfirm();
 
   return (
-    <div className="rounded-xl border border-border/80">
-      <Table>
+    <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="w-14">Logo</TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Region</TableHead>
+            <TableHead className="max-w-[140px]">Contact number</TableHead>
+            <TableHead className="max-w-[160px]">Email</TableHead>
             <TableHead className="w-[120px] text-end">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {isPending ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                 No manufacturers yet.
               </TableCell>
             </TableRow>
@@ -60,6 +61,18 @@ export function ManufacturersTable({ rows, isPending, onEdit, onDelete }: Props)
                 </TableCell>
                 <TableCell className="font-medium">{row.name}</TableCell>
                 <TableCell>{row.region}</TableCell>
+                <TableCell
+                  className="max-w-[140px] truncate text-muted-foreground"
+                  title={row.contactNumber ?? undefined}
+                >
+                  {row.contactNumber ?? "—"}
+                </TableCell>
+                <TableCell
+                  className="max-w-[160px] truncate text-muted-foreground"
+                  title={row.email ?? undefined}
+                >
+                  {row.email ?? "—"}
+                </TableCell>
                 <TableCell className="text-end">
                   <div className="flex justify-end gap-1">
                     <Button
@@ -97,6 +110,5 @@ export function ManufacturersTable({ rows, isPending, onEdit, onDelete }: Props)
           )}
         </TableBody>
       </Table>
-    </div>
   );
 }

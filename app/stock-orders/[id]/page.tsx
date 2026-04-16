@@ -3,6 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PURCHASE_ORDER_TYPE_STOCK } from "@/lib/purchase-order-type";
+import { getStoreContextForUserId } from "@/lib/store-context";
 import { StockOrderDetailView } from "./stock-order-detail-view";
 
 const idSchema = z.string().uuid();
@@ -19,12 +20,21 @@ export async function generateMetadata({
   }
 
   const session = await auth();
-  if (!session?.user) {
+  if (!session?.user?.id) {
+    return { title: "Stock order" };
+  }
+
+  const storeContext = await getStoreContextForUserId(session.user.id);
+  if (!storeContext) {
     return { title: "Stock order" };
   }
 
   const row = await prisma.purchaseOrder.findFirst({
-    where: { id: parsed.data, type: PURCHASE_ORDER_TYPE_STOCK },
+    where: {
+      id: parsed.data,
+      storeId: storeContext.storeId,
+      type: PURCHASE_ORDER_TYPE_STOCK,
+    },
     select: { name: true, number: true },
   });
 

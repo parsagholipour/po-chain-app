@@ -8,9 +8,71 @@ import { LineItemCard, LineItemsGrid } from "@/components/po/line-items/line-ite
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
-import type { ManufacturingOrderDetail, ManufacturingOrderSummary, Product } from "@/lib/types/api";
+import type {
+  ManufacturingOrderDetail,
+  ManufacturingOrderSummary,
+  ManufacturingOrderSummaryLinkedOrder,
+  Product,
+} from "@/lib/types/api";
+import { MoLinkedOrderLabel } from "@/components/po/mo-linked-order-label";
 import { moStatusLabels, shippingStatusLabels } from "@/lib/po/status-labels";
 import { ChevronDown, ChevronRight } from "lucide-react";
+
+function linkedOrderHref(type: "distributor" | "stock", id: string) {
+  return type === "stock" ? `/stock-orders/${id}` : `/purchase-orders/${id}`;
+}
+
+const LINKED_ORDER_PREVIEW_MAX = 4;
+
+function MoLinkedOrdersChips({ orders }: { orders: ManufacturingOrderSummaryLinkedOrder[] }) {
+  if (orders.length === 0) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+  const visible = orders.slice(0, LINKED_ORDER_PREVIEW_MAX);
+  const overflow = orders.slice(LINKED_ORDER_PREVIEW_MAX);
+  const overflowTitle =
+    overflow.length > 0
+      ? overflow
+          .map((o) => {
+            const kind = o.type === "stock" ? "SO" : "PO";
+            const ch = o.saleChannelName ? ` · ${o.saleChannelName}` : "";
+            return `${kind} ${o.name}${ch}`;
+          })
+          .join("\n")
+      : undefined;
+
+  return (
+    <div className="flex max-w-[min(100%,22rem)] flex-col gap-1">
+      {visible.map((o) => {
+        const title = [o.name, o.saleChannelName].filter(Boolean).join(" · ");
+        return (
+          <Link
+            key={o.id}
+            href={linkedOrderHref(o.type, o.id)}
+            title={title}
+            className="flex min-h-6 min-w-0 max-w-full items-center gap-1.5 rounded-md border border-border/60 bg-muted/10 px-2 py-0.5 text-start text-xs transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoLinkedOrderLabel
+              type={o.type}
+              name={o.name}
+              saleChannelName={o.saleChannelName}
+              className="text-xs"
+            />
+          </Link>
+        );
+      })}
+      {overflow.length > 0 ? (
+        <span
+          className="inline-flex w-fit items-center rounded-md border border-dashed border-border/80 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+          title={overflowTitle}
+        >
+          +{overflow.length} more
+        </span>
+      ) : null}
+    </div>
+  );
+}
 
 export function ExpandableMoTableHead() {
   return (
@@ -64,15 +126,13 @@ export function ExpandableManufacturingOrderSummaryRow({
             )}
           </Button>
         </TableCell>
-        <TableCell className="font-mono font-medium">
-          <Link href={href} className="text-primary underline-offset-4 hover:underline">
-            {row.number}
-          </Link>
-        </TableCell>
         <TableCell>
           <Link href={href} className="font-medium hover:underline">
             {row.name}
           </Link>
+        </TableCell>
+        <TableCell className="align-top">
+          <MoLinkedOrdersChips orders={row.linkedOrders ?? []} />
         </TableCell>
         <TableCell>
           {row.manufacturers.length > 0 ? (
@@ -131,7 +191,6 @@ export function ExpandableManufacturingOrderSummaryRow({
                 <LineItemsGrid dense>
                   {allocations.map((a) => {
                     const po = a.purchaseOrderLine.purchaseOrder;
-                    const prefix = po.type === "stock" ? "SO" : "PO";
                     return (
                       <LineItemCard
                         key={a.purchaseOrderLineId}
@@ -142,8 +201,13 @@ export function ExpandableManufacturingOrderSummaryRow({
                         onEditProduct={onEditProduct ? () => onEditProduct(a.purchaseOrderLine.product) : undefined}
                         footer={
                           <div className="space-y-1 text-start text-[10px] leading-tight text-muted-foreground">
-                            <p className="font-mono">{prefix} #{po.number}</p>
-                            <p className="line-clamp-2 leading-snug">{po.name}</p>
+                            <MoLinkedOrderLabel
+                              type={po.type}
+                              name={po.name}
+                              saleChannelName={po.saleChannel?.name ?? null}
+                              className="text-[10px] text-muted-foreground"
+                              badgeClassName="text-[8px]"
+                            />
                             <p className="font-mono">{a.purchaseOrderLine.product.sku}</p>
                           </div>
                         }

@@ -13,13 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Loader2 } from "lucide-react";
 
 type ProductOption = {
@@ -48,7 +42,11 @@ export function AddPoLineDialog({ open, onOpenChange, onSubmit }: Props) {
   const [quantity, setQuantity] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
-  const productItems = products.map((p) => ({ value: p.id, label: p.name }));
+  const productSelectItems = products.map((p) => ({
+    value: p.id,
+    label: p.name,
+    keywords: p.sku,
+  }));
 
   function handleOpenChange(next: boolean) {
     if (!next) {
@@ -82,25 +80,14 @@ export function AddPoLineDialog({ open, onOpenChange, onSubmit }: Props) {
         >
           <div className="space-y-2">
             <Label>Product</Label>
-            <Select
+            <SearchableSelect
+              className="w-full"
+              items={productSelectItems}
               value={productId}
-              items={productItems}
               disabled={submitting}
-              onValueChange={(v) => {
-                if (v) setProductId(v);
-              }}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select product" />
-              </SelectTrigger>
-              <SelectContent>
-                {products.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              placeholder="Select product"
+              onValueChange={setProductId}
+            />
           </div>
           <div className="space-y-2">
             <Label>Quantity</Label>

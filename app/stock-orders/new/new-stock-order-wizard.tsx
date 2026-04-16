@@ -9,7 +9,7 @@ import { apiErrorMessage } from "@/lib/api-error-message";
 import { uploadFileToStorage } from "@/lib/upload-client";
 import { useWizardDocumentUpload } from "@/lib/use-wizard-document-upload";
 import type { Product, SaleChannel } from "@/lib/types/api";
-import { WizardStepBasics } from "@/components/po/purchase-order-wizard/wizard-step-basics";
+import { WizardStepBasics, documentDisplayName } from "@/components/po/purchase-order-wizard/wizard-step-basics";
 import {
   WizardStepLines,
   emptyLineDraft,
@@ -42,7 +42,7 @@ export function NewStockOrderWizard() {
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [isFinishing, setIsFinishing] = useState(false);
 
-  const { data: saleChannels = [] } = useQuery({
+  const { data: saleChannels = [], isPending: saleChannelsPending } = useQuery({
     queryKey: ["sale-channels"],
     queryFn: async () => {
       const { data } = await api.get<SaleChannel[]>("/api/sale-channels");
@@ -60,7 +60,7 @@ export function NewStockOrderWizard() {
     }
   }, [saleChannelId, nonDistributorChannels]);
 
-  const { data: products = [] } = useQuery({
+  const { data: products = [], isPending: productsPending } = useQuery({
     queryKey: ["products"],
     queryFn: async () => {
       const { data } = await api.get<Product[]>("/api/products");
@@ -230,6 +230,7 @@ export function NewStockOrderWizard() {
 
           {step === 1 ? (
             <WizardStepSaleChannels
+              isPending={saleChannelsPending}
               saleChannels={nonDistributorChannels}
               value={saleChannelId}
               onChange={setSaleChannelId}
@@ -238,6 +239,7 @@ export function NewStockOrderWizard() {
 
           {step === 2 ? (
             <WizardStepLines
+              isPending={productsPending}
               products={products}
               manufacturers={[]}
               manufacturerIdList={[]}
@@ -252,6 +254,8 @@ export function NewStockOrderWizard() {
             <WizardStepReview
               name={name}
               hasDocument={!!(documentKey || docFile)}
+              documentName={documentDisplayName(documentKey, docFile)}
+              documentKey={documentKey}
               saleChannelName={saleChannelName}
               manufacturerNames={[]}
               lines={filledLines(lines)}

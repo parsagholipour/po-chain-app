@@ -35,6 +35,10 @@ export type MoLinkableOrder = {
 type Props = {
   mo: ManufacturingOrderDetail;
   linkableOrders: MoLinkableOrder[];
+  /** True while the open distributor PO list for linking is still loading. */
+  poLinkCatalogPending?: boolean;
+  /** True while the open stock order list for linking is still loading. */
+  soLinkCatalogPending?: boolean;
   onAddPurchaseOrder: (purchaseOrderId: string) => void;
   onRemovePurchaseOrder: (purchaseOrderId: string) => void;
   pending?: boolean;
@@ -72,10 +76,12 @@ function MoLinkedOrderRow({
       >
         <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <span className="min-w-0 flex-1">
-          <span className="block font-mono text-xs text-muted-foreground">
-            {prefix} #{row.purchaseOrder.number}
-          </span>
           <span className="block truncate font-medium leading-snug">{row.purchaseOrder.name}</span>
+          {row.purchaseOrder.saleChannel ? (
+            <span className="block truncate text-xs text-muted-foreground">
+              {row.purchaseOrder.saleChannel.name}
+            </span>
+          ) : null}
         </span>
         <Badge variant="secondary" className="shrink-0 text-[10px]">
           {statusLabel}
@@ -125,6 +131,7 @@ function AddLinkPanel({
   emptyMessage,
   toggleAriaLabelOpen,
   toggleAriaLabelClose,
+  catalogLoading = false,
 }: {
   title: string;
   description: string;
@@ -141,6 +148,7 @@ function AddLinkPanel({
   emptyMessage: string;
   toggleAriaLabelOpen: string;
   toggleAriaLabelClose: string;
+  catalogLoading?: boolean;
 }) {
   const [isConfirming, setIsConfirming] = useState(false);
   const available = selectItems.length;
@@ -157,9 +165,11 @@ function AddLinkPanel({
           <p className="text-xs text-muted-foreground">{description}</p>
           {!pickerOpen ? (
             <p className="pt-1 text-xs text-muted-foreground">
-              {available > 0
-                ? `${available} unlinked in list — use + to attach one.`
-                : "Nothing left to link from the current list."}
+              {catalogLoading && available === 0
+                ? "Loading…"
+                : available > 0
+                  ? `${available} unlinked in list — use + to attach one.`
+                  : "Nothing left to link from the current list."}
             </p>
           ) : null}
         </div>
@@ -248,7 +258,9 @@ function AddLinkPanel({
             </div>
           </div>
         ) : (
-          <p className="border-t border-border/50 pt-3 text-xs text-muted-foreground">{emptyMessage}</p>
+          <p className="border-t border-border/50 pt-3 text-xs text-muted-foreground">
+            {catalogLoading ? "Loading…" : emptyMessage}
+          </p>
         )
       ) : null}
     </div>
@@ -258,6 +270,8 @@ function AddLinkPanel({
 export function MoLinksSection({
   mo,
   linkableOrders,
+  poLinkCatalogPending = false,
+  soLinkCatalogPending = false,
   onAddPurchaseOrder,
   onRemovePurchaseOrder,
   pending = false,
@@ -274,9 +288,8 @@ export function MoLinksSection({
   );
 
   const linkedByType = useMemo(() => {
-    const openLinkedOrders = mo.purchaseOrders.filter((r) => r.purchaseOrder.status === "open");
-    const pos = openLinkedOrders.filter((r) => r.purchaseOrder.type === "distributor");
-    const sos = openLinkedOrders.filter((r) => r.purchaseOrder.type === "stock");
+    const pos = mo.purchaseOrders.filter((r) => r.purchaseOrder.type === "distributor");
+    const sos = mo.purchaseOrders.filter((r) => r.purchaseOrder.type === "stock");
     return { pos, sos };
   }, [mo.purchaseOrders]);
 
@@ -358,6 +371,7 @@ export function MoLinksSection({
               emptyMessage="No POs left to add from this list (already linked or none loaded)."
               toggleAriaLabelOpen="Add purchase order"
               toggleAriaLabelClose="Close add purchase order"
+              catalogLoading={poLinkCatalogPending}
             />
           </div>
           <div className="min-w-0 lg:flex-1">
@@ -375,6 +389,7 @@ export function MoLinksSection({
               chooseLabel="Select stock order"
               placeholder="Choose a stock order…"
               emptyMessage="No stock orders left to add from this list (already linked or none loaded)."
+              catalogLoading={soLinkCatalogPending}
               toggleAriaLabelOpen="Add stock order"
               toggleAriaLabelClose="Close add stock order"
             />
@@ -473,3 +488,4 @@ export function MoLinksSection({
     </Card>
   );
 }
+

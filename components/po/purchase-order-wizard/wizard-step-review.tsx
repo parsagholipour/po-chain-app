@@ -1,5 +1,6 @@
 "use client";
 
+import { DocumentDownloadLink } from "@/components/ui/document-download-link";
 import type { Manufacturer, Product } from "@/lib/types/api";
 import type { LineDraft } from "./wizard-step-lines";
 
@@ -8,6 +9,8 @@ type Props = {
   hasDocument: boolean;
   /** When set, shown instead of a bare "Yes" for the document row. */
   documentName?: string | null;
+  /** Storage key for the uploaded document — enables a download link. */
+  documentKey?: string | null;
   saleChannelName: string | null;
   manufacturerNames: string[];
   lines: LineDraft[];
@@ -22,6 +25,7 @@ export function WizardStepReview({
   name,
   hasDocument,
   documentName = null,
+  documentKey = null,
   saleChannelName,
   manufacturerNames,
   lines,
@@ -36,11 +40,16 @@ export function WizardStepReview({
         <span className="text-muted-foreground">Name: </span>
         <span className="font-medium">{name.trim() || "—"}</span>
       </div>
-      <div>
-        <span className="text-muted-foreground">Document: </span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground">Document:</span>
         {hasDocument ? (
           documentName ? (
-            <span className="font-medium break-all">{documentName}</span>
+            <>
+              <span className="font-medium break-all">{documentName}</span>
+              {documentKey ? (
+                <DocumentDownloadLink documentKey={documentKey} fileName={documentName} fallback={null} />
+              ) : null}
+            </>
           ) : (
             "Yes"
           )

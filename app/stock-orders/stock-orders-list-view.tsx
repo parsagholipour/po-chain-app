@@ -53,6 +53,7 @@ function EntityTabRow({
   emptyMessage,
   label,
   allCountLabel,
+  entitiesLoading = false,
 }: {
   items: { id: string; name: string; logoKey: string | null; openCount: number | null }[];
   selectedId: string;
@@ -60,6 +61,8 @@ function EntityTabRow({
   emptyMessage: string;
   label: string;
   allCountLabel: string;
+  /** When true, do not show the empty-state message (list length is unknown while fetching). */
+  entitiesLoading?: boolean;
 }) {
   const allActive = selectedId === PO_LIST_ALL_SCOPE_ID;
   return (
@@ -133,7 +136,7 @@ function EntityTabRow({
           );
         })}
       </div>
-      {items.length === 0 ? (
+      {!entitiesLoading && items.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 px-4 py-6 text-center">
           <p className="text-sm text-muted-foreground">{emptyMessage}</p>
         </div>
@@ -153,6 +156,8 @@ function SoListFiltersAndTable({
   emptyNoScopeMessage,
   emptyFilteredMessage,
   onEditProduct,
+  onDeleteOrder,
+  deletingOrderId,
 }: {
   q: string;
   onQChange: (value: string) => void;
@@ -164,6 +169,8 @@ function SoListFiltersAndTable({
   emptyNoScopeMessage: string;
   emptyFilteredMessage: string;
   onEditProduct?: (product: Product) => void;
+  onDeleteOrder?: (id: string) => Promise<void>;
+  deletingOrderId?: string | undefined;
 }) {
   return (
     <>
@@ -200,34 +207,43 @@ function SoListFiltersAndTable({
           <TableHeader>
             <TableRow>
               <ExpandableOrderSummaryTableHead />
-              <TableHead className="w-24">#</TableHead>
               <TableHead>Name</TableHead>
               <TableHead className="min-w-[12rem]">Status</TableHead>
               <TableHead className="w-40">Created</TableHead>
+              <TableHead className="w-12">
+                <span className="sr-only">Actions</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {!filterReady ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   {emptyNoScopeMessage}
                 </TableCell>
               </TableRow>
             ) : isPending ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   Loading…
                 </TableCell>
               </TableRow>
             ) : data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   {emptyFilteredMessage}
                 </TableCell>
               </TableRow>
             ) : (
               data.map((row) => (
-                <ExpandableOrderSummaryRow key={row.id} row={row} apiScope="stock-orders" onEditProduct={onEditProduct} />
+                <ExpandableOrderSummaryRow
+                  key={row.id}
+                  row={row}
+                  apiScope="stock-orders"
+                  onEditProduct={onEditProduct}
+                  onDelete={onDeleteOrder}
+                  isDeleting={deletingOrderId === row.id}
+                />
               ))
             )}
           </TableBody>
@@ -253,7 +269,7 @@ export function StockOrdersListView() {
     return () => clearTimeout(t);
   }, [q]);
 
-  const { data: manufacturers = [] } = useQuery({
+  const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: manufacturersKey,
     queryFn: async () => {
       const { data: rows } = await api.get<Manufacturer[]>("/api/manufacturers");
@@ -316,14 +332,29 @@ export function StockOrdersListView() {
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
 
+  const deleteSo = useMutation({
+    mutationFn: async (id: string) => {
+      await api.delete(`/api/stock-orders/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["stock-orders"] });
+      qc.invalidateQueries({ queryKey: ["manufacturing-orders"] });
+      qc.invalidateQueries({ queryKey: ["manufacturing-order"] });
+      toast.success("Stock order deleted");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const deletingSoId = deleteSo.isPending ? deleteSo.variables : undefined;
+
   async function saveProduct(payload: {
     id?: string;
     values: ProductFormValues;
     patchImageKey: boolean;
     patchBarcodeKey: boolean;
     patchPackagingKey: boolean;
-  }) {
-    if (!payload.id) return;
+  }): Promise<string> {
+    if (!payload.id) return "";
     const body: Record<string, unknown> = {
       name: payload.values.name,
       sku: payload.values.sku,
@@ -334,10 +365,11 @@ export function StockOrdersListView() {
     if (payload.patchBarcodeKey) body.barcodeKey = payload.values.barcodeKey;
     if (payload.patchPackagingKey) body.packagingKey = payload.values.packagingKey;
     await updateProduct.mutateAsync({ id: payload.id, body });
+    return payload.id;
   }
 
   const onEditProduct =
-    manufacturers.length > 0
+    !manufacturersPending && manufacturers.length > 0
       ? (product: Product) => {
           setEditingProduct(product);
           setProductEditOpen(true);
@@ -369,6 +401,7 @@ export function StockOrdersListView() {
             emptyMessage="No manufacturers yet. Add one under Manufacturers."
             label="Manufacturer"
             allCountLabel="all manufacturers"
+            entitiesLoading={manufacturersPending}
           />
           <SoListFiltersAndTable
             q={q}
@@ -385,6 +418,8 @@ export function StockOrdersListView() {
                 : "No stock orders for this manufacturer match your filters."
             }
             onEditProduct={onEditProduct}
+            onDeleteOrder={(id) => deleteSo.mutateAsync(id)}
+            deletingOrderId={deletingSoId}
           />
         </div>
       </div>

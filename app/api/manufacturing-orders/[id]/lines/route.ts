@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session-user";
 import { moLineAllocationCreateSchema } from "@/lib/validations/manufacturing-order";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
@@ -10,6 +9,7 @@ import {
   purchaseOrderLineLinkedToMo,
 } from "@/lib/mo-line-guard";
 import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
+import { requireStoreContext } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
@@ -19,8 +19,9 @@ export async function POST(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { userId, storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -36,21 +37,31 @@ export async function POST(
   const parsed = moLineAllocationCreateSchema.safeParse(body);
   if (!parsed.success) return jsonFromZod(parsed.error);
 
-  const mo = await prisma.manufacturingOrder.findUnique({ where: { id: pid.data.id } });
+  const mo = await prisma.manufacturingOrder.findFirst({
+    where: { id: pid.data.id, storeId },
+  });
   if (!mo) return jsonError("Manufacturing order not found", 404);
 
-  const linked = await purchaseOrderLineLinkedToMo(pid.data.id, parsed.data.purchaseOrderLineId);
+  const linked = await purchaseOrderLineLinkedToMo(
+    storeId,
+    pid.data.id,
+    parsed.data.purchaseOrderLineId,
+  );
   if (!linked) {
     return jsonError("Purchase order line is not on a purchase order linked to this MO", 400);
   }
 
-  const onMo = await manufacturerOnManufacturingOrder(pid.data.id, parsed.data.manufacturerId);
+  const onMo = await manufacturerOnManufacturingOrder(
+    storeId,
+    pid.data.id,
+    parsed.data.manufacturerId,
+  );
   if (!onMo) {
     return jsonError("Manufacturer is not linked to this manufacturing order", 400);
   }
 
-  const existingLine = await prisma.purchaseOrderLine.findUnique({
-    where: { id: parsed.data.purchaseOrderLineId },
+  const existingLine = await prisma.purchaseOrderLine.findFirst({
+    where: { id: parsed.data.purchaseOrderLineId, storeId },
   });
   if (!existingLine) return jsonError("Purchase order line not found", 404);
 
@@ -61,12 +72,13 @@ export async function POST(
         purchaseOrderLineId: parsed.data.purchaseOrderLineId,
         manufacturerId: parsed.data.manufacturerId,
         verified: parsed.data.verified ?? false,
+        storeId,
         createdById: userId,
       },
     });
 
-    const full = await prisma.manufacturingOrder.findUnique({
-      where: { id: pid.data.id },
+    const full = await prisma.manufacturingOrder.findFirst({
+      where: { id: pid.data.id, storeId },
       include: manufacturingOrderDetailInclude,
     });
     return NextResponse.json(full ? manufacturingOrderDetailFromPrisma(full) : null, {

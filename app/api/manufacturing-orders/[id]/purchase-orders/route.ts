@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId } from "@/lib/session-user";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-include";
@@ -9,6 +8,7 @@ import {
   formatMissingProductAssetsError,
 } from "@/lib/mo-product-assets";
 import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
+import { requireStoreContext } from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
@@ -19,8 +19,9 @@ export async function POST(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { userId, storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -36,11 +37,13 @@ export async function POST(
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) return jsonFromZod(parsed.error);
 
-  const mo = await prisma.manufacturingOrder.findUnique({ where: { id: pid.data.id } });
+  const mo = await prisma.manufacturingOrder.findFirst({
+    where: { id: pid.data.id, storeId },
+  });
   if (!mo) return jsonError("Manufacturing order not found", 404);
 
-  const po = await prisma.purchaseOrder.findUnique({
-    where: { id: parsed.data.purchaseOrderId },
+  const po = await prisma.purchaseOrder.findFirst({
+    where: { id: parsed.data.purchaseOrderId, storeId },
   });
   if (!po) {
     return jsonError("Purchase order or stock order not found", 404);
@@ -49,7 +52,7 @@ export async function POST(
   try {
     await prisma.$transaction(async (tx) => {
       const poLines = await tx.purchaseOrderLine.findMany({
-        where: { purchaseOrderId: parsed.data.purchaseOrderId },
+        where: { purchaseOrderId: parsed.data.purchaseOrderId, storeId },
         select: {
           id: true,
           product: {
@@ -59,6 +62,7 @@ export async function POST(
               sku: true,
               barcodeKey: true,
               packagingKey: true,
+              verified: true,
             },
           },
           purchaseOrder: {
@@ -85,13 +89,14 @@ export async function POST(
         data: {
           manufacturingOrderId: pid.data.id,
           purchaseOrderId: parsed.data.purchaseOrderId,
+          storeId,
         },
       });
 
       if (poLines.length === 0) return;
 
       const existingManufacturers = await tx.manufacturingOrderManufacturer.findMany({
-        where: { manufacturingOrderId: pid.data.id },
+        where: { manufacturingOrderId: pid.data.id, storeId },
         select: { manufacturerId: true },
       });
       const manufacturerOnMo = new Set(existingManufacturers.map((m) => m.manufacturerId));
@@ -103,6 +108,7 @@ export async function POST(
             data: {
               manufacturingOrderId: pid.data.id,
               manufacturerId,
+              storeId,
               status: "initial",
               createdById: userId,
             },
@@ -117,14 +123,15 @@ export async function POST(
           purchaseOrderLineId: line.id,
           manufacturerId: line.product.defaultManufacturerId,
           verified: false,
+          storeId,
           createdById: userId,
         })),
         skipDuplicates: true,
       });
     });
 
-    const full = await prisma.manufacturingOrder.findUnique({
-      where: { id: pid.data.id },
+    const full = await prisma.manufacturingOrder.findFirst({
+      where: { id: pid.data.id, storeId },
       include: manufacturingOrderDetailInclude,
     });
     return NextResponse.json(full ? manufacturingOrderDetailFromPrisma(full) : null, {

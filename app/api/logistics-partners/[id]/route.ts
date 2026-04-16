@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getSessionUserId, requireAppUserId } from "@/lib/session-user";
 import { logisticsPartnerUpdateSchema } from "@/lib/validations/master-data";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
+import { requireStoreContext } from "@/lib/store-context";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -13,15 +13,16 @@ export async function GET(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const userId = await getSessionUserId();
-  if (!userId) return jsonError("Unauthorized", 401);
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
   if (!pid.success) return jsonFromZod(pid.error);
 
-  const row = await prisma.logisticsPartner.findUnique({
-    where: { id: pid.data.id },
+  const row = await prisma.logisticsPartner.findFirst({
+    where: { id: pid.data.id, storeId },
   });
   if (!row) return jsonError("Not found", 404);
   return NextResponse.json(row);
@@ -31,8 +32,9 @@ export async function PATCH(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireAppUserId();
+  const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -52,6 +54,12 @@ export async function PATCH(
   }
 
   try {
+    const existing = await prisma.logisticsPartner.findFirst({
+      where: { id: pid.data.id, storeId },
+      select: { id: true },
+    });
+    if (!existing) return jsonError("Not found", 404);
+
     const partner = await prisma.logisticsPartner.update({
       where: { id: pid.data.id },
       data: parsed.data,
@@ -68,15 +76,19 @@ export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireAppUserId();
+  const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
+  const { storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
   if (!pid.success) return jsonFromZod(pid.error);
 
   try {
-    await prisma.logisticsPartner.delete({ where: { id: pid.data.id } });
+    const deleted = await prisma.logisticsPartner.deleteMany({
+      where: { id: pid.data.id, storeId },
+    });
+    if (deleted.count === 0) return jsonError("Not found", 404);
     return new NextResponse(null, { status: 204 });
   } catch (e) {
     const j = jsonFromPrisma(e);

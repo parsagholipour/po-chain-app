@@ -1,8 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { Controller, useForm, useFormState } from "react-hook-form";
+import { useRef, useState } from "react";
+import { Controller, useForm, useFormState, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { uploadFileToStorage } from "@/lib/upload-client";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,10 @@ import { DialogFooter } from "@/components/ui/dialog";
 import { saleChannelTypeLabels } from "@/lib/po/sale-channel-labels";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  CustomFieldsRenderer,
+  type CustomFieldsHandle,
+} from "@/components/po/custom-fields/custom-fields-renderer";
 
 const saleChannelTypeSelectItems = (
   ["distributor", "amazon", "cjdropshipping"] as const
@@ -42,11 +46,13 @@ export type SaleChannelFormValues = z.infer<typeof schema>;
 
 type Props = {
   defaultValues: SaleChannelFormValues;
-  onSubmit: (values: SaleChannelFormValues) => Promise<void>;
+  editingId?: string | null;
+  onSubmit: (values: SaleChannelFormValues) => Promise<string>;
   onCancel: () => void;
 };
 
-export function SaleChannelForm({ defaultValues, onSubmit, onCancel }: Props) {
+export function SaleChannelForm({ defaultValues, editingId, onSubmit, onCancel }: Props) {
+  const customFieldsRef = useRef<CustomFieldsHandle>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [removeStoredLogo, setRemoveStoredLogo] = useState(false);
 
@@ -55,6 +61,7 @@ export function SaleChannelForm({ defaultValues, onSubmit, onCancel }: Props) {
     defaultValues,
   });
   const { isSubmitting } = useFormState({ control: form.control });
+  const watchedValues = useWatch({ control: form.control });
 
   const storedLogoKey =
     removeStoredLogo || logoFile ? null : (defaultValues.logoKey ?? null);
@@ -73,7 +80,10 @@ export function SaleChannelForm({ defaultValues, onSubmit, onCancel }: Props) {
     } else {
       logoKey = defaultValues.logoKey ?? null;
     }
-    await onSubmit({ ...values, logoKey });
+    const entityId = await onSubmit({ ...values, logoKey });
+    if (customFieldsRef.current?.hasFields) {
+      await customFieldsRef.current.save(entityId);
+    }
   }
 
   return (
@@ -139,6 +149,13 @@ export function SaleChannelForm({ defaultValues, onSubmit, onCancel }: Props) {
               }
             />
           </Field>
+          <CustomFieldsRenderer
+            ref={customFieldsRef}
+            entityType="sale_channel"
+            entityId={editingId}
+            disabled={isSubmitting}
+            nativeValues={watchedValues as Record<string, unknown>}
+          />
         </FieldGroup>
       </FieldSet>
       <DialogFooter className="mt-4 border-0 bg-transparent">

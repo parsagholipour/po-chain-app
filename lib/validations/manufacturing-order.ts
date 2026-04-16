@@ -30,14 +30,15 @@ export const moManufacturerPatchSchema = z.object({
 
   depositPaidAt: optionalIsoDateTime,
   depositPaidAmount: z.number().nonnegative().nullable().optional(),
-  depositTrackingNumber: z.string().nullable().optional(),
+  depositRefNumber: z.string().nullable().optional(),
   depositDocumentKey: z.string().nullable().optional(),
 
   manufacturingStartedAt: optionalIsoDateTime,
+  estimatedCompletionAt: optionalIsoDateTime,
 
   balancePaidAt: optionalIsoDateTime,
   balancePaidAmount: z.number().nonnegative().nullable().optional(),
-  balanceTrackingNumber: z.string().nullable().optional(),
+  balanceRefNumber: z.string().nullable().optional(),
   balanceDocumentKey: z.string().nullable().optional(),
 
   readyAt: optionalIsoDateTime,

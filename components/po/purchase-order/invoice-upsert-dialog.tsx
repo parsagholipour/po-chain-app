@@ -107,25 +107,6 @@ function InvoiceUpsertDialogForm({
                   <FieldError errors={[form.formState.errors.invoiceNumber]} />
                 </FieldContent>
               </Field>
-              <Field className="gap-1.5">
-                <FieldLabel>Order date</FieldLabel>
-                <Input type="datetime-local" {...form.register("orderDate")} />
-              </Field>
-              <Field className="gap-1.5">
-                <FieldLabel>Est. completion</FieldLabel>
-                <Input
-                  type="datetime-local"
-                  {...form.register("estimatedCompletionDate")}
-                />
-              </Field>
-              <Field className="gap-1.5">
-                <FieldLabel>Deposit paid</FieldLabel>
-                <Input type="datetime-local" {...form.register("depositPaidAt")} />
-              </Field>
-              <Field className="gap-1.5">
-                <FieldLabel>Balance paid</FieldLabel>
-                <Input type="datetime-local" {...form.register("balancePaidAt")} />
-              </Field>
               <div className="space-y-2">
                 <Label htmlFor="invoice-doc">Document (optional)</Label>
                 <Input

@@ -16,12 +16,14 @@ import { Pencil, Trash2 } from "lucide-react";
 
 interface LogisticsPartnersTableProps {
   partners: LogisticsPartner[];
+  isPending?: boolean;
   onEdit: (partner: LogisticsPartner) => void;
   onDelete: (id: string) => void;
 }
 
 export function LogisticsPartnersTable({
   partners,
+  isPending = false,
   onEdit,
   onDelete,
 }: LogisticsPartnersTableProps) {
@@ -39,7 +41,15 @@ export function LogisticsPartnersTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {partners.map((partner) => (
+          {isPending ? (
+            <TableRow>
+              <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
+                Loading…
+              </TableCell>
+            </TableRow>
+          ) : null}
+          {!isPending &&
+            partners.map((partner) => (
             <TableRow key={partner.id}>
               <TableCell>
                 {partner.logoKey ? (
@@ -99,13 +109,13 @@ export function LogisticsPartnersTable({
               </TableCell>
             </TableRow>
           ))}
-          {partners.length === 0 && (
+          {!isPending && partners.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center">
+              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                 No logistics partners found
               </TableCell>
             </TableRow>
-          )}
+          ) : null}
         </TableBody>
       </Table>
     </div>

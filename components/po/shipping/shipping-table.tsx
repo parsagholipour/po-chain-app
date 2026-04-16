@@ -16,14 +16,16 @@ import { Pencil, Trash2, ExternalLink } from "lucide-react";
 import { shippingStatusLabels } from "@/lib/po/status-labels";
 import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import { shippingOrderHref } from "@/lib/shipping";
+import { PriceView } from "@/components/ui/price-view";
 
 interface ShippingTableProps {
   shippings: ShippingRow[];
+  isPending?: boolean;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
 }
 
-export function ShippingTable({ shippings, onEdit, onDelete }: ShippingTableProps) {
+export function ShippingTable({ shippings, isPending = false, onEdit, onDelete }: ShippingTableProps) {
   return (
     <div className="rounded-md border">
       <Table>
@@ -31,6 +33,8 @@ export function ShippingTable({ shippings, onEdit, onDelete }: ShippingTableProp
           <TableRow>
             <TableHead>Tracking #</TableHead>
             <TableHead>Status</TableHead>
+            <TableHead className="text-end">Cost</TableHead>
+            <TableHead>DDP</TableHead>
             <TableHead>Partner</TableHead>
             <TableHead>Shipped At</TableHead>
             <TableHead>Linked Orders</TableHead>
@@ -39,13 +43,27 @@ export function ShippingTable({ shippings, onEdit, onDelete }: ShippingTableProp
           </TableRow>
         </TableHeader>
         <TableBody>
-          {shippings.map((shipping) => (
+          {isPending ? (
+            <TableRow>
+              <TableCell colSpan={9} className="h-28 text-center text-muted-foreground">
+                Loading…
+              </TableCell>
+            </TableRow>
+          ) : null}
+          {!isPending &&
+            shippings.map((shipping) => (
             <TableRow key={shipping.id}>
               <TableCell className="font-medium">{shipping.trackingNumber}</TableCell>
               <TableCell>
                 <Badge variant="secondary">
                   {shippingStatusLabels[shipping.status] ?? shipping.status}
                 </Badge>
+              </TableCell>
+              <TableCell className="text-end text-muted-foreground">
+                <PriceView value={shipping.cost} />
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {shipping.deliveryDutiesPaid ? "Yes" : "—"}
               </TableCell>
               <TableCell>
                 {shipping.logisticsPartner?.name || "-"}
@@ -113,13 +131,13 @@ export function ShippingTable({ shippings, onEdit, onDelete }: ShippingTableProp
               </TableCell>
             </TableRow>
           ))}
-          {shippings.length === 0 && (
+          {!isPending && shippings.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center">
+              <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                 No shipping records found
               </TableCell>
             </TableRow>
-          )}
+          ) : null}
         </TableBody>
       </Table>
     </div>
