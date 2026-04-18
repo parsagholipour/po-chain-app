@@ -8,7 +8,14 @@ import { useState } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { uploadFileToStorage } from "@/lib/upload-client";
-import type { Manufacturer, Product, PurchaseOrderDetail, SaleChannel } from "@/lib/types/api";
+import type {
+  Manufacturer,
+  PoOsd,
+  Product,
+  PurchaseOrderDetail,
+  SaleChannel,
+} from "@/lib/types/api";
+import type { OsdCreateInput, OsdPatchInput } from "@/lib/validations/purchase-order";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
 import { AddPoLineDialog } from "@/components/po/purchase-order/add-po-line-dialog";
@@ -16,6 +23,8 @@ import { PoDetailHeader } from "@/components/po/purchase-order/po-detail-header"
 import { PoLinesSection } from "@/components/po/purchase-order/po-lines-section";
 import { PoLinkedMosSection } from "@/components/po/purchase-order/po-linked-mos-section";
 import { PoShipmentsSection } from "@/components/po/purchase-order/po-shipments-section";
+import { PoOsdSection } from "@/components/po/purchase-order/po-osd-section";
+import { AddOsdDialog } from "@/components/po/purchase-order/add-osd-dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -155,6 +164,39 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
 
+  const createOsd = useMutation({
+    mutationFn: async (body: OsdCreateInput) => {
+      await api.post(`/api/purchase-orders/${purchaseOrderId}/osds`, body);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: poKey });
+      toast.success("OS&D created");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const patchOsd = useMutation({
+    mutationFn: async ({ osdId, body }: { osdId: string; body: OsdPatchInput }) => {
+      await api.patch(`/api/purchase-orders/${purchaseOrderId}/osds/${osdId}`, body);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: poKey });
+      toast.success("OS&D updated");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const deleteOsd = useMutation({
+    mutationFn: async (osdId: string) => {
+      await api.delete(`/api/purchase-orders/${purchaseOrderId}/osds/${osdId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: poKey });
+      toast.success("OS&D removed");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
   const updateProduct = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
       const { data } = await api.patch<Product>(`/api/products/${id}`, body);
@@ -172,6 +214,9 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
   const [productEditOpen, setProductEditOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isDocumentSaving, setIsDocumentSaving] = useState(false);
+  const [osdDialogOpen, setOsdDialogOpen] = useState(false);
+  const [osdDialogMode, setOsdDialogMode] = useState<"create" | "edit">("create");
+  const [editingOsd, setEditingOsd] = useState<PoOsd | null>(null);
 
   async function saveProductFromPo(payload: {
     id?: string;
@@ -329,6 +374,22 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         }
       />
 
+      <PoOsdSection
+        osds={po.osds}
+        onNew={() => {
+          setOsdDialogMode("create");
+          setEditingOsd(null);
+          setOsdDialogOpen(true);
+        }}
+        onEdit={(osd) => {
+          setOsdDialogMode("edit");
+          setEditingOsd(osd);
+          setOsdDialogOpen(true);
+        }}
+        onDelete={(id) => deleteOsd.mutate(id)}
+        busy={deleteOsd.isPending || patchOsd.isPending || createOsd.isPending}
+      />
+
       <PoLinkedMosSection manufacturingOrders={linkedMos} />
 
       <PoShipmentsSection
@@ -341,6 +402,19 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         open={lineOpen}
         onOpenChange={setLineOpen}
         onSubmit={(v) => addLine.mutateAsync(v)}
+      />
+
+      <AddOsdDialog
+        key={
+          osdDialogOpen ? `osd-${osdDialogMode}-${editingOsd?.id ?? "new"}` : "osd-shut"
+        }
+        open={osdDialogOpen}
+        onOpenChange={setOsdDialogOpen}
+        lines={po.lines}
+        mode={osdDialogMode}
+        editing={editingOsd}
+        onCreate={(body) => createOsd.mutateAsync(body)}
+        onEdit={(osdId, body) => patchOsd.mutateAsync({ osdId, body })}
       />
 
       <ProductUpsertDialog

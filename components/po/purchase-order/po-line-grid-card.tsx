@@ -2,10 +2,11 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { LineItemCard } from "@/components/po/line-items/line-items-grid";
 import type { PoLineRow, Product } from "@/lib/types/api";
 import { Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type Props = {
   line: PoLineRow;
@@ -22,13 +23,12 @@ export function PoLineGridCard({
   busy,
   onEditProduct,
 }: Props) {
-  const [qty, setQty] = useState(line.quantity);
+  const [orderedQty, setOrderedQty] = useState(line.orderedQuantity);
 
-  useEffect(() => {
-    setQty(line.quantity);
-  }, [line.quantity]);
-
-  const subtitle = `${line.product.defaultManufacturer.name} · Qty: ${qty}`;
+  const qtyMismatch = line.quantity !== line.orderedQuantity;
+  const subtitle = `${line.product.defaultManufacturer.name} · Ordered: ${orderedQty}${
+    qtyMismatch ? ` · Effective: ${line.quantity}` : ""
+  }`;
 
   return (
     <LineItemCard
@@ -39,6 +39,13 @@ export function PoLineGridCard({
       footer={
         <div className="flex flex-col gap-2 text-start">
           <p className="text-xs text-muted-foreground font-mono">{line.product.sku}</p>
+          {qtyMismatch ? (
+            <p className="text-xs">
+              <Badge variant="secondary" className="font-normal">
+                Ordered {line.orderedQuantity} · Effective {line.quantity}
+              </Badge>
+            </p>
+          ) : null}
           <p className="text-xs text-muted-foreground">
             Default manufacturer:{" "}
             <span className="font-medium text-foreground">
@@ -50,10 +57,10 @@ export function PoLineGridCard({
               type="number"
               min={1}
               className="min-w-0 flex-1"
-              value={qty}
-              onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))}
+              value={orderedQty}
+              onChange={(e) => setOrderedQty(Math.max(1, Number(e.target.value) || 1))}
               onBlur={() => {
-                if (qty !== line.quantity) onPatch({ quantity: qty });
+                if (orderedQty !== line.orderedQuantity) onPatch({ quantity: orderedQty });
               }}
               disabled={busy}
             />

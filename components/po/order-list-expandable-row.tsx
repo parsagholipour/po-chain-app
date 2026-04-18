@@ -131,7 +131,8 @@ export function ExpandableOrderSummaryRow({
               {distributorPoStatusLabels[row.status] ?? row.status}
             </Badge>
             {row.shippingBadges && row.shippingBadges.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-medium text-foreground">Shipping</span>
                 {row.shippingBadges.map((s) => (
                   <Badge key={s.id} variant="outline" className="text-[10px] font-medium">
                     {shippingStatusLabels[s.status] ?? s.status}
@@ -217,7 +218,11 @@ export function ExpandableOrderSummaryRow({
                       compact
                       imageKey={line.product.imageKey}
                       title={line.product.name}
-                      subtitle={`Qty ${line.quantity} · ${line.product.defaultManufacturer.name}`}
+                      subtitle={
+                        line.quantity !== line.orderedQuantity
+                          ? `Ordered ${line.orderedQuantity} · Effective ${line.quantity} · ${line.product.defaultManufacturer.name}`
+                          : `Qty ${line.quantity} · ${line.product.defaultManufacturer.name}`
+                      }
                       onEditProduct={onEditProduct ? () => onEditProduct(line.product) : undefined}
                       footer={
                         <p className="text-start font-mono text-[10px] leading-tight text-muted-foreground">

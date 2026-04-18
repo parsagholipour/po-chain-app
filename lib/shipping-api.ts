@@ -1,7 +1,11 @@
 import type { Prisma } from "@/app/generated/prisma/client";
 import { shippingOrderTypeFromPurchaseOrderType } from "@/lib/shipping";
 import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-include";
-import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
+import {
+  purchaseOrderDetailInclude,
+  purchaseOrderLineApiInclude,
+  purchaseOrderOsdListInclude,
+} from "@/lib/purchase-order-include";
 import { shippingDetailInclude } from "@/lib/shipping-include";
 
 export type ShippingWithRelations = Prisma.ShippingGetPayload<{
@@ -10,6 +14,14 @@ export type ShippingWithRelations = Prisma.ShippingGetPayload<{
 
 export type PurchaseOrderDetailWithRelations = Prisma.PurchaseOrderGetPayload<{
   include: typeof purchaseOrderDetailInclude;
+}>;
+
+export type PurchaseOrderOsdDetailPayload = Prisma.PurchaseOrderOsdGetPayload<{
+  include: typeof purchaseOrderOsdListInclude;
+}>;
+
+export type PurchaseOrderLineApiPayload = Prisma.PurchaseOrderLineGetPayload<{
+  include: typeof purchaseOrderLineApiInclude;
 }>;
 
 export type ManufacturingOrderDetailWithRelations = Prisma.ManufacturingOrderGetPayload<{
@@ -109,11 +121,58 @@ export function shippingRowFromPrisma(row: ShippingLike) {
   };
 }
 
+export function purchaseOrderLineFromPrisma(line: PurchaseOrderLineApiPayload) {
+  const { manufacturingOrderLines, ...lineRest } = line;
+  return {
+    ...lineRest,
+    allocations: manufacturingOrderLines.map((mol) => ({
+      manufacturingOrderId: mol.manufacturingOrderId,
+      manufacturerId: mol.manufacturerId,
+      manufacturingOrder: mol.manufacturingOrder,
+      manufacturer: mol.manufacturer,
+    })),
+  };
+}
+
+function mapPurchaseOrderOsd(osd: PurchaseOrderOsdDetailPayload) {
+  return {
+    id: osd.id,
+    purchaseOrderId: osd.purchaseOrderId,
+    type: osd.type,
+    resolution: osd.resolution,
+    manufacturingOrderId: osd.manufacturingOrderId,
+    manufacturerId: osd.manufacturerId,
+    manufacturingOrder: osd.manufacturingOrder,
+    manufacturer: osd.manufacturer,
+    documentKey: osd.documentKey,
+    notes: osd.notes,
+    storeId: osd.storeId,
+    createdAt: osd.createdAt.toISOString(),
+    updatedAt: osd.updatedAt.toISOString(),
+    createdById: osd.createdById,
+    lines: osd.lines.map((ol) => ({
+      id: ol.id,
+      osdId: ol.osdId,
+      quantity: ol.quantity,
+      purchaseOrderLineId: ol.purchaseOrderLineId,
+      storeId: ol.storeId,
+      createdAt: ol.createdAt.toISOString(),
+      purchaseOrderLine: ol.purchaseOrderLine,
+    })),
+  };
+}
+
+export function purchaseOrderOsdFromPrisma(osd: PurchaseOrderOsdDetailPayload) {
+  return mapPurchaseOrderOsd(osd);
+}
+
 export function purchaseOrderDetailFromPrisma(row: PurchaseOrderDetailWithRelations) {
-  const { purchaseOrderShippings, ...rest } = row;
+  const { purchaseOrderShippings, lines, osds, ...rest } = row;
 
   return {
     ...rest,
+    lines: lines.map((line) => purchaseOrderLineFromPrisma(line)),
+    osds: osds.map(mapPurchaseOrderOsd),
     shippings: purchaseOrderShippings.map((item) => shippingRowFromPrisma(item.shipping)),
   };
 }

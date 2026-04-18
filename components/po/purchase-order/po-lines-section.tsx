@@ -46,7 +46,7 @@ export function PoLinesSection({
         <LineItemsGrid>
           {lines.map((line) => (
             <PoLineGridCard
-              key={line.id}
+              key={`${line.id}-${line.orderedQuantity}-${line.quantity}`}
               line={line}
               onPatch={(body) => onPatchLine(line.id, body)}
               onDelete={() => {

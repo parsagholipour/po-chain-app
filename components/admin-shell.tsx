@@ -34,6 +34,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { useNavCounts } from "@/lib/use-nav-counts";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -144,6 +145,15 @@ function SidebarBrand({ activeStoreName, isCollapsed }: { activeStoreName: strin
   );
 }
 
+function NavCountBadge({ count }: { count: number | undefined }) {
+  if (!count) return null;
+  return (
+    <span className="ml-auto flex size-5 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/15 text-[10px] font-semibold tabular-nums text-sidebar-primary">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 function NavList({
   onNavigate,
   className,
@@ -154,6 +164,13 @@ function NavList({
   isCollapsed?: boolean;
 }) {
   const pathname = usePathname();
+  const { data: navCounts } = useNavCounts();
+
+  const countByHref: Record<string, number | undefined> = {
+    "/purchase-orders-overview": navCounts?.purchaseOrders,
+    "/stock-orders": navCounts?.stockOrders,
+    "/manufacturing-orders": navCounts?.manufacturingOrders,
+  };
 
   return (
     <nav className={cn("flex flex-col gap-0.5 p-3", className)}>
@@ -192,6 +209,7 @@ function NavList({
                 )}
               />
               {!isCollapsed && <span className="relative truncate">{item.label}</span>}
+              {!isCollapsed && <NavCountBadge count={countByHref[item.href]} />}
             </Link>
           );
         }

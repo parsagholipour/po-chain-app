@@ -6,6 +6,9 @@ import { z } from "zod";
 import { PURCHASE_ORDER_TYPE_STOCK } from "@/lib/purchase-order-type";
 import { requireStoreContext } from "@/lib/store-context";
 import { productPricingSnapshot } from "@/lib/purchase-order-line-pricing";
+import { purchaseOrderLineApiInclude } from "@/lib/purchase-order-include";
+import { purchaseOrderLineFromPrisma } from "@/lib/shipping-api";
+import { recomputeLineQuantities } from "@/lib/po/osd-recompute";
 
 export const runtime = "nodejs";
 
@@ -30,10 +33,10 @@ export async function GET(
 
   const lines = await prisma.purchaseOrderLine.findMany({
     where: { purchaseOrderId: pid.data.id, storeId },
-    include: { product: { include: { defaultManufacturer: true, category: true } } },
+    include: purchaseOrderLineApiInclude,
     orderBy: { createdAt: "asc" },
   });
-  return NextResponse.json(lines);
+  return NextResponse.json(lines.map((l) => purchaseOrderLineFromPrisma(l)));
 }
 
 export async function POST(
@@ -69,18 +72,26 @@ export async function POST(
   if (!product) return jsonError("Product not found", 404);
 
   try {
-    const line = await prisma.purchaseOrderLine.create({
-      data: {
-        purchaseOrderId: pid.data.id,
-        productId: parsed.data.productId,
-        quantity: parsed.data.quantity,
-        ...productPricingSnapshot(product),
-        storeId,
-        createdById: userId,
-      },
-      include: { product: { include: { defaultManufacturer: true, category: true } } },
+    const line = await prisma.$transaction(async (tx) => {
+      const created = await tx.purchaseOrderLine.create({
+        data: {
+          purchaseOrderId: pid.data.id,
+          productId: parsed.data.productId,
+          storeId,
+          createdById: userId,
+          ...productPricingSnapshot(product),
+          quantity: parsed.data.quantity,
+          orderedQuantity: parsed.data.quantity,
+        },
+        include: purchaseOrderLineApiInclude,
+      });
+      await recomputeLineQuantities(tx, pid.data.id, storeId);
+      return tx.purchaseOrderLine.findFirstOrThrow({
+        where: { id: created.id },
+        include: purchaseOrderLineApiInclude,
+      });
     });
-    return NextResponse.json(line, { status: 201 });
+    return NextResponse.json(purchaseOrderLineFromPrisma(line), { status: 201 });
   } catch (e) {
     const j = jsonFromPrisma(e);
     if (j) return j;

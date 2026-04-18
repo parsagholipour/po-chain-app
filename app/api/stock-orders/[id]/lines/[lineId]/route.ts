@@ -6,6 +6,9 @@ import { z } from "zod";
 import { PURCHASE_ORDER_TYPE_STOCK } from "@/lib/purchase-order-type";
 import { requireStoreContext } from "@/lib/store-context";
 import { productPricingSnapshot } from "@/lib/purchase-order-line-pricing";
+import { purchaseOrderLineApiInclude } from "@/lib/purchase-order-include";
+import { purchaseOrderLineFromPrisma } from "@/lib/shipping-api";
+import { recomputeLineQuantities } from "@/lib/po/osd-recompute";
 
 export const runtime = "nodejs";
 
@@ -61,14 +64,36 @@ export async function PATCH(
     pricingSnapshot = productPricingSnapshot(product);
   }
 
+  const { quantity, ...restPatch } = parsed.data;
+
   try {
-    const line = await prisma.purchaseOrderLine.update({
-      where: { id: pid.data.lineId },
-      data: { ...parsed.data, ...(pricingSnapshot ?? {}) },
-      include: { product: { include: { defaultManufacturer: true, category: true } } },
+    const line = await prisma.$transaction(async (tx) => {
+      await tx.purchaseOrderLine.update({
+        where: { id: pid.data.lineId },
+        data: {
+          ...restPatch,
+          ...(pricingSnapshot ?? {}),
+          ...(quantity !== undefined ? { orderedQuantity: quantity } : {}),
+        },
+      });
+      try {
+        await recomputeLineQuantities(tx, pid.data.id, storeId);
+      } catch (e) {
+        if (e instanceof Error && e.message === "OSD_NEGATIVE_QUANTITY") {
+          throw new Error("OSD_NEGATIVE_QUANTITY");
+        }
+        throw e;
+      }
+      return tx.purchaseOrderLine.findFirstOrThrow({
+        where: { id: pid.data.lineId },
+        include: purchaseOrderLineApiInclude,
+      });
     });
-    return NextResponse.json(line);
+    return NextResponse.json(purchaseOrderLineFromPrisma(line));
   } catch (e) {
+    if (e instanceof Error && e.message === "OSD_NEGATIVE_QUANTITY") {
+      return jsonError("Effective quantity would become negative for one or more lines", 400);
+    }
     const j = jsonFromPrisma(e);
     if (j) return j;
     throw e;

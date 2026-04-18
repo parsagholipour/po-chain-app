@@ -60,15 +60,82 @@ function hasSelectValue(children: React.ReactNode): boolean {
   return found
 }
 
-function Select<Value, Multiple extends boolean | undefined = false>({
-  children,
-  items,
-  ...props
-}: SelectPrimitive.Root.Props<Value, Multiple>) {
+function areSelectValuesEqual<Value>(
+  next: unknown,
+  current: unknown,
+  multiple: boolean | undefined,
+  isItemEqualToValue?: (itemValue: Value, value: Value) => boolean,
+): boolean {
+  const eq = (a: unknown, b: unknown) =>
+    isItemEqualToValue && a != null && b != null
+      ? isItemEqualToValue(a as Value, b as Value)
+      : Object.is(a, b)
+
+  if (multiple) {
+    const a = Array.isArray(next) ? next : []
+    const b = Array.isArray(current) ? current : []
+    if (a.length !== b.length) return false
+    for (let i = 0; i < a.length; i++) {
+      if (!eq(a[i], b[i])) return false
+    }
+    return true
+  }
+  return eq(next, current)
+}
+
+function Select<Value, Multiple extends boolean | undefined = false>(
+  props: SelectPrimitive.Root.Props<Value, Multiple>,
+) {
+  const { children, items, ...rest } = props
+
   const inferredItems = items == null ? collectSelectItems(children) : undefined
   const resolvedItems =
     items ?? (inferredItems && inferredItems.length > 0 ? inferredItems : undefined)
   const warnedRef = React.useRef(false)
+
+  const isControlled = "value" in props
+
+  type RootProps = SelectPrimitive.Root.Props<Value, Multiple>
+  type Latest = {
+    isControlled: boolean
+    value: RootProps["value"]
+    multiple: RootProps["multiple"]
+    isItemEqualToValue: RootProps["isItemEqualToValue"]
+    onValueChange: RootProps["onValueChange"]
+    lastUncontrolled: RootProps["value"]
+  }
+
+  // A single ref keeps the wrapped handler referentially stable while still
+  // reading the latest props synchronously inside the callback. Mutating during
+  // render is safe here because every assignment is idempotent for given props.
+  const latestRef = React.useRef<Latest>({
+    isControlled,
+    value: rest.value,
+    multiple: rest.multiple,
+    isItemEqualToValue: rest.isItemEqualToValue,
+    onValueChange: rest.onValueChange,
+    lastUncontrolled: isControlled ? undefined : rest.defaultValue,
+  })
+  latestRef.current.isControlled = isControlled
+  latestRef.current.value = rest.value
+  latestRef.current.multiple = rest.multiple
+  latestRef.current.isItemEqualToValue = rest.isItemEqualToValue
+  latestRef.current.onValueChange = rest.onValueChange
+
+  const handleValueChange = React.useCallback<NonNullable<RootProps["onValueChange"]>>(
+    (nextValue, eventDetails) => {
+      const s = latestRef.current
+      const current = s.isControlled ? s.value : s.lastUncontrolled
+      if (areSelectValuesEqual(nextValue, current, s.multiple, s.isItemEqualToValue)) {
+        return
+      }
+      if (!s.isControlled) {
+        s.lastUncontrolled = nextValue as RootProps["value"]
+      }
+      s.onValueChange?.(nextValue, eventDetails)
+    },
+    [],
+  )
 
   React.useEffect(() => {
     if (process.env.NODE_ENV === "production") {
@@ -87,8 +154,9 @@ function Select<Value, Multiple extends boolean | undefined = false>({
 
   return (
     <SelectPrimitive.Root
-      items={resolvedItems as SelectPrimitive.Root.Props<Value, Multiple>["items"]}
-      {...props}
+      {...rest}
+      items={resolvedItems as RootProps["items"]}
+      onValueChange={handleValueChange}
     >
       {children}
     </SelectPrimitive.Root>

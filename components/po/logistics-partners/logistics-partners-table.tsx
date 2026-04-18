@@ -37,13 +37,16 @@ export function LogisticsPartnersTable({
             <TableHead>Type</TableHead>
             <TableHead>Contact</TableHead>
             <TableHead>Link</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Address</TableHead>
+            <TableHead>Notes</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {isPending ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
+              <TableCell colSpan={9} className="h-28 text-center text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
@@ -88,6 +91,9 @@ export function LogisticsPartnersTable({
                   "-"
                 )}
               </TableCell>
+              <TableCell>{partner.email || "-"}</TableCell>
+              <TableCell>{partner.address || "-"}</TableCell>
+              <TableCell className="max-w-[200px] truncate">{partner.notes || "-"}</TableCell>
               <TableCell className="text-right">
                 <div className="flex justify-end gap-2">
                   <Button
@@ -111,7 +117,7 @@ export function LogisticsPartnersTable({
           ))}
           {!isPending && partners.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
                 No logistics partners found
               </TableCell>
             </TableRow>

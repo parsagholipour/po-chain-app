@@ -82,6 +82,9 @@ export type LogisticsPartner = {
   logoKey: string | null;
   contactNumber: string | null;
   link: string | null;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
   type: "freight_forwarder" | "carrier";
   createdAt: string;
   updatedAt: string;
@@ -142,12 +145,64 @@ export type LinkedManufacturingOrderRef = {
   status: string;
 };
 
+export type PoLineAllocation = {
+  manufacturingOrderId: string;
+  manufacturerId: string;
+  manufacturingOrder: { id: string; number: number; name: string };
+  manufacturer: { id: string; name: string };
+};
+
 export type PoLineRow = {
   id: string;
+  /** Effective quantity after OS&D (analytics / revenue). */
   quantity: number;
+  /** Distributor-ordered quantity shown on the PO. */
+  orderedQuantity: number;
   unitCost: string | number | null;
   unitPrice: string | number | null;
   product: Product;
+  allocations: PoLineAllocation[];
+};
+
+export type PoOsdType = "overage" | "shortage" | "damage";
+export type PoOsdResolution = "charged" | "returned" | "sent";
+
+/** PO line shape embedded under an OS&D line (subset of `PoLineRow`). */
+export type PoOsdNestedLine = {
+  id: string;
+  quantity: number;
+  orderedQuantity: number;
+  unitCost: string | number | null;
+  unitPrice: string | number | null;
+  product: Product;
+};
+
+export type PoOsdLineRow = {
+  id: string;
+  osdId: string;
+  quantity: number;
+  purchaseOrderLineId: string;
+  storeId: string;
+  createdAt: string;
+  purchaseOrderLine: PoOsdNestedLine;
+};
+
+export type PoOsd = {
+  id: string;
+  purchaseOrderId: string;
+  type: PoOsdType;
+  resolution: PoOsdResolution;
+  manufacturingOrderId: string | null;
+  manufacturerId: string | null;
+  manufacturingOrder: { id: string; number: number; name: string } | null;
+  manufacturer: { id: string; name: string; region: string } | null;
+  documentKey: string | null;
+  notes: string | null;
+  storeId: string;
+  createdAt: string;
+  updatedAt: string;
+  createdById: string;
+  lines: PoOsdLineRow[];
 };
 
 export type ShippingOrderRef = {
@@ -183,6 +238,7 @@ type PurchaseOrderDetailBase = {
   status: string;
   documentKey: string | null;
   lines: PoLineRow[];
+  osds: PoOsd[];
   manufacturingOrderPurchaseOrders: {
     manufacturingOrder: LinkedManufacturingOrderRef;
   }[];
@@ -269,6 +325,7 @@ export type MoLineAllocationRow = {
   purchaseOrderLine: {
     id: string;
     quantity: number;
+    orderedQuantity: number;
     unitCost: string | number | null;
     unitPrice: string | number | null;
     product: Product;

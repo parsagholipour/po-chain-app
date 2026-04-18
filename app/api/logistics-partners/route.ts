@@ -50,7 +50,7 @@ export async function POST(request: Request) {
   const parsed = logisticsPartnerCreateSchema.safeParse(body);
   if (!parsed.success) return jsonFromZod(parsed.error);
 
-  const { name, logoKey, contactNumber, link, type } = parsed.data;
+  const { name, logoKey, contactNumber, link, email, address, notes, type } = parsed.data;
 
   try {
     const partner = await prisma.logisticsPartner.create({
@@ -59,6 +59,9 @@ export async function POST(request: Request) {
         logoKey: logoKey ?? null,
         contactNumber: contactNumber ?? null,
         link: link ?? null,
+        email: email ?? null,
+        address: address ?? null,
+        notes: notes ?? null,
         type,
         storeId,
         createdById: userId,

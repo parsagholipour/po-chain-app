@@ -180,10 +180,11 @@ export async function POST(request: Request) {
           data: {
             purchaseOrderId: po.id,
             productId: line.productId,
-            quantity: line.quantity,
-            ...productPricingSnapshot(productPricing),
             storeId,
             createdById: userId,
+            ...productPricingSnapshot(productPricing),
+            quantity: line.quantity,
+            orderedQuantity: line.quantity,
           },
         });
       }

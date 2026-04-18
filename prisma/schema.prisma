@@ -92,6 +92,19 @@ enum ConditionOperator {
   is_empty
 }
 
+/// OS&D (Over / Short / Damage) on a distributor purchase order
+enum PurchaseOrderOsdType {
+  overage
+  shortage
+  damage
+}
+
+enum PurchaseOrderOsdResolution {
+  charged
+  returned
+  sent
+}
+
 model Store {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
@@ -117,6 +130,8 @@ model Store {
   customFieldDefinitions               CustomFieldDefinition[]
   customFieldValues                    CustomFieldValue[]
   productCategories                    ProductCategory[]
+  purchaseOrderOsds                    PurchaseOrderOsd[]
+  purchaseOrderOsdLines                PurchaseOrderOsdLine[]
 
   @@index([name])
 }
@@ -155,6 +170,7 @@ model User {
   manufacturingOrderPurchaseOrderLinesCreated ManufacturingOrderPurchaseOrderLine[] @relation("MOPurchaseOrderLineCreatedBy")
   customFieldDefinitionsCreated               CustomFieldDefinition[]               @relation("CustomFieldDefinitionCreatedBy")
   productCategoriesCreated                    ProductCategory[]                     @relation("ProductCategoryCreatedBy")
+  purchaseOrderOsdsCreated                    PurchaseOrderOsd[]                   @relation("PurchaseOrderOsdCreatedBy")
 }
 
 model Manufacturer {
@@ -177,6 +193,7 @@ model Manufacturer {
   productsAsDefault     Product[]                             @relation("ProductDefaultManufacturer")
   onManufacturingOrders ManufacturingOrderManufacturer[]
   onMoLines             ManufacturingOrderPurchaseOrderLine[]
+  purchaseOrderOsds     PurchaseOrderOsd[]
 
   @@index([storeId, name])
   @@index([storeId, createdAt])
@@ -282,6 +299,7 @@ model PurchaseOrder {
   lines                            PurchaseOrderLine[]
   manufacturingOrderPurchaseOrders ManufacturingOrderPurchaseOrder[]
   purchaseOrderShippings           PurchaseOrderShipping[]
+  osds                             PurchaseOrderOsd[]
 
   @@index([storeId, type, status])
   @@index([storeId, number])
@@ -290,10 +308,12 @@ model PurchaseOrder {
 }
 
 model PurchaseOrderLine {
-  id              String   @id @default(uuid()) @db.Uuid
-  purchaseOrderId String   @db.Uuid
-  productId       String   @db.Uuid
-  quantity        Int
+  id               String   @id @default(uuid()) @db.Uuid
+  purchaseOrderId  String   @db.Uuid
+  productId        String   @db.Uuid
+  quantity         Int
+  /// Distributor-ordered quantity; `quantity` is effective units after OS&D deltas (analytics).
+  orderedQuantity  Int
   unitCost        Decimal? @db.Decimal(12, 2)
   unitPrice       Decimal? @db.Decimal(12, 2)
   storeId         String   @db.Uuid
@@ -307,10 +327,55 @@ model PurchaseOrderLine {
   product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   manufacturingOrderLines ManufacturingOrderPurchaseOrderLine[]
+  osdLines                PurchaseOrderOsdLine[]
 
   @@index([storeId, purchaseOrderId])
   @@index([storeId, productId])
   @@index([storeId, createdAt])
+}
+
+model PurchaseOrderOsd {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  purchaseOrderId    String                   @db.Uuid
+  type                 PurchaseOrderOsdType
+  resolution           PurchaseOrderOsdResolution
+  manufacturingOrderId String?                @db.Uuid
+  manufacturerId     String?                  @db.Uuid
+  documentKey        String?
+  notes                String?
+  storeId            String                   @db.Uuid
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+  createdById        String                   @db.Uuid
+
+  purchaseOrder      PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  store              Store              @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  createdBy          User               @relation("PurchaseOrderOsdCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  manufacturingOrder ManufacturingOrder? @relation(fields: [manufacturingOrderId], references: [id], onDelete: SetNull)
+  manufacturer       Manufacturer?      @relation(fields: [manufacturerId], references: [id], onDelete: SetNull)
+  lines              PurchaseOrderOsdLine[]
+
+  @@index([storeId, purchaseOrderId])
+  @@index([storeId, createdAt])
+  @@index([storeId, manufacturingOrderId])
+  @@index([storeId, manufacturerId])
+}
+
+model PurchaseOrderOsdLine {
+  id                  String   @id @default(uuid()) @db.Uuid
+  osdId               String   @db.Uuid
+  purchaseOrderLineId String   @db.Uuid
+  quantity            Int
+  storeId             String   @db.Uuid
+  createdAt           DateTime @default(now())
+
+  osd               PurchaseOrderOsd  @relation(fields: [osdId], references: [id], onDelete: Cascade)
+  purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  store             Store             @relation(fields: [storeId], references: [id], onDelete: Restrict)
+
+  @@unique([osdId, purchaseOrderLineId])
+  @@index([storeId, osdId])
+  @@index([storeId, purchaseOrderLineId])
 }
 
 model ManufacturingOrder {
@@ -330,6 +395,7 @@ model ManufacturingOrder {
   purchaseOrders              ManufacturingOrderPurchaseOrder[]
   lineAllocations             ManufacturingOrderPurchaseOrderLine[]
   manufacturingOrderShippings ManufacturingOrderShipping[]
+  purchaseOrderOsds           PurchaseOrderOsd[]
 
   @@index([storeId, status])
   @@index([storeId, number])
@@ -393,6 +459,9 @@ model LogisticsPartner {
   logoKey       String?
   contactNumber String?
   link          String?
+  email         String?
+  address       String?
+  notes         String?
   type          LogisticsPartnerType
   storeId       String               @db.Uuid
   store         Store                @relation(fields: [storeId], references: [id], onDelete: Restrict)

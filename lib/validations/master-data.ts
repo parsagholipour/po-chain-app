@@ -56,6 +56,9 @@ export const logisticsPartnerCreateSchema = z.object({
   logoKey: nullableOptionalString,
   contactNumber: nullableOptionalString,
   link: nullableOptionalUrl,
+  email: nullableOptionalEmail,
+  address: nullableOptionalString,
+  notes: nullableOptionalString,
   type: logisticsPartnerTypeSchema,
 });
 

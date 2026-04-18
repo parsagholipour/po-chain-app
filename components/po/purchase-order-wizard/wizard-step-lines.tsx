@@ -20,6 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { Manufacturer, Product } from "@/lib/types/api";
+import { PoLinesSelectTable } from "@/components/po/purchase-order-wizard/po-lines-select-table";
 
 export type LineDraft = {
   productId: string;
@@ -79,6 +80,31 @@ export function WizardStepLines({
     [manufacturerIdList, manufacturers],
   );
 
+  if (hideManufacturer) {
+    if (isPending) {
+      return <p className="text-sm text-muted-foreground">Loading…</p>;
+    }
+    if (products.length === 0) {
+      return <p className="text-sm text-muted-foreground">Add products first.</p>;
+    }
+    return (
+      <PoLinesSelectTable
+        selectColumnLabel="Product"
+        selectPlaceholder="Select product"
+        emptyItemsMessage="Add products first."
+        items={productSelectItems}
+        rows={lines.map((l) => ({ entityId: l.productId, quantity: l.quantity }))}
+        onUpdateRow={(i, patch) => {
+          const p: Partial<LineDraft> = {};
+          if (patch.entityId !== undefined) p.productId = patch.entityId;
+          if (patch.quantity !== undefined) p.quantity = patch.quantity;
+          onUpdateLine(i, p);
+        }}
+        onRemoveRow={onRemoveLine}
+      />
+    );
+  }
+
   if (isPending) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
@@ -95,7 +121,7 @@ export function WizardStepLines({
             <TableRow>
               <TableHead>Product</TableHead>
               <TableHead className="w-28">Qty</TableHead>
-              {hideManufacturer ? null : <TableHead>Manufacturer</TableHead>}
+              <TableHead>Manufacturer</TableHead>
               <TableHead className="w-14" />
             </TableRow>
           </TableHeader>
@@ -128,32 +154,30 @@ export function WizardStepLines({
                       }
                     />
                   </TableCell>
-                  {hideManufacturer ? null : (
-                    <TableCell>
-                      <Select
-                        value={line.manufacturerId}
-                        items={manufacturerItems}
-                        disabled={!hasProduct}
-                        onValueChange={(v) => {
-                          if (v) onUpdateLine(i, { manufacturerId: v });
-                        }}
-                      >
-                        <SelectTrigger className="w-full min-w-[140px]">
-                          <SelectValue placeholder="Manufacturer" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {manufacturerIdList.map((mid) => {
-                            const m = manufacturers.find((x) => x.id === mid);
-                            return (
-                              <SelectItem key={mid} value={mid}>
-                                {m?.name ?? mid}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                  )}
+                  <TableCell>
+                    <Select
+                      value={line.manufacturerId}
+                      items={manufacturerItems}
+                      disabled={!hasProduct}
+                      onValueChange={(v) => {
+                        if (v) onUpdateLine(i, { manufacturerId: v });
+                      }}
+                    >
+                      <SelectTrigger className="w-full min-w-[140px]">
+                        <SelectValue placeholder="Manufacturer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {manufacturerIdList.map((mid) => {
+                          const m = manufacturers.find((x) => x.id === mid);
+                          return (
+                            <SelectItem key={mid} value={mid}>
+                              {m?.name ?? mid}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
                   <TableCell>
                     {hasProduct ? (
                       <Button type="button" variant="ghost" size="sm" onClick={() => onRemoveLine(i)}>

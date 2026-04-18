@@ -175,7 +175,8 @@ export function PoDetailHeader({
               </span>
             </div>
             {po.shippings.length > 0 ? (
-              <div className="flex flex-wrap gap-2 pt-2">
+              <div className="flex flex-wrap items-center gap-2 pt-2">
+                <span className="text-xs font-medium text-foreground">Shipping</span>
                 {po.shippings.map((shipping) => (
                   <Badge key={shipping.id} variant="outline" className="text-xs font-medium">
                     {shippingStatusLabels[shipping.status] ?? shipping.status}

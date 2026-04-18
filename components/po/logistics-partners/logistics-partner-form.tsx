@@ -44,6 +44,9 @@ function getDefaultFormValues(
     logoKey: defaultValues?.logoKey ?? null,
     contactNumber: defaultValues?.contactNumber ?? "",
     link: defaultValues?.link ?? "",
+    email: defaultValues?.email ?? "",
+    address: defaultValues?.address ?? "",
+    notes: defaultValues?.notes ?? "",
     type: defaultValues?.type ?? defaultType,
   };
 }
@@ -87,6 +90,9 @@ export function LogisticsPartnerForm({
       logoKey,
       contactNumber: values.contactNumber ?? null,
       link: values.link ?? null,
+      email: values.email ?? null,
+      address: values.address ?? null,
+      notes: values.notes ?? null,
     });
     if (customFieldsRef.current?.hasFields) {
       await customFieldsRef.current.save(entityId);
@@ -145,6 +151,30 @@ export function LogisticsPartnerForm({
             <Input {...form.register("link")} placeholder="https://..." />
           </FieldContent>
           <FieldError>{form.formState.errors.link?.message}</FieldError>
+        </Field>
+
+        <Field>
+          <FieldLabel>Email</FieldLabel>
+          <FieldContent>
+            <Input {...form.register("email")} placeholder="email@example.com" />
+          </FieldContent>
+          <FieldError>{form.formState.errors.email?.message}</FieldError>
+        </Field>
+
+        <Field>
+          <FieldLabel>Address</FieldLabel>
+          <FieldContent>
+            <Input {...form.register("address")} placeholder="Address" />
+          </FieldContent>
+          <FieldError>{form.formState.errors.address?.message}</FieldError>
+        </Field>
+
+        <Field>
+          <FieldLabel>Notes</FieldLabel>
+          <FieldContent>
+            <Input {...form.register("notes")} placeholder="Notes" />
+          </FieldContent>
+          <FieldError>{form.formState.errors.notes?.message}</FieldError>
         </Field>
 
         <CustomFieldsRenderer
