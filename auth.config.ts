@@ -10,8 +10,14 @@ export default {
     }),
   ],
   trustHost: true,
+  pages: {
+    error: "/auth/error",
+  },
   callbacks: {
-    authorized({ auth }) {
+    authorized({ auth, request }) {
+      if (request.nextUrl.pathname.startsWith("/auth/error")) {
+        return true;
+      }
       return !!auth?.user;
     },
   },
