@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useRouter } from "nextjs-toploader/app";
 import { z } from "zod";
 
 export function parseUuidParam(value: string | null | undefined): string | null {

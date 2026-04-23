@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { SessionProvider } from "next-auth/react";
+import NextTopLoader from "nextjs-toploader";
 import { useState } from "react";
 import { ConfirmProvider } from "@/components/confirm-provider";
 
@@ -14,6 +15,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionProvider basePath="/api/auth">
+      <NextTopLoader
+        color="oklch(0.52 0.12 180)"
+        height={3}
+        showSpinner={false}
+        zIndex={9999}
+      />
       <QueryClientProvider client={queryClient}>
         <ThemeProvider
           attribute="class"

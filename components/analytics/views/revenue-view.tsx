@@ -1,7 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "nextjs-toploader/app";
 import { AnalyticsHeader } from "@/components/analytics/analytics-header";
 import { BreakdownTable } from "@/components/analytics/breakdown-table";
 import { ChartCard } from "@/components/analytics/chart-card";

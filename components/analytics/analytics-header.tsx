@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "nextjs-toploader/app";
 import { DateRangePicker } from "@/components/analytics/date-range-picker";
 import { parseAnalyticsRange } from "@/lib/analytics/date-range";
 import type { AnalyticsGranularity } from "@/lib/types/analytics";

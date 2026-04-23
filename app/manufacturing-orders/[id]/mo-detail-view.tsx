@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter } from "nextjs-toploader/app";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";

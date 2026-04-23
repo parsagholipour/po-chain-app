@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter } from "nextjs-toploader/app";
 import { useEffect, useState, type FormEvent } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";

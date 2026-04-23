@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter } from "nextjs-toploader/app";
 import { useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Building2 } from "lucide-react";

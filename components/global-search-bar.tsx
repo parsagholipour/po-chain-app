@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "nextjs-toploader/app";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { History, Loader2, Search, X } from "lucide-react";
