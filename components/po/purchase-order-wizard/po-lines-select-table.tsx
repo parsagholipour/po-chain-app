@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect, type SearchableSelectItem } from "@/components/ui/searchable-select";
+import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Table,
   TableBody,
@@ -11,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { usePagination } from "@/hooks/use-pagination";
 
 /** One row: searchable entity id (e.g. product or PO line) + quantity. */
 export type PoLinesSelectRow = {
@@ -50,6 +52,9 @@ export function PoLinesSelectTable({
   onUpdateRow,
   onRemoveRow,
 }: Props) {
+  const pagination = usePagination({ totalItems: rows.length });
+  const pagedRows = pagination.sliceItems(rows);
+
   if (isPending) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
   }
@@ -70,7 +75,8 @@ export function PoLinesSelectTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {rows.map((row, i) => {
+            {pagedRows.map((row, offset) => {
+              const i = pagination.startIndex + offset;
               const hasEntity = row.entityId.length > 0;
               const rowItems = getItemsForRow ? getItemsForRow(i, row) : items;
               const noChoices = rowItems.length === 0;
@@ -115,6 +121,11 @@ export function PoLinesSelectTable({
           </TableBody>
         </Table>
       </div>
+      <TablePagination
+        {...pagination}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+      />
     </div>
   );
 }

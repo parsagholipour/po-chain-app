@@ -16,7 +16,8 @@ export function useNavCounts() {
       const { data } = await api.get<NavCounts>("/api/nav-counts");
       return data;
     },
-    staleTime: 30_000,
+    staleTime: 0,
     refetchInterval: 60_000,
+    refetchOnWindowFocus: "always",
   });
 }

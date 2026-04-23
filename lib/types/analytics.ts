@@ -6,10 +6,14 @@ export type AnalyticsRange = {
   granularity: AnalyticsGranularity;
 };
 
+export type AnalyticsKpiValueFormat = "currency" | "percent" | "integer" | "number";
+
 export type AnalyticsKpi = {
   label: string;
   value: number;
   deltaPct: number | null;
+  /** How to render `value` in KPI tiles (defaults to `"number"`). */
+  valueFormat?: AnalyticsKpiValueFormat;
 };
 
 export type TimeSeriesPoint = {

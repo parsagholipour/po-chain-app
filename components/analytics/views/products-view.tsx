@@ -9,7 +9,9 @@ import { BarChart } from "@/components/analytics/charts/bar-chart";
 import { CHART_COLORS } from "@/components/analytics/charts/chart-setup";
 import { api } from "@/lib/axios";
 import type { ProductLeaderboardRow, QualityIssueRow } from "@/lib/types/analytics";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePagination } from "@/hooks/use-pagination";
 
 type LeaderboardPayload = { rows: ProductLeaderboardRow[] };
 type UnsoldPayload = { rows: QualityIssueRow[] };
@@ -38,6 +40,9 @@ export function ProductsView() {
 
   const topRows = (leaderboard.data?.rows ?? []).slice(0, 10);
   const lowRows = (lowMargin.data?.rows ?? []).slice(0, 10);
+  const unsoldRows = unsold.data?.rows ?? [];
+  const unsoldPagination = usePagination({ totalItems: unsoldRows.length, resetDeps: [query] });
+  const pagedUnsoldRows = unsoldPagination.sliceItems(unsoldRows);
 
   return (
     <div className="space-y-6">
@@ -96,14 +101,14 @@ export function ProductsView() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(unsold.data?.rows ?? []).length === 0 ? (
+              {unsoldRows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={2} className="h-20 text-center text-muted-foreground">
                     No unsold products for this period.
                   </TableCell>
                 </TableRow>
               ) : (
-                (unsold.data?.rows ?? []).map((row) => (
+                pagedUnsoldRows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell>{row.label}</TableCell>
                     <TableCell className="text-muted-foreground">{row.note}</TableCell>
@@ -112,6 +117,13 @@ export function ProductsView() {
               )}
             </TableBody>
           </Table>
+          <div className="border-t border-border/60 px-3 py-2">
+            <TablePagination
+              {...unsoldPagination}
+              onPageChange={unsoldPagination.setPage}
+              onPageSizeChange={unsoldPagination.setPageSize}
+            />
+          </div>
         </div>
       </ChartCard>
     </div>

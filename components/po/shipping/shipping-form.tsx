@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import {
   CustomFieldsRenderer,
@@ -12,6 +12,7 @@ import {
 import { z } from "zod";
 import { shippingCreateSchema } from "@/lib/validations/shipping";
 import { uploadFileToStorage } from "@/lib/upload-client";
+import { OrderStatusLogsDialog } from "@/components/po/order-status-logs-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Field,
@@ -41,6 +42,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import type { ShippingRow } from "@/lib/types/api";
 
 export type ShippingFormValues = z.infer<typeof shippingCreateSchema>;
 
@@ -61,12 +63,14 @@ interface ShippingFormProps {
   defaultValues?: Partial<ShippingFormValues>;
   editingId?: string | null;
   onSubmit: (values: ShippingFormValues) => Promise<string>;
+  onSaveStatusLogNote?: (logId: string, note: string | null) => Promise<void>;
   isSubmitting?: boolean;
   availableManufacturingOrders?: OrderOption[];
   availablePurchaseOrders?: OrderOption[];
   availableLogisticsPartners?: LogisticsPartnerOption[];
   requiredManufacturingOrderIds?: string[];
   requiredPurchaseOrderIds?: string[];
+  statusLogs?: ShippingRow["statusLogs"];
 }
 
 const NO_PARTNER_VALUE = "__none__";
@@ -107,17 +111,24 @@ export function ShippingForm({
   defaultValues,
   editingId,
   onSubmit,
+  onSaveStatusLogNote,
   isSubmitting = false,
   availableManufacturingOrders = [],
   availablePurchaseOrders = [],
   availableLogisticsPartners = [],
   requiredManufacturingOrderIds = [],
   requiredPurchaseOrderIds = [],
+  statusLogs = [],
 }: ShippingFormProps) {
-  const customFieldsRef = useRef<CustomFieldsHandle>(null);
+  const [customFieldsHandle, setCustomFieldsHandle] = useState<CustomFieldsHandle | null>(
+    null,
+  );
   const invoiceDocumentInputRef = useRef<HTMLInputElement>(null);
   const [invoiceDocumentFile, setInvoiceDocumentFile] = useState<File | null>(null);
   const [removeStoredInvoiceDocument, setRemoveStoredInvoiceDocument] = useState(false);
+  const handleCustomFieldsRef = useCallback((handle: CustomFieldsHandle | null) => {
+    setCustomFieldsHandle(handle);
+  }, []);
 
   const form = useForm<ShippingFormValues>({
     resolver: zodResolver(shippingCreateSchema) as Resolver<ShippingFormValues>,
@@ -170,6 +181,7 @@ export function ShippingForm({
 
   const partnerLabel =
     logisticsPartnerTypeLabels[logisticsPartnerTypeForShippingType(type)];
+  const showStatusHistory = editingId != null;
   const logisticsPartnerSelectItems = [
     {
       value: NO_PARTNER_VALUE,
@@ -220,8 +232,8 @@ export function ShippingForm({
         ...requiredPurchaseOrderIds,
       ]),
     });
-    if (customFieldsRef.current?.hasFields) {
-      await customFieldsRef.current.save(entityId);
+    if (customFieldsHandle?.hasFields) {
+      await customFieldsHandle.save(entityId);
     }
   }
 
@@ -255,7 +267,18 @@ export function ShippingForm({
         </Field>
 
         <Field>
-          <FieldLabel>Status</FieldLabel>
+          <div className="flex items-center gap-2">
+            <FieldLabel>Status</FieldLabel>
+            {showStatusHistory ? (
+              <OrderStatusLogsDialog
+                title="Shipping status history"
+                description="Newest first. Each entry shows when the shipping status changed and who changed it."
+                logs={statusLogs}
+                statusLabels={shippingStatusLabels}
+                onSaveNote={onSaveStatusLogNote}
+              />
+            ) : null}
+          </div>
           <FieldContent>
             <Select
               value={status}
@@ -565,7 +588,7 @@ export function ShippingForm({
         )}
 
         <CustomFieldsRenderer
-          ref={customFieldsRef}
+          ref={handleCustomFieldsRef}
           entityType="shipping"
           entityId={editingId}
           disabled={isSubmitting}

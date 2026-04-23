@@ -6,6 +6,7 @@ import { ChartCard } from "@/components/analytics/chart-card";
 import { BarChart } from "@/components/analytics/charts/bar-chart";
 import { DoughnutChart } from "@/components/analytics/charts/doughnut-chart";
 import { CHART_COLORS } from "@/components/analytics/charts/chart-setup";
+import { PriceView } from "@/components/ui/price-view";
 import { api } from "@/lib/axios";
 
 type Payload = {
@@ -60,7 +61,7 @@ export function ManufacturingView() {
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="lg:col-span-3">
-          <ChartCard title="Manufacturer pivot status funnel">
+          <ChartCard title="Manufacturer status funnel">
             <BarChart
               labels={funnel.map(([status]) => status)}
               series={[
@@ -83,7 +84,7 @@ export function ManufacturingView() {
 
       <ChartCard title="Outstanding balances (MOs with deposit paid, balance pending)">
         <p className="text-3xl font-semibold tabular-nums">
-          {(data?.outstandingBalances ?? 0).toLocaleString()}
+          <PriceView value={data?.outstandingBalances ?? 0} />
         </p>
       </ChartCard>
     </div>

@@ -13,9 +13,8 @@ export type OsdMoValidationResult =
   | { ok: false; message: string; field?: string };
 
 /**
- * Validates manufacturing order + manufacturer attribution for an OSD payload.
- * See plan: MO required when every selected PO line has an MO allocation; lines that map to
- * different manufacturers on the same MO must use separate OS&D records (rejected here).
+ * Validates manufacturing order attribution for an OSD payload.
+ * See plan: MO required when every selected PO line has an MO allocation.
  */
 export async function validateOsdMoContext(
   tx: OsdMoDb,
@@ -23,11 +22,10 @@ export async function validateOsdMoContext(
     storeId: string;
     purchaseOrderId: string;
     manufacturingOrderId: string | null;
-    manufacturerId: string | null;
     purchaseOrderLineIds: string[];
   },
 ): Promise<OsdMoValidationResult> {
-  const { storeId, purchaseOrderId, manufacturingOrderId, manufacturerId, purchaseOrderLineIds } =
+  const { storeId, purchaseOrderId, manufacturingOrderId, purchaseOrderLineIds } =
     params;
 
   const uniqueLineIds = [...new Set(purchaseOrderLineIds)];
@@ -52,7 +50,6 @@ export async function validateOsdMoContext(
     select: {
       purchaseOrderLineId: true,
       manufacturingOrderId: true,
-      manufacturerId: true,
     },
   });
 
@@ -64,14 +61,6 @@ export async function validateOsdMoContext(
       ok: false,
       message:
         "Manufacturing order is required when every selected line is allocated to a manufacturing order",
-      field: "manufacturingOrderId",
-    };
-  }
-
-  if (manufacturerId && !manufacturingOrderId) {
-    return {
-      ok: false,
-      message: "Manufacturing order is required when manufacturer is set",
       field: "manufacturingOrderId",
     };
   }
@@ -92,7 +81,6 @@ export async function validateOsdMoContext(
     };
   }
 
-  const manufacturersOnMoForSelectedLines = new Set<string>();
   for (const lineId of uniqueLineIds) {
     const alloc = allocations.find(
       (a) =>
@@ -104,43 +92,6 @@ export async function validateOsdMoContext(
         ok: false,
         message: "Each selected line must be allocated to the selected manufacturing order",
         field: "manufacturingOrderId",
-      };
-    }
-    manufacturersOnMoForSelectedLines.add(alloc.manufacturerId);
-  }
-
-  if (manufacturersOnMoForSelectedLines.size > 1) {
-    return {
-      ok: false,
-      message:
-        "Selected lines are allocated to different manufacturers on this manufacturing order. Create separate OS&D records.",
-      field: "lines",
-    };
-  }
-
-  if (manufacturerId) {
-    const pivot = await tx.manufacturingOrderManufacturer.findUnique({
-      where: {
-        manufacturingOrderId_manufacturerId: {
-          manufacturingOrderId,
-          manufacturerId,
-        },
-      },
-      select: { manufacturerId: true },
-    });
-    if (!pivot) {
-      return {
-        ok: false,
-        message: "Manufacturer is not on the selected manufacturing order",
-        field: "manufacturerId",
-      };
-    }
-    if (!manufacturersOnMoForSelectedLines.has(manufacturerId)) {
-      return {
-        ok: false,
-        message:
-          "Manufacturer must match an allocation manufacturer for the selected lines on this manufacturing order",
-        field: "manufacturerId",
       };
     }
   }

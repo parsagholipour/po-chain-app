@@ -3,10 +3,11 @@ import { prisma } from "@/lib/prisma";
 import { shippingPatchSchema, shippingPatchToPrisma } from "@/lib/validations/shipping";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
+import { createOrderStatusLog } from "@/lib/order-status-log";
 import { shippingDetailInclude } from "@/lib/shipping-include";
 import { shippingRowFromPrisma } from "@/lib/shipping-api";
 import { logisticsPartnerTypeForShippingType } from "@/lib/shipping";
-import { syncLinkedOrderStatusesForShipping } from "@/lib/shipping-order-status";
+import { reconcileLinkedOrderStatusesForShipping } from "@/lib/shipping-order-status";
 import {
   PURCHASE_ORDER_TYPE_DISTRIBUTOR,
   PURCHASE_ORDER_TYPE_STOCK,
@@ -47,7 +48,7 @@ export async function PATCH(
 ) {
   const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
-  const { storeId } = authz.context;
+  const { storeId, userId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -70,11 +71,28 @@ export async function PATCH(
     const result = await prisma.$transaction(async (tx) => {
       const existing = await tx.shipping.findFirst({
         where: { id: pid.data.id, storeId },
-        select: { id: true, type: true },
+        select: {
+          id: true,
+          type: true,
+          status: true,
+          manufacturingOrderShippings: {
+            select: { manufacturingOrderId: true },
+          },
+          purchaseOrderShippings: {
+            select: { purchaseOrderId: true },
+          },
+        },
       });
       if (!existing) {
         throw new Error("SHIPPING_NOT_FOUND");
       }
+
+      const existingManufacturingOrderIds = existing.manufacturingOrderShippings.map(
+        (row) => row.manufacturingOrderId,
+      );
+      const existingPurchaseOrderIds = existing.purchaseOrderShippings.map(
+        (row) => row.purchaseOrderId,
+      );
 
       if (parsed.data.logisticsPartnerId) {
         const partner = await tx.logisticsPartner.findFirst({
@@ -134,6 +152,17 @@ export async function PATCH(
         data: shippingPatchToPrisma(shippingData),
       });
 
+      if (parsed.data.status && parsed.data.status !== existing.status) {
+        await createOrderStatusLog({
+          tx,
+          storeId,
+          createdById: userId,
+          shippingId: pid.data.id,
+          fromStatus: existing.status,
+          toStatus: parsed.data.status,
+        });
+      }
+
       if (parsed.data.manufacturingOrderIds !== undefined) {
         await tx.manufacturingOrderShipping.deleteMany({
           where: { shippingId: pid.data.id, storeId },
@@ -164,12 +193,20 @@ export async function PATCH(
         }
       }
 
-      await syncLinkedOrderStatusesForShipping(tx, {
+      const nextManufacturingOrderIds =
+        parsed.data.manufacturingOrderIds !== undefined
+          ? manufacturingOrderIds
+          : existingManufacturingOrderIds;
+      const nextPurchaseOrderIds =
+        parsed.data.purchaseOrderIds !== undefined ? purchaseOrderIds : existingPurchaseOrderIds;
+
+      await reconcileLinkedOrderStatusesForShipping(tx, {
         storeId,
-        manufacturingOrderIds:
-          parsed.data.manufacturingOrderIds !== undefined ? manufacturingOrderIds : undefined,
-        purchaseOrderIds:
-          parsed.data.purchaseOrderIds !== undefined ? purchaseOrderIds : undefined,
+        manufacturingOrderIds: uniqueIds([
+          ...existingManufacturingOrderIds,
+          ...nextManufacturingOrderIds,
+        ]),
+        purchaseOrderIds: uniqueIds([...existingPurchaseOrderIds, ...nextPurchaseOrderIds]),
       });
 
       return shipping.id;
@@ -217,14 +254,40 @@ export async function DELETE(
   if (!pid.success) return jsonFromZod(pid.error);
 
   try {
-    const deleted = await prisma.shipping.deleteMany({
-      where: { id: pid.data.id, storeId },
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.shipping.findFirst({
+        where: { id: pid.data.id, storeId },
+        select: {
+          manufacturingOrderShippings: {
+            select: { manufacturingOrderId: true },
+          },
+          purchaseOrderShippings: {
+            select: { purchaseOrderId: true },
+          },
+        },
+      });
+      if (!existing) {
+        throw new Error("SHIPPING_NOT_FOUND");
+      }
+
+      await tx.shipping.deleteMany({
+        where: { id: pid.data.id, storeId },
+      });
+
+      await reconcileLinkedOrderStatusesForShipping(tx, {
+        storeId,
+        manufacturingOrderIds: existing.manufacturingOrderShippings.map(
+          (row) => row.manufacturingOrderId,
+        ),
+        purchaseOrderIds: existing.purchaseOrderShippings.map((row) => row.purchaseOrderId),
+      });
     });
-    if (deleted.count === 0) {
-      return jsonError("Not found", 404);
-    }
+
     return new NextResponse(null, { status: 204 });
   } catch (e) {
+    if (e instanceof Error && e.message === "SHIPPING_NOT_FOUND") {
+      return jsonError("Not found", 404);
+    }
     const j = jsonFromPrisma(e);
     if (j) return j;
     throw e;

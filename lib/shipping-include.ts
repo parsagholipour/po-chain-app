@@ -1,3 +1,5 @@
+import { orderStatusLogInclude } from "@/lib/order-status-log";
+
 export const shippingDetailInclude = {
   logisticsPartner: true,
   manufacturingOrderShippings: {
@@ -24,5 +26,9 @@ export const shippingDetailInclude = {
         },
       },
     },
+  },
+  statusLogs: {
+    orderBy: { createdAt: "desc" as const },
+    include: orderStatusLogInclude,
   },
 } as const;

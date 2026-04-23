@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { moStatusLabels } from "@/lib/po/status-labels";
 import type { MoManufacturerPivot } from "@/lib/types/api";
@@ -39,7 +40,7 @@ export type StatusChangeTarget = {
 type FieldSpec = {
   key: string;
   label: string;
-  type: "datetime" | "number" | "text" | "file";
+  type: "datetime" | "number" | "text" | "textarea" | "file";
 };
 
 const statusOrder = [
@@ -57,22 +58,27 @@ const statusFieldMap: Record<string, FieldSpec[]> = {
     { key: "depositPaidAmount", label: "Paid amount", type: "number" },
     { key: "depositRefNumber", label: "Ref number", type: "text" },
     { key: "depositDocumentKey", label: "Document", type: "file" },
+    { key: "depositNote", label: "Note", type: "textarea" },
   ],
   manufacturing: [
     { key: "manufacturingStartedAt", label: "Started at", type: "datetime" },
     { key: "estimatedCompletionAt", label: "Estimated Completion Time", type: "datetime" },
+    { key: "manufacturingNote", label: "Note", type: "textarea" },
   ],
   balance_paid: [
     { key: "balancePaidAt", label: "Paid at", type: "datetime" },
     { key: "balancePaidAmount", label: "Paid amount", type: "number" },
     { key: "balanceRefNumber", label: "Ref number", type: "text" },
     { key: "balanceDocumentKey", label: "Document", type: "file" },
+    { key: "balanceNote", label: "Note", type: "textarea" },
   ],
   ready_to_pickup: [
     { key: "readyAt", label: "Ready at", type: "datetime" },
+    { key: "readyNote", label: "Note", type: "textarea" },
   ],
   picked_up: [
     { key: "pickedUpAt", label: "Picked up at", type: "datetime" },
+    { key: "pickedUpNote", label: "Note", type: "textarea" },
   ],
 };
 
@@ -217,7 +223,7 @@ function EditPivotDetailsForm({
       } else if (f.type === "number") {
         const existing = row[f.key as keyof MoManufacturerPivot];
         init[f.key] = existing != null ? String(existing) : "";
-      } else if (f.type === "text") {
+      } else if (f.type === "text" || f.type === "textarea") {
         const existing = row[f.key as keyof MoManufacturerPivot];
         init[f.key] = typeof existing === "string" ? existing : "";
       }
@@ -240,7 +246,7 @@ function EditPivotDetailsForm({
         } else if (f.type === "number") {
           const v = values[f.key];
           body[f.key] = v ? Number(v) : null;
-        } else if (f.type === "text") {
+        } else if (f.type === "text" || f.type === "textarea") {
           body[f.key] = values[f.key] || null;
         } else if (f.type === "file") {
           const file = files[f.key];
@@ -313,24 +319,38 @@ function EditPivotDetailsForm({
                       <Field key={f.key} className="gap-1">
                         <FieldLabel className="text-xs">{f.label}</FieldLabel>
                         <FieldContent>
-                          <Input
-                            type={
-                              f.type === "datetime"
-                                ? "datetime-local"
-                                : f.type === "number"
-                                  ? "number"
-                                  : "text"
-                            }
-                            step={f.type === "number" ? "0.01" : undefined}
-                            value={values[f.key] ?? ""}
-                            disabled={submitting}
-                            onChange={(e) =>
-                              setValues((prev) => ({
-                                ...prev,
-                                [f.key]: e.target.value,
-                              }))
-                            }
-                          />
+                          {f.type === "textarea" ? (
+                            <Textarea
+                              rows={3}
+                              value={values[f.key] ?? ""}
+                              disabled={submitting}
+                              onChange={(e) =>
+                                setValues((prev) => ({
+                                  ...prev,
+                                  [f.key]: e.target.value,
+                                }))
+                              }
+                            />
+                          ) : (
+                            <Input
+                              type={
+                                f.type === "datetime"
+                                  ? "datetime-local"
+                                  : f.type === "number"
+                                    ? "number"
+                                    : "text"
+                              }
+                              step={f.type === "number" ? "0.01" : undefined}
+                              value={values[f.key] ?? ""}
+                              disabled={submitting}
+                              onChange={(e) =>
+                                setValues((prev) => ({
+                                  ...prev,
+                                  [f.key]: e.target.value,
+                                }))
+                              }
+                            />
+                          )}
                         </FieldContent>
                       </Field>
                     );
@@ -384,7 +404,7 @@ function StatusChangeForm({
       } else if (f.type === "number") {
         const existing = target.row[f.key as keyof MoManufacturerPivot];
         init[f.key] = existing != null ? String(existing) : "";
-      } else if (f.type === "text") {
+      } else if (f.type === "text" || f.type === "textarea") {
         const existing = target.row[f.key as keyof MoManufacturerPivot];
         init[f.key] = typeof existing === "string" ? existing : "";
       }
@@ -409,7 +429,7 @@ function StatusChangeForm({
         } else if (f.type === "number") {
           const v = values[f.key];
           body[f.key] = v ? Number(v) : null;
-        } else if (f.type === "text") {
+        } else if (f.type === "text" || f.type === "textarea") {
           body[f.key] = values[f.key] || null;
         } else if (f.type === "file") {
           const file = files[f.key];
@@ -501,24 +521,38 @@ function StatusChangeForm({
               <Field key={f.key} className="gap-1.5">
                 <FieldLabel>{f.label}</FieldLabel>
                 <FieldContent>
-                  <Input
-                    type={
-                      f.type === "datetime"
-                        ? "datetime-local"
-                        : f.type === "number"
-                          ? "number"
-                          : "text"
-                    }
-                    step={f.type === "number" ? "0.01" : undefined}
-                    value={values[f.key] ?? ""}
-                    disabled={submitting}
-                    onChange={(e) =>
-                      setValues((prev) => ({
-                        ...prev,
-                        [f.key]: e.target.value,
-                      }))
-                    }
-                  />
+                  {f.type === "textarea" ? (
+                    <Textarea
+                      rows={3}
+                      value={values[f.key] ?? ""}
+                      disabled={submitting}
+                      onChange={(e) =>
+                        setValues((prev) => ({
+                          ...prev,
+                          [f.key]: e.target.value,
+                        }))
+                      }
+                    />
+                  ) : (
+                    <Input
+                      type={
+                        f.type === "datetime"
+                          ? "datetime-local"
+                          : f.type === "number"
+                            ? "number"
+                            : "text"
+                      }
+                      step={f.type === "number" ? "0.01" : undefined}
+                      value={values[f.key] ?? ""}
+                      disabled={submitting}
+                      onChange={(e) =>
+                        setValues((prev) => ({
+                          ...prev,
+                          [f.key]: e.target.value,
+                        }))
+                      }
+                    />
+                  )}
                 </FieldContent>
               </Field>
             );

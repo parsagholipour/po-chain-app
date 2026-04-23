@@ -95,16 +95,11 @@ export async function PATCH(
     parsed.data.manufacturingOrderId !== undefined
       ? parsed.data.manufacturingOrderId
       : existing.manufacturingOrderId;
-  const mergedManufacturerId =
-    parsed.data.manufacturerId !== undefined
-      ? parsed.data.manufacturerId
-      : existing.manufacturerId;
 
   const moCheck = await validateOsdMoContext(prisma, {
     storeId,
     purchaseOrderId: parsedParams.data.id,
     manufacturingOrderId: mergedManufacturingOrderId,
-    manufacturerId: mergedManufacturerId,
     purchaseOrderLineIds: mergedLines.map((l) => l.purchaseOrderLineId),
   });
   if (!moCheck.ok) {
@@ -119,7 +114,6 @@ export async function PATCH(
           type: mergedType,
           resolution: mergedResolution,
           manufacturingOrderId: mergedManufacturingOrderId,
-          manufacturerId: mergedManufacturerId,
           ...(parsed.data.documentKey !== undefined
             ? { documentKey: parsed.data.documentKey }
             : {}),

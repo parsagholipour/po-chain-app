@@ -2,6 +2,7 @@
 
 import { Bar } from "react-chartjs-2";
 import type { ChartData, ChartOptions } from "chart.js";
+import { formatUsd } from "@/lib/format-usd";
 import { cn } from "@/lib/utils";
 import { CHART_PALETTE, registerChartJs, withAlpha } from "./chart-setup";
 
@@ -64,7 +65,7 @@ export function BarChart({
           label: (ctx) => {
             const value = Number((horizontal ? ctx.parsed.x : ctx.parsed.y) ?? 0);
             const formatted = currency
-              ? value.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })
+              ? formatUsd(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
               : value.toLocaleString();
             return `${ctx.dataset.label ?? ""}${ctx.dataset.label ? ": " : ""}${formatted}`;
           },
@@ -75,19 +76,31 @@ export function BarChart({
       x: {
         stacked,
         grid: { display: horizontal },
-        ticks: { autoSkipPadding: 14 },
+        ticks: {
+          autoSkipPadding: 14,
+          ...(horizontal && currency
+            ? {
+                callback: (tick: string | number) =>
+                  formatUsd(Number(tick), { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
+              }
+            : {}),
+        },
       },
       y: {
         stacked,
         beginAtZero: true,
         grid: { display: !horizontal },
         ticks: {
-          callback: (value) => {
-            if (horizontal) return value as string;
-            return currency
-              ? `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-              : Number(value).toLocaleString();
-          },
+          ...(!horizontal && currency
+            ? {
+                callback: (tick: string | number) =>
+                  formatUsd(Number(tick), { minimumFractionDigits: 0, maximumFractionDigits: 0 }),
+              }
+            : !horizontal
+              ? {
+                  callback: (tick: string | number) => Number(tick).toLocaleString(),
+                }
+              : {}),
         },
       },
     },

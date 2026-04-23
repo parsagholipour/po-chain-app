@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
@@ -22,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { distributorPoStatusLabels } from "@/lib/po/status-labels";
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
+import { invalidateNavCounts } from "@/lib/query-invalidation";
 import { cn } from "@/lib/utils";
 
 const STEPS = ["Basics", "POs & stock orders", "Manufacturers", "Review"] as const;
@@ -37,6 +38,7 @@ type WizardOrderRow = {
 };
 
 export function NewManufacturingOrderWizard() {
+  const qc = useQueryClient();
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
@@ -167,6 +169,7 @@ export function NewManufacturingOrderWizard() {
       return data;
     },
     onSuccess: (row) => {
+      void invalidateNavCounts(qc);
       toast.success("Manufacturing order created");
       router.push(`/manufacturing-orders/${row.id}`);
     },

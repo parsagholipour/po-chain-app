@@ -2,7 +2,12 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function TableContainer({ className, ...props }: React.ComponentProps<"div">) {
+function TableContainer({
+  className,
+  footer,
+  children,
+  ...props
+}: React.ComponentProps<"div"> & { footer?: React.ReactNode }) {
   return (
     <div
       data-slot="table-container"
@@ -11,7 +16,14 @@ function TableContainer({ className, ...props }: React.ComponentProps<"div">) {
         className
       )}
       {...props}
-    />
+    >
+      {children}
+      {footer ? (
+        <div className="border-t border-border/80 bg-muted/20 px-3 py-2">
+          {footer}
+        </div>
+      ) : null}
+    </div>
   )
 }
 

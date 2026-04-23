@@ -33,19 +33,21 @@ export function SaleChannelsTable({ rows, isPending, onEdit, onDelete }: Props) 
             <TableHead className="w-14">Logo</TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Type</TableHead>
+            <TableHead className="max-w-[140px]">Contact number</TableHead>
+            <TableHead className="max-w-[160px]">Email</TableHead>
             <TableHead className="w-[120px] text-end">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {isPending ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                 No sale channels yet.
               </TableCell>
             </TableRow>
@@ -62,6 +64,12 @@ export function SaleChannelsTable({ rows, isPending, onEdit, onDelete }: Props) 
                 <TableCell className="font-medium">{row.name}</TableCell>
                 <TableCell>
                   <Badge variant="secondary">{saleChannelTypeLabels[row.type]}</Badge>
+                </TableCell>
+                <TableCell className="max-w-[140px] truncate text-muted-foreground">
+                  {row.contactNumber?.trim() || "—"}
+                </TableCell>
+                <TableCell className="max-w-[160px] truncate text-muted-foreground">
+                  {row.email?.trim() || "—"}
                 </TableCell>
                 <TableCell className="text-end">
                   <div className="flex justify-end gap-1">

@@ -42,10 +42,14 @@ export async function syncUserWithDefaultStore({
   keycloakSub,
   email,
   name,
+  realEmail,
+  realName,
 }: {
   keycloakSub: string;
   email: string;
   name: string | null;
+  realEmail?: string | null;
+  realName?: string | null;
 }) {
   return prisma.$transaction(async (tx) => {
     const store = await tx.store.upsert({
@@ -61,8 +65,19 @@ export async function syncUserWithDefaultStore({
 
     const user = await tx.user.upsert({
       where: { keycloakSub },
-      create: { keycloakSub, email, name },
-      update: { email, name },
+      create: {
+        keycloakSub,
+        email,
+        name,
+        realEmail: realEmail ?? null,
+        realName: realName ?? null,
+      },
+      update: {
+        email,
+        name,
+        ...(realEmail !== undefined ? { realEmail } : {}),
+        ...(realName !== undefined ? { realName } : {}),
+      },
     });
 
     await tx.userStore.upsert({

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
@@ -22,11 +22,13 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { invalidateNavCounts } from "@/lib/query-invalidation";
 import { cn } from "@/lib/utils";
 
 const WIZARD_STEPS = ["Basics", "Sale channel", "Lines", "Review"] as const;
 
 export function NewStockOrderWizard() {
+  const qc = useQueryClient();
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
@@ -82,6 +84,7 @@ export function NewStockOrderWizard() {
       return data;
     },
     onSuccess: (row) => {
+      void invalidateNavCounts(qc);
       toast.success("Stock order created");
       router.push(`/stock-orders/${row.id}`);
     },

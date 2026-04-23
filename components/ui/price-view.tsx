@@ -1,3 +1,4 @@
+import { formatUsd } from "@/lib/format-usd";
 import { cn } from "@/lib/utils";
 
 function parseAmount(value: string | number | null | undefined): number | null {
@@ -14,16 +15,12 @@ export type PriceViewProps = {
 };
 
 /**
- * Read-only money display (two decimal places, locale-aware).
+ * Read-only USD display (two decimal places, locale-aware).
  */
 export function PriceView({ value, className, emptyClassName }: PriceViewProps) {
   const n = parseAmount(value);
   if (n == null) {
     return <span className={cn("text-muted-foreground", emptyClassName, className)}>—</span>;
   }
-  return (
-    <span className={cn("tabular-nums", className)}>
-      {n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-    </span>
-  );
+  return <span className={cn("tabular-nums", className)}>{formatUsd(n, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>;
 }

@@ -6,11 +6,13 @@ import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import type { CustomFieldDefinition } from "@/lib/types/api";
 import { Button } from "@/components/ui/button";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { FieldDefinitionUpsertDialog } from "./field-definition-upsert-dialog";
 import { useConfirm } from "@/components/confirm-provider";
+import { usePagination } from "@/hooks/use-pagination";
 
 const ENTITY_TYPES = [
   { value: "product", label: "Products" },
@@ -58,6 +60,8 @@ function DefinitionsTable({
       return data;
     },
   });
+  const pagination = usePagination({ totalItems: definitions.length, resetDeps: [entityType] });
+  const pagedDefinitions = pagination.sliceItems(definitions);
 
   const createMut = useMutation({
     mutationFn: async (values: Record<string, unknown>) => {
@@ -159,7 +163,7 @@ function DefinitionsTable({
               </tr>
             </thead>
             <tbody>
-              {definitions.map((def) => (
+              {pagedDefinitions.map((def) => (
                 <tr key={def.id} className="border-b last:border-0">
                   <td className="px-4 py-2.5 font-medium">{def.name}</td>
                   <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
@@ -201,6 +205,13 @@ function DefinitionsTable({
               ))}
             </tbody>
           </table>
+          <div className="border-t px-3 py-2">
+            <TablePagination
+              {...pagination}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
+          </div>
         </div>
       )}
 

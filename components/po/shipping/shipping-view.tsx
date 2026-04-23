@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import {
@@ -9,6 +10,8 @@ import {
   type ShippingType,
 } from "@/lib/shipping";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { TableContainer } from "@/components/ui/table-container";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { ShippingTable } from "./shipping-table";
 import { ShippingUpsertDialog } from "./shipping-upsert-dialog";
 import { Button } from "@/components/ui/button";
@@ -18,12 +21,18 @@ import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import type { ShippingRow } from "@/lib/types/api";
 import { invalidateShippingRelatedQueries } from "./query-utils";
+import { parseUuidParam, useClearIdSearchParam } from "@/lib/url-id-param";
+import { usePagination } from "@/hooks/use-pagination";
 
 const shippingCountStatuses = new Set(["pending", "in_transit"]);
 
 export function ShippingView() {
   const qc = useQueryClient();
   const confirm = useConfirm();
+  const searchParams = useSearchParams();
+  const clearIdParam = useClearIdSearchParam();
+  const idFromUrl = parseUuidParam(searchParams.get("id"));
+
   const [activeTab, setActiveTab] = useState<ShippingType>("manufacturing_order");
   const [upsertOpen, setUpsertOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,6 +63,36 @@ export function ShippingView() {
       );
     },
   });
+  const rows = shippings || [];
+  const pagination = usePagination({ totalItems: rows.length, resetDeps: [activeTab] });
+  const pagedRows = pagination.sliceItems(rows);
+
+  useEffect(() => {
+    if (!idFromUrl) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await api.get<ShippingRow>(`/api/shipping/${idFromUrl}`);
+        if (cancelled) return;
+        queueMicrotask(() => {
+          if (cancelled) return;
+          setActiveTab(data.type);
+          setEditingId(data.id);
+          setUpsertOpen(true);
+        });
+      } catch {
+        if (!cancelled) {
+          queueMicrotask(() => {
+            toast.error("Shipping not found");
+            clearIdParam();
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [idFromUrl, clearIdParam]);
 
   const deleteMut = useMutation({
     mutationFn: async (id: string) => {
@@ -71,14 +110,10 @@ export function ShippingView() {
     setUpsertOpen(true);
   };
 
-  const handleUpsertClose = () => {
-    setUpsertOpen(false);
-    setEditingId(null);
-  };
-
   const handleUpsertSuccess = () => {
     setUpsertOpen(false);
     setEditingId(null);
+    clearIdParam();
   };
 
   const handleDelete = (id: string) => {
@@ -101,13 +136,27 @@ export function ShippingView() {
             Manage shipping records for manufacturing orders, purchase orders, and stock orders
           </p>
         </div>
-        <Button onClick={() => setUpsertOpen(true)}>
+        <Button
+          onClick={() => {
+            setEditingId(null);
+            setUpsertOpen(true);
+          }}
+        >
           <Plus className="mr-2 h-4 w-4" />
           Add Shipping
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+      <TableContainer
+        className="shadow-sm"
+        footer={
+          <TablePagination
+            {...pagination}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+          />
+        }
+      >
         <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0">
           <TabsList
             variant="line"
@@ -136,7 +185,7 @@ export function ShippingView() {
           <TabsContent value={activeTab} className="mt-0 outline-none">
             <div className="p-5 pt-4">
               <ShippingTable
-                shippings={shippings || []}
+                shippings={pagedRows}
                 isPending={isPending}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
@@ -144,11 +193,17 @@ export function ShippingView() {
             </div>
           </TabsContent>
         </Tabs>
-      </div>
+      </TableContainer>
 
       <ShippingUpsertDialog
         open={upsertOpen}
-        onOpenChange={handleUpsertClose}
+        onOpenChange={(open) => {
+          setUpsertOpen(open);
+          if (!open) {
+            clearIdParam();
+            setEditingId(null);
+          }
+        }}
         editingId={editingId}
         defaultType={activeTab}
         onSuccess={handleUpsertSuccess}

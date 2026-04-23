@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppChrome } from "@/components/app-chrome";
+import { APP_NAME } from "@/lib/app-name";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 
@@ -15,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PO App",
+  title: APP_NAME,
   description: "Next.js, Prisma, shadcn/ui, TanStack Query & Table",
 };
 

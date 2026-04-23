@@ -47,6 +47,11 @@ export const saleChannelCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   logoKey: nullableOptionalString,
   type: saleChannelTypeSchema,
+  contactNumber: nullableOptionalString,
+  address: nullableOptionalString,
+  email: nullableOptionalEmail,
+  link: nullableOptionalUrl,
+  notes: nullableOptionalString,
 });
 
 export const saleChannelUpdateSchema = saleChannelCreateSchema.partial();

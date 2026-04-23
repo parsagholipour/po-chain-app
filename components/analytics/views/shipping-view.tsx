@@ -42,9 +42,9 @@ export function ShippingView() {
       />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiCard label="Total shipping spend" value={totalSpend} deltaPct={null} />
-        <KpiCard label="Total shipments" value={totalShipments} deltaPct={null} />
-        <KpiCard label="DDP share %" value={data?.ddpSharePct ?? 0} deltaPct={null} />
+        <KpiCard label="Total shipping spend" value={totalSpend} deltaPct={null} valueFormat="currency" />
+        <KpiCard label="Total shipments" value={totalShipments} deltaPct={null} valueFormat="integer" />
+        <KpiCard label="DDP share %" value={data?.ddpSharePct ?? 0} deltaPct={null} valueFormat="percent" />
         <KpiCard label="Avg lead time (days)" value={data?.avgLeadTimeDays ?? 0} deltaPct={null} />
       </div>
 

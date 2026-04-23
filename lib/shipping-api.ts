@@ -1,6 +1,7 @@
 import type { Prisma } from "@/app/generated/prisma/client";
 import { shippingOrderTypeFromPurchaseOrderType } from "@/lib/shipping";
 import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-include";
+import { orderStatusLogFromPrisma } from "@/lib/order-status-log";
 import {
   purchaseOrderDetailInclude,
   purchaseOrderLineApiInclude,
@@ -40,6 +41,25 @@ type ShippingLike = {
   notes: string | null;
   invoiceDocumentKey: string | null;
   logisticsPartnerId: string | null;
+  statusLogs?: Array<{
+    id: string;
+    fromStatus: string;
+    toStatus: string;
+    note: string | null;
+    purchaseOrderId: string | null;
+    manufacturingOrderId: string | null;
+    shippingId: string | null;
+    storeId: string;
+    createdAt: Date;
+    createdById: string;
+    createdBy: {
+      id: string;
+      name: string | null;
+      email: string;
+      realEmail: string | null;
+      realName: string | null;
+    };
+  }>;
   logisticsPartner?: {
     id: string;
     name: string;
@@ -105,6 +125,7 @@ export function shippingRowFromPrisma(row: ShippingLike) {
     notes: row.notes ?? null,
     invoiceDocumentKey: row.invoiceDocumentKey ?? null,
     logisticsPartnerId: row.logisticsPartnerId ?? null,
+    statusLogs: (row.statusLogs ?? []).map(orderStatusLogFromPrisma),
     logisticsPartner: row.logisticsPartner
       ? {
           id: row.logisticsPartner.id,
@@ -141,9 +162,7 @@ function mapPurchaseOrderOsd(osd: PurchaseOrderOsdDetailPayload) {
     type: osd.type,
     resolution: osd.resolution,
     manufacturingOrderId: osd.manufacturingOrderId,
-    manufacturerId: osd.manufacturerId,
     manufacturingOrder: osd.manufacturingOrder,
-    manufacturer: osd.manufacturer,
     documentKey: osd.documentKey,
     notes: osd.notes,
     storeId: osd.storeId,
@@ -167,12 +186,20 @@ export function purchaseOrderOsdFromPrisma(osd: PurchaseOrderOsdDetailPayload) {
 }
 
 export function purchaseOrderDetailFromPrisma(row: PurchaseOrderDetailWithRelations) {
-  const { purchaseOrderShippings, lines, osds, ...rest } = row;
+  const { purchaseOrderShippings, lines, osds, invoice, statusLogs, ...rest } = row;
 
   return {
     ...rest,
+    invoice: invoice
+      ? {
+          id: invoice.id,
+          invoiceNumber: invoice.invoiceNumber,
+          documentKey: invoice.documentKey ?? null,
+        }
+      : null,
     lines: lines.map((line) => purchaseOrderLineFromPrisma(line)),
     osds: osds.map(mapPurchaseOrderOsd),
+    statusLogs: statusLogs.map(orderStatusLogFromPrisma),
     shippings: purchaseOrderShippings.map((item) => shippingRowFromPrisma(item.shipping)),
   };
 }
@@ -180,10 +207,11 @@ export function purchaseOrderDetailFromPrisma(row: PurchaseOrderDetailWithRelati
 export function manufacturingOrderDetailFromPrisma(
   row: ManufacturingOrderDetailWithRelations,
 ) {
-  const { manufacturingOrderShippings, ...rest } = row;
+  const { manufacturingOrderShippings, statusLogs, ...rest } = row;
 
   return {
     ...rest,
+    statusLogs: statusLogs.map(orderStatusLogFromPrisma),
     shippings: manufacturingOrderShippings.map((item) => shippingRowFromPrisma(item.shipping)),
   };
 }

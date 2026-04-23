@@ -34,11 +34,17 @@ function PivotStepDetails({ row, onEdit }: { row: MoManufacturerPivot; onEdit?: 
   if (row.depositDocumentKey) {
     entries.push({ label: "Deposit document", value: <PoDocumentLink documentKey={row.depositDocumentKey} /> });
   }
+  if (row.depositNote) {
+    entries.push({ label: "Deposit note", value: row.depositNote });
+  }
   if (row.manufacturingStartedAt) {
     entries.push({ label: "Manufacturing started", value: formatInvoiceDate(row.manufacturingStartedAt) });
   }
   if (row.estimatedCompletionAt) {
     entries.push({ label: "Estimated completion", value: formatInvoiceDate(row.estimatedCompletionAt) });
+  }
+  if (row.manufacturingNote) {
+    entries.push({ label: "Manufacturing note", value: row.manufacturingNote });
   }
   if (row.balancePaidAt) {
     entries.push({ label: "Balance paid at", value: formatInvoiceDate(row.balancePaidAt) });
@@ -52,11 +58,20 @@ function PivotStepDetails({ row, onEdit }: { row: MoManufacturerPivot; onEdit?: 
   if (row.balanceDocumentKey) {
     entries.push({ label: "Balance document", value: <PoDocumentLink documentKey={row.balanceDocumentKey} /> });
   }
+  if (row.balanceNote) {
+    entries.push({ label: "Balance note", value: row.balanceNote });
+  }
   if (row.readyAt) {
     entries.push({ label: "Ready at", value: formatInvoiceDate(row.readyAt) });
   }
+  if (row.readyNote) {
+    entries.push({ label: "Ready note", value: row.readyNote });
+  }
   if (row.pickedUpAt) {
     entries.push({ label: "Picked up at", value: formatInvoiceDate(row.pickedUpAt) });
+  }
+  if (row.pickedUpNote) {
+    entries.push({ label: "Picked up note", value: row.pickedUpNote });
   }
 
   if (entries.length === 0) return null;
@@ -167,7 +182,7 @@ export function PoManufacturersSection({
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="space-y-1">
-                <Label className="text-xs">Pivot status</Label>
+                <Label className="text-xs">Status</Label>
                 <Select
                   value={row.status}
                   items={pivotStatusItemsForValue(row.status)}

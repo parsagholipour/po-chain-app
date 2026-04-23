@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { ShippingView } from "@/components/po/shipping/shipping-view";
 import type { Metadata } from "next";
 
@@ -6,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function ShippingPage() {
-  return <ShippingView />;
+  return (
+    <Suspense fallback={null}>
+      <ShippingView />
+    </Suspense>
+  );
 }

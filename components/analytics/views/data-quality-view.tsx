@@ -5,8 +5,8 @@ import { AnalyticsHeader } from "@/components/analytics/analytics-header";
 import { ChartCard } from "@/components/analytics/chart-card";
 import { BarChart } from "@/components/analytics/charts/bar-chart";
 import { CHART_COLORS } from "@/components/analytics/charts/chart-setup";
+import { IssueTable } from "@/components/analytics/issue-table";
 import { api } from "@/lib/axios";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { QualityIssueRow } from "@/lib/types/analytics";
 
 type Payload = {
@@ -17,37 +17,6 @@ type Payload = {
   staleTransitDistributorOrders: QualityIssueRow[];
   unverifiedProducts: QualityIssueRow[];
 };
-
-function IssueTable({ rows }: { rows: QualityIssueRow[] }) {
-  return (
-    <div className="overflow-hidden rounded-lg border border-border/60">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Item</TableHead>
-            <TableHead>Details</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={2} className="h-16 text-center text-muted-foreground">
-                No issues found.
-              </TableCell>
-            </TableRow>
-          ) : (
-            rows.map((row) => (
-              <TableRow key={row.id}>
-                <TableCell>{row.label}</TableCell>
-                <TableCell className="text-muted-foreground">{row.note}</TableCell>
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
 
 export function DataQualityView() {
   const dataQuery = useQuery({

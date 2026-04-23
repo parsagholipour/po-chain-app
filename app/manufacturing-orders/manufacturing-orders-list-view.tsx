@@ -7,6 +7,8 @@ import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TableContainer } from "@/components/ui/table-container";
+import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Select,
   SelectContent,
@@ -35,6 +37,7 @@ import {
 } from "@/components/po/mo-list-expandable-row";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
+import { usePagination } from "@/hooks/use-pagination";
 
 export type { ManufacturingOrderSummary } from "@/lib/types/api";
 
@@ -60,7 +63,7 @@ function EntityTabRow({
   selectedId: string;
   onSelect: (id: string) => void;
   emptyMessage: string;
-  label: string;
+  label?: string;
   /** Omit to hide open-count on "All". `null` = loading; number = total non-closed (e.g. sum by channel). */
   allOpenCount?: number | null;
   /** e.g. "all sale channels" for aria/title. */
@@ -80,7 +83,7 @@ function EntityTabRow({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      {label ? <p className="text-xs font-medium text-muted-foreground">{label}</p> : null}
       <div
         className="-mx-1 flex max-w-full gap-0 overflow-x-auto border-b border-border px-1 pb-px"
         role="tablist"
@@ -351,6 +354,11 @@ export function ManufacturingOrdersListView() {
       return rows;
     },
   });
+  const pagination = usePagination({
+    totalItems: data.length,
+    resetDeps: [debouncedQ, status, selectedManufacturerId],
+  });
+  const pagedRows = pagination.sliceItems(data);
 
   const updateProduct = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
@@ -412,14 +420,22 @@ export function ManufacturingOrdersListView() {
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+      <TableContainer
+        className="shadow-sm"
+        footer={
+          <TablePagination
+            {...pagination}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+          />
+        }
+      >
         <div className="space-y-5 p-5 pt-4">
           <EntityTabRow
             items={manufacturerItems}
             selectedId={selectedManufacturerId}
             onSelect={setSelectedManufacturerId}
             emptyMessage="No manufacturers yet. Add one under Manufacturers."
-            label="Manufacturer"
             allCountLabel="all manufacturers"
             entitiesLoading={manufacturersPending}
           />
@@ -430,7 +446,7 @@ export function ManufacturingOrdersListView() {
             onStatusChange={setStatus}
             filterReady={filterReady}
             isPending={isPending}
-            data={data}
+            data={pagedRows}
             emptyNoScopeMessage="Loading…"
             emptyFilteredMessage={
               selectedManufacturerId === PO_LIST_ALL_SCOPE_ID
@@ -440,7 +456,7 @@ export function ManufacturingOrdersListView() {
             onEditProduct={onEditProduct}
           />
         </div>
-      </div>
+      </TableContainer>
 
       <ProductUpsertDialog
         open={productEditOpen}

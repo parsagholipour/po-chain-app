@@ -1,4 +1,4 @@
-/** API response shapes used across the PO app */
+/** API response shapes for JSON HTTP responses in this app. */
 
 export type CustomFieldCondition = {
   id: string;
@@ -73,7 +73,13 @@ export type SaleChannel = {
   name: string;
   logoKey: string | null;
   type: "distributor" | "amazon" | "cjdropshipping";
+  contactNumber: string | null;
+  link: string | null;
+  email: string | null;
+  address: string | null;
+  notes: string | null;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type LogisticsPartner = {
@@ -193,9 +199,7 @@ export type PoOsd = {
   type: PoOsdType;
   resolution: PoOsdResolution;
   manufacturingOrderId: string | null;
-  manufacturerId: string | null;
   manufacturingOrder: { id: string; number: number; name: string } | null;
-  manufacturer: { id: string; name: string; region: string } | null;
   documentKey: string | null;
   notes: string | null;
   storeId: string;
@@ -225,20 +229,50 @@ export type ShippingRow = {
   notes: string | null;
   invoiceDocumentKey: string | null;
   logisticsPartnerId: string | null;
+  statusLogs: OrderStatusLog[];
   logisticsPartner: LogisticsPartner | null;
   orders: ShippingOrderRef[];
 };
 
 export type PoShippingRow = ShippingRow;
 
+export type OrderStatusLogActor = {
+  id: string;
+  name: string | null;
+  email: string;
+  realEmail: string | null;
+  realName: string | null;
+};
+
+export type OrderStatusLog = {
+  id: string;
+  fromStatus: string;
+  toStatus: string;
+  note: string | null;
+  purchaseOrderId: string | null;
+  manufacturingOrderId: string | null;
+  shippingId: string | null;
+  storeId: string;
+  createdAt: string;
+  createdById: string;
+  createdBy: OrderStatusLogActor;
+};
+
 type PurchaseOrderDetailBase = {
   id: string;
   number: number;
   name: string;
   status: string;
+  invoiceId: string | null;
+  invoice: null | {
+    id: string;
+    invoiceNumber: string;
+    documentKey: string | null;
+  };
   documentKey: string | null;
   lines: PoLineRow[];
   osds: PoOsd[];
+  statusLogs: OrderStatusLog[];
   manufacturingOrderPurchaseOrders: {
     manufacturingOrder: LinkedManufacturingOrderRef;
   }[];
@@ -274,17 +308,22 @@ export type MoManufacturerPivot = {
   depositPaidAmount: string | number | null;
   depositRefNumber: string | null;
   depositDocumentKey: string | null;
+  depositNote: string | null;
 
   manufacturingStartedAt: string | null;
   estimatedCompletionAt: string | null;
+  manufacturingNote: string | null;
 
   balancePaidAt: string | null;
   balancePaidAmount: string | number | null;
   balanceRefNumber: string | null;
   balanceDocumentKey: string | null;
+  balanceNote: string | null;
 
   readyAt: string | null;
+  readyNote: string | null;
   pickedUpAt: string | null;
+  pickedUpNote: string | null;
 };
 
 export type ManufacturingOrderSummaryManufacturer = {
@@ -347,6 +386,7 @@ export type ManufacturingOrderDetail = {
   documentKey: string | null;
   createdAt: string;
   updatedAt: string;
+  statusLogs: OrderStatusLog[];
   manufacturers: MoManufacturerPivot[];
   purchaseOrders: {
     purchaseOrderId: string;
@@ -361,4 +401,14 @@ export type ManufacturingOrderDetail = {
   }[];
   lineAllocations: MoLineAllocationRow[];
   shippings: ShippingRow[];
+};
+
+/** Last-updated non-closed PO / SO / MO for global search “Recommended”. */
+export type RecommendedOpenItem = {
+  kind: "po" | "mo" | "so";
+  id: string;
+  name: string;
+  number: number;
+  status: string;
+  updatedAt: string;
 };

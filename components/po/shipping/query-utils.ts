@@ -1,6 +1,7 @@
 "use client";
 
 import type { QueryClient } from "@tanstack/react-query";
+import { invalidateNavCounts } from "@/lib/query-invalidation";
 
 export async function invalidateShippingRelatedQueries(queryClient: QueryClient) {
   await Promise.all([
@@ -11,6 +12,7 @@ export async function invalidateShippingRelatedQueries(queryClient: QueryClient)
     queryClient.invalidateQueries({ queryKey: ["purchase-order"] }),
     queryClient.invalidateQueries({ queryKey: ["stock-orders"] }),
     queryClient.invalidateQueries({ queryKey: ["stock-order"] }),
+    invalidateNavCounts(queryClient),
   ]);
 }
 

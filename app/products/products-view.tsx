@@ -1,7 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import type { Manufacturer, Product } from "@/lib/types/api";
@@ -10,8 +11,11 @@ import { ProductsTable } from "@/components/po/products/products-table";
 import type { ProductFormValues } from "@/components/po/products/product-form";
 import { Button } from "@/components/ui/button";
 import { TableContainer } from "@/components/ui/table-container";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import { parseUuidParam, useClearIdSearchParam } from "@/lib/url-id-param";
+import { usePagination } from "@/hooks/use-pagination";
 
 export type { Product } from "@/lib/types/api";
 
@@ -20,6 +24,10 @@ const manufacturersKey = ["manufacturers"] as const;
 
 export function ProductsView() {
   const qc = useQueryClient();
+  const searchParams = useSearchParams();
+  const clearIdParam = useClearIdSearchParam();
+  const idFromUrl = parseUuidParam(searchParams.get("id"));
+
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
 
@@ -38,6 +46,22 @@ export function ProductsView() {
       return rows;
     },
   });
+  const pagination = usePagination({ totalItems: data.length });
+  const pagedRows = pagination.sliceItems(data);
+
+  useEffect(() => {
+    if (!idFromUrl || isPending) return;
+    const row = data.find((r) => r.id === idFromUrl);
+    queueMicrotask(() => {
+      if (row) {
+        setEditing(row);
+        setOpen(true);
+      } else {
+        toast.error("Product not found");
+        clearIdParam();
+      }
+    });
+  }, [idFromUrl, isPending, data, clearIdParam]);
 
   const createMut = useMutation({
     mutationFn: async (values: ProductFormValues) => {
@@ -144,9 +168,17 @@ export function ProductsView() {
         </p>
       ) : null}
 
-      <TableContainer>
+      <TableContainer
+        footer={
+          <TablePagination
+            {...pagination}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+          />
+        }
+      >
         <ProductsTable
-          rows={data}
+          rows={pagedRows}
           isPending={isPending}
           onEdit={(row) => {
             setEditing(row);
@@ -158,7 +190,13 @@ export function ProductsView() {
 
       <ProductUpsertDialog
         open={open}
-        onOpenChange={setOpen}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) {
+            clearIdParam();
+            setEditing(null);
+          }
+        }}
         editing={editing}
         manufacturers={manufacturers}
         onSave={handleSave}

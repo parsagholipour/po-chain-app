@@ -80,7 +80,6 @@ export async function POST(
     storeId,
     purchaseOrderId: pid.data.id,
     manufacturingOrderId: parsed.data.manufacturingOrderId ?? null,
-    manufacturerId: parsed.data.manufacturerId ?? null,
     purchaseOrderLineIds: parsed.data.lines.map((l) => l.purchaseOrderLineId),
   });
   if (!moCheck.ok) {
@@ -95,7 +94,6 @@ export async function POST(
           type: parsed.data.type,
           resolution: parsed.data.resolution,
           manufacturingOrderId: parsed.data.manufacturingOrderId ?? null,
-          manufacturerId: parsed.data.manufacturerId ?? null,
           documentKey: parsed.data.documentKey ?? null,
           notes: parsed.data.notes ?? null,
           storeId,

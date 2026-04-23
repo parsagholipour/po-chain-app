@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
-import type { ShippingRow } from "@/lib/types/api";
+import type { OrderStatusLog, ShippingRow } from "@/lib/types/api";
 import {
   Dialog,
   DialogContent,
@@ -135,6 +135,36 @@ export function ShippingUpsertDialog({
     onError: (err) => toast.error(apiErrorMessage(err)),
   });
 
+  const saveStatusLogNoteMut = useMutation({
+    mutationFn: async ({
+      logId,
+      note,
+    }: {
+      logId: string;
+      note: string | null;
+    }) => {
+      const { data } = await api.patch<OrderStatusLog>(`/api/order-status-logs/${logId}`, {
+        note,
+      });
+      return data;
+    },
+    onSuccess: (updatedLog) => {
+      if (!editingId) return;
+      qc.setQueryData<ShippingRow | undefined>(["shipping", editingId], (current) =>
+        current
+          ? {
+              ...current,
+              statusLogs: current.statusLogs.map((log) =>
+                log.id === updatedLog.id ? updatedLog : log,
+              ),
+            }
+          : current,
+      );
+      toast.success("Note saved");
+    },
+    onError: (err) => toast.error(apiErrorMessage(err)),
+  });
+
   const handleSubmit = async (values: ShippingFormValues): Promise<string> => {
     if (editingId) {
       const row = await updateMut.mutateAsync({ id: editingId, values });
@@ -211,12 +241,16 @@ export function ShippingUpsertDialog({
             defaultValues={defaultFormValues}
             editingId={editingId}
             onSubmit={handleSubmit}
+            onSaveStatusLogNote={async (logId, note) => {
+              await saveStatusLogNoteMut.mutateAsync({ logId, note });
+            }}
             isSubmitting={isSubmitting}
             availableManufacturingOrders={manufacturingOrders ?? []}
             availablePurchaseOrders={availablePurchaseOrders}
             availableLogisticsPartners={logisticsPartners}
             requiredManufacturingOrderIds={requiredManufacturingOrderIds}
             requiredPurchaseOrderIds={requiredPurchaseOrderIds}
+            statusLogs={shipping?.statusLogs ?? []}
           />
         )}
       </DialogContent>

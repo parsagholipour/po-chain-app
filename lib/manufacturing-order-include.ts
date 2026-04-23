@@ -1,3 +1,5 @@
+import { orderStatusLogInclude } from "@/lib/order-status-log";
+
 /** Prisma `include` for manufacturing order detail API responses. */
 export const manufacturingOrderDetailInclude = {
   manufacturers: { include: { manufacturer: true, invoice: true } },
@@ -44,5 +46,9 @@ export const manufacturingOrderDetailInclude = {
         },
       },
     },
+  },
+  statusLogs: {
+    orderBy: { createdAt: "desc" as const },
+    include: orderStatusLogInclude,
   },
 } as const;

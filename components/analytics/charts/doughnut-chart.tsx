@@ -2,6 +2,7 @@
 
 import { Doughnut } from "react-chartjs-2";
 import type { ChartData, ChartOptions } from "chart.js";
+import { formatUsd } from "@/lib/format-usd";
 import { cn } from "@/lib/utils";
 import { CHART_PALETTE, registerChartJs, withAlpha } from "./chart-setup";
 
@@ -46,7 +47,7 @@ export function DoughnutChart({
             const total = ctx.dataset.data.reduce((sum: number, v) => sum + Number(v ?? 0), 0);
             const pct = total > 0 ? ((value / total) * 100).toFixed(1) : "0.0";
             const formatted = currency
-              ? value.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })
+              ? formatUsd(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
               : value.toLocaleString();
             return `${ctx.label}: ${formatted} (${pct}%)`;
           },

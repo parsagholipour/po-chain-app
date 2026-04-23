@@ -72,12 +72,6 @@ export function PoOsdSection({ osds, onNew, onEdit, onDelete, busy }: Props) {
                   {osd.manufacturingOrder ? (
                     <p className="text-xs text-muted-foreground">
                       MO #{osd.manufacturingOrder.number} — {osd.manufacturingOrder.name}
-                      {osd.manufacturer ? (
-                        <>
-                          {" "}
-                          · {osd.manufacturer.name}
-                        </>
-                      ) : null}
                     </p>
                   ) : null}
                 </div>

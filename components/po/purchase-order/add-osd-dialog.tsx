@@ -56,58 +56,10 @@ function moIdsIntersection(lineIds: string[], allLines: PoLineRow[]): string[] {
   return intersection ? [...intersection] : [];
 }
 
-function manufacturersForMo(
-  moId: string,
-  lineIds: string[],
-  allLines: PoLineRow[],
-): { id: string; name: string }[] {
-  const map = new Map<string, string>();
-  for (const line of allLines.filter((l) => lineIds.includes(l.id))) {
-    for (const a of line.allocations) {
-      if (a.manufacturingOrderId === moId) {
-        map.set(a.manufacturerId, a.manufacturer.name);
-      }
-    }
-  }
-  return [...map.entries()].map(([id, name]) => ({ id, name }));
-}
-
 function moSelectLabel(moId: string, allLines: PoLineRow[]) {
   const a = allLines.flatMap((l) => l.allocations).find((x) => x.manufacturingOrderId === moId);
   if (!a) return moId;
   return `MO #${a.manufacturingOrder.number} — ${a.manufacturingOrder.name}`;
-}
-
-const OSD_MO_MANUFACTURER_CONFLICT_MSG =
-  "Selected lines use different manufacturers on the same manufacturing order. Create separate OS&D records.";
-
-/**
- * True when some manufacturing order shared by all selected lines has no single manufacturer
- * common to every line (lines must be split across OS&D entries).
- */
-function linesHaveMoManufacturerConflict(lineIds: string[], allLines: PoLineRow[]): boolean {
-  const unique = [...new Set(lineIds)].filter(Boolean);
-  if (unique.length < 2) return false;
-  const commonMos = moIdsIntersection(unique, allLines);
-  for (const moId of commonMos) {
-    let intersection: Set<string> | null = null;
-    for (const lineId of unique) {
-      const line = allLines.find((l) => l.id === lineId);
-      if (!line) return true;
-      const mfs = new Set(
-        line.allocations
-          .filter((a) => a.manufacturingOrderId === moId)
-          .map((a) => a.manufacturerId),
-      );
-      if (mfs.size === 0) return true;
-      intersection =
-        intersection == null
-          ? mfs
-          : new Set([...intersection].filter((x: string) => mfs.has(x)));
-    }
-    if (!intersection || intersection.size === 0) return true;
-  }
-  return false;
 }
 
 type Props = {
@@ -161,9 +113,6 @@ export function AddOsdDialog({
   const [manufacturingOrderId, setManufacturingOrderId] = useState<string | null>(() =>
     mode === "edit" && editing ? editing.manufacturingOrderId : null,
   );
-  const [manufacturerId, setManufacturerId] = useState<string | null>(() =>
-    mode === "edit" && editing ? editing.manufacturerId : null,
-  );
   const [notes, setNotes] = useState(() =>
     mode === "edit" && editing ? (editing.notes ?? "") : "",
   );
@@ -176,32 +125,6 @@ export function AddOsdDialog({
   const selIds = useMemo(() => selectedLineIds(lineRows), [lineRows]);
   const moRequired = useMemo(() => moRequiredForLines(selIds, poLines), [selIds, poLines]);
   const moOptions = useMemo(() => moIdsIntersection(selIds, poLines), [selIds, poLines]);
-  const mfOptions = useMemo(
-    () =>
-      manufacturingOrderId
-        ? manufacturersForMo(manufacturingOrderId, selIds, poLines)
-        : [],
-    [manufacturingOrderId, selIds, poLines],
-  );
-
-  const manufacturerSelectHint = useMemo(() => {
-    if (mfOptions.length > 0) return null;
-    if (selIds.length === 0) return "Select at least one product line.";
-    if (!moRequired) {
-      return "Manufacturers apply only when every selected line has manufacturing allocations.";
-    }
-    if (moOptions.length === 0) {
-      return "Selected lines must share a manufacturing order before you can choose a manufacturer.";
-    }
-    if (!manufacturingOrderId) return "Select a manufacturing order first.";
-    return "No manufacturers are available for this manufacturing order and line selection.";
-  }, [
-    mfOptions.length,
-    selIds.length,
-    moRequired,
-    moOptions.length,
-    manufacturingOrderId,
-  ]);
 
   useEffect(() => {
     if (type === "damage") {
@@ -216,30 +139,13 @@ export function AddOsdDialog({
     }
     if (!moRequired && selIds.length > 0 && moOptions.length === 0) {
       setManufacturingOrderId(null);
-      setManufacturerId(null);
     }
   }, [open, moRequired, moOptions, manufacturingOrderId, selIds.length]);
-
-  useEffect(() => {
-    if (!open) return;
-    if (!manufacturingOrderId) {
-      setManufacturerId(null);
-      return;
-    }
-    setManufacturerId((prev) => {
-      const mfs = manufacturersForMo(manufacturingOrderId, selIds, poLines);
-      if (mfs.length === 0) return null;
-      if (mfs.length === 1) return mfs[0]!.id;
-      if (prev != null && mfs.some((m) => m.id === prev)) return prev;
-      return null;
-    });
-  }, [open, manufacturingOrderId, selIds, poLines]);
 
   useEffect(() => {
     if (!manufacturingOrderId) return;
     if (moOptions.length > 0 && !moOptions.includes(manufacturingOrderId)) {
       setManufacturingOrderId(null);
-      setManufacturerId(null);
     }
   }, [moOptions, manufacturingOrderId]);
 
@@ -261,11 +167,6 @@ export function AddOsdDialog({
       const next = [...prev];
       const prevRow = next[i]!;
       next[i] = { ...prevRow, ...patch };
-      const ids = selectedLineIds(next.filter((r) => r.purchaseOrderLineId));
-      if (ids.length >= 2 && linesHaveMoManufacturerConflict(ids, poLines)) {
-        queueMicrotask(() => toast.error(OSD_MO_MANUFACTURER_CONFLICT_MSG));
-        return prev;
-      }
       const isLast = i === next.length - 1;
       const wasEmpty = !prevRow.purchaseOrderLineId;
       const nowFilled = next[i]!.purchaseOrderLineId.length > 0;
@@ -308,20 +209,8 @@ export function AddOsdDialog({
       return;
     }
     const ids = selectedLineIds(rows);
-    if (ids.length !== rows.length) {
-      toast.error("Duplicate lines are not allowed");
-      return;
-    }
-    if (linesHaveMoManufacturerConflict(ids, poLines)) {
-      toast.error(OSD_MO_MANUFACTURER_CONFLICT_MSG);
-      return;
-    }
     if (moRequired && (!manufacturingOrderId || moOptions.length === 0)) {
       toast.error("Select a valid manufacturing order for the selected lines");
-      return;
-    }
-    if (manufacturingOrderId && mfOptions.length > 1 && !manufacturerId) {
-      toast.error("Select the manufacturer");
       return;
     }
 
@@ -338,7 +227,6 @@ export function AddOsdDialog({
           resolution,
           lines: bodyLines,
           manufacturingOrderId: manufacturingOrderId ?? undefined,
-          manufacturerId: manufacturerId ?? undefined,
           documentKey: documentKey ?? undefined,
           notes: notes.trim() ? notes.trim() : undefined,
         };
@@ -349,7 +237,6 @@ export function AddOsdDialog({
           resolution,
           lines: bodyLines,
           manufacturingOrderId: manufacturingOrderId ?? null,
-          manufacturerId: manufacturerId ?? null,
           documentKey: documentKey ?? null,
           notes: notes.trim() ? notes.trim() : null,
         };
@@ -430,23 +317,14 @@ export function AddOsdDialog({
               emptyItemsMessage="This purchase order has no lines."
               items={lineSelectItems}
               getItemsForRow={(rowIndex, row) => {
-                const chosenElsewhere = new Set(
-                  lineRows
-                    .map((r, j) =>
-                      j !== rowIndex && r.purchaseOrderLineId ? r.purchaseOrderLineId : "",
-                    )
-                    .filter((id): id is string => id.length > 0),
-                );
                 const otherIds = lineRows
                   .map((r, j) =>
                     j !== rowIndex && r.purchaseOrderLineId ? r.purchaseOrderLineId : "",
                   )
                   .filter((id): id is string => id.length > 0);
                 return lineSelectItems.filter((it) => {
-                  if (chosenElsewhere.has(it.value) && it.value !== row.entityId) return false;
                   if (it.value === row.entityId) return true;
-                  if (otherIds.length === 0) return true;
-                  return !linesHaveMoManufacturerConflict([...otherIds, it.value], poLines);
+                  return true;
                 });
               }}
               rows={lineRows.map((r) => ({
@@ -496,35 +374,6 @@ export function AddOsdDialog({
               )}
             </div>
           ) : null}
-
-          <div className="space-y-2">
-            <Label>
-              Manufacturer
-              {mfOptions.length > 1 ? (
-                <span className="font-normal text-muted-foreground"> (required)</span>
-              ) : null}
-            </Label>
-            <Select
-              value={manufacturerId ?? ""}
-              items={mfOptions.map((m) => ({ value: m.id, label: m.name }))}
-              disabled={mfOptions.length === 0}
-              onValueChange={(v) => setManufacturerId(v && v !== "" ? String(v) : null)}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Manufacturer" />
-              </SelectTrigger>
-              <SelectContent>
-                {mfOptions.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {manufacturerSelectHint ? (
-              <p className="text-xs text-muted-foreground">{manufacturerSelectHint}</p>
-            ) : null}
-          </div>
 
           <div className="space-y-2">
             <Label htmlFor="osd-notes">Notes</Label>

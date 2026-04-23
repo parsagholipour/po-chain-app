@@ -8,8 +8,10 @@ import { BarChart } from "@/components/analytics/charts/bar-chart";
 import { DoughnutChart } from "@/components/analytics/charts/doughnut-chart";
 import { CHART_COLORS } from "@/components/analytics/charts/chart-setup";
 import { api } from "@/lib/axios";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PriceView } from "@/components/ui/price-view";
+import { usePagination } from "@/hooks/use-pagination";
 
 type Row = {
   id: string;
@@ -33,6 +35,8 @@ export function ManufacturersView() {
   });
 
   const rows = dataQuery.data?.rows ?? [];
+  const pagination = usePagination({ totalItems: rows.length, resetDeps: [query] });
+  const pagedRows = pagination.sliceItems(rows);
   const topRevenue = [...rows].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
   const topSpend = [...rows].sort((a, b) => b.manufacturingSpend - a.manufacturingSpend).slice(0, 10);
   const openMoRows = rows.filter((r) => r.openMoCount > 0);
@@ -107,7 +111,7 @@ export function ManufacturersView() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((row) => (
+              {pagedRows.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-medium">{row.label}</TableCell>
                   <TableCell className="text-right">
@@ -125,6 +129,13 @@ export function ManufacturersView() {
               ))}
             </TableBody>
           </Table>
+          <div className="border-t border-border/60 px-3 py-2">
+            <TablePagination
+              {...pagination}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
+          </div>
         </div>
       </ChartCard>
     </div>

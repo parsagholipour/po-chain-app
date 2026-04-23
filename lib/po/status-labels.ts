@@ -2,10 +2,11 @@
 export const distributorPoStatusLabels: Record<string, string> = {
   open: "Open",
   in_transit: "Shipped",
+  invoiced: "Invoiced",
   closed: "Closed",
 };
 
-export const distributorPoStatuses = ["open", "in_transit", "closed"] as const;
+export const distributorPoStatuses = ["open", "in_transit", "invoiced", "closed"] as const;
 
 export const shippingStatusLabels: Record<string, string> = {
   pending: "Pending",

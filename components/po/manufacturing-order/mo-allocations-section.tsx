@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { useConfirm } from "@/components/confirm-provider";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -22,7 +21,9 @@ import {
 } from "@/components/ui/table";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { MoLinkedOrderLabel } from "@/components/po/mo-linked-order-label";
+import { TablePagination } from "@/components/ui/table-pagination";
 import type { MoLineAllocationRow, MoManufacturerPivot } from "@/lib/types/api";
+import { usePagination } from "@/hooks/use-pagination";
 import { Plus, Trash2 } from "lucide-react";
 
 type Props = {
@@ -57,6 +58,8 @@ export function MoAllocationsSection({
       })),
     [manufacturerOptions],
   );
+  const pagination = usePagination({ totalItems: allocations.length });
+  const pagedAllocations = pagination.sliceItems(allocations);
 
   return (
     <section
@@ -92,7 +95,7 @@ export function MoAllocationsSection({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {allocations.map((row) => (
+              {pagedAllocations.map((row) => (
                 <TableRow key={row.purchaseOrderLineId}>
                   <TableCell>
                     <div className="flex items-center gap-3">
@@ -194,6 +197,13 @@ export function MoAllocationsSection({
               ))}
             </TableBody>
           </Table>
+          <div className="border-t border-border/60 px-3 py-2">
+            <TablePagination
+              {...pagination}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
+          </div>
         </div>
       )}
     </section>

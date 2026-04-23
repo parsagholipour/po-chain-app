@@ -1,5 +1,7 @@
 import { PriceView } from "@/components/ui/price-view";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePagination } from "@/hooks/use-pagination";
 import type { BreakdownRow } from "@/lib/types/analytics";
 
 export function BreakdownTable({
@@ -9,6 +11,9 @@ export function BreakdownTable({
   rows: BreakdownRow[];
   emptyMessage?: string;
 }) {
+  const pagination = usePagination({ totalItems: rows.length });
+  const pagedRows = pagination.sliceItems(rows);
+
   return (
     <div className="overflow-hidden rounded-lg border border-border/60">
       <Table>
@@ -30,7 +35,7 @@ export function BreakdownTable({
               </TableCell>
             </TableRow>
           ) : (
-            rows.map((row) => (
+            pagedRows.map((row) => (
               <TableRow key={row.id}>
                 <TableCell className="font-medium">{row.label}</TableCell>
                 <TableCell className="text-right">
@@ -49,6 +54,13 @@ export function BreakdownTable({
           )}
         </TableBody>
       </Table>
+      <div className="border-t border-border/60 px-3 py-2">
+        <TablePagination
+          {...pagination}
+          onPageChange={pagination.setPage}
+          onPageSizeChange={pagination.setPageSize}
+        />
+      </div>
     </div>
   );
 }

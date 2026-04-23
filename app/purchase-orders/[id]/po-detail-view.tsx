@@ -4,12 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { uploadFileToStorage } from "@/lib/upload-client";
 import type {
   Manufacturer,
+  OrderStatusLog,
   PoOsd,
   Product,
   PurchaseOrderDetail,
@@ -23,9 +24,14 @@ import { PoDetailHeader } from "@/components/po/purchase-order/po-detail-header"
 import { PoLinesSection } from "@/components/po/purchase-order/po-lines-section";
 import { PoLinkedMosSection } from "@/components/po/purchase-order/po-linked-mos-section";
 import { PoShipmentsSection } from "@/components/po/purchase-order/po-shipments-section";
+import { PoOrderInvoiceSection } from "@/components/po/purchase-order/po-order-invoice-section";
+import { InvoiceUpsertDialog } from "@/components/po/purchase-order/invoice-upsert-dialog";
+import { invoiceDefaultsForPivot } from "@/lib/po/invoice-defaults";
+import type { InvoiceApiPayload, InvoiceFormValues } from "@/lib/po/invoice-form";
 import { PoOsdSection } from "@/components/po/purchase-order/po-osd-section";
 import { AddOsdDialog } from "@/components/po/purchase-order/add-osd-dialog";
 import { toast } from "sonner";
+import { invalidateNavCounts } from "@/lib/query-invalidation";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -105,7 +111,50 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
     },
     onSuccess: (row) => {
       qc.setQueryData(poKey, row);
+      void invalidateNavCounts(qc);
       toast.success("Updated");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const patchInvoice = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
+      await api.patch(`/api/invoices/${id}`, body);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: poKey });
+      toast.success("Invoice saved");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const saveStatusLogNote = useMutation({
+    mutationFn: async ({
+      logId,
+      note,
+    }: {
+      logId: string;
+      note: string | null;
+    }) => {
+      const { data } = await api.patch<OrderStatusLog>(`/api/order-status-logs/${logId}`, {
+        note,
+      });
+      return data;
+    },
+    onSuccess: (updatedLog) => {
+      qc.setQueryData<Extract<PurchaseOrderDetail, { type: "distributor" }> | undefined>(
+        poKey,
+        (current) =>
+          current
+            ? {
+                ...current,
+                statusLogs: current.statusLogs.map((log) =>
+                  log.id === updatedLog.id ? updatedLog : log,
+                ),
+              }
+            : current,
+      );
+      toast.success("Note saved");
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
@@ -118,6 +167,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
       qc.invalidateQueries({ queryKey: ["purchase-orders"] });
       qc.invalidateQueries({ queryKey: ["manufacturing-orders"] });
       qc.invalidateQueries({ queryKey: ["manufacturing-order"] });
+      void invalidateNavCounts(qc);
       qc.removeQueries({ queryKey: poKey });
       toast.success("Purchase order deleted");
       router.push("/purchase-orders-overview");
@@ -217,6 +267,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
   const [osdDialogOpen, setOsdDialogOpen] = useState(false);
   const [osdDialogMode, setOsdDialogMode] = useState<"create" | "edit">("create");
   const [editingOsd, setEditingOsd] = useState<PoOsd | null>(null);
+  const [invoiceDialogMode, setInvoiceDialogMode] = useState<"create" | "edit" | null>(null);
 
   async function saveProductFromPo(payload: {
     id?: string;
@@ -264,6 +315,33 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
   const linkedMos = po?.manufacturingOrderPurchaseOrders.map(
     (r) => r.manufacturingOrder,
   ) ?? [];
+
+  const invoiceDialogDefaults = useMemo((): InvoiceFormValues => {
+    if (!po || !invoiceDialogMode) {
+      return { invoiceNumber: "" };
+    }
+    return invoiceDefaultsForPivot(
+      { invoice: po.invoice },
+      invoiceDialogMode === "edit" ? "edit" : "create",
+    );
+  }, [po, invoiceDialogMode]);
+
+  const invoiceResetToken = po
+    ? `po-invoice-${invoiceDialogMode}-${po.invoice?.id ?? "new"}`
+    : "";
+
+  async function submitPurchaseOrderInvoice(payload: InvoiceApiPayload) {
+    if (!po || !invoiceDialogMode) return;
+    if (invoiceDialogMode === "edit" && po.invoice) {
+      await patchInvoice.mutateAsync({
+        id: po.invoice.id,
+        body: payload,
+      });
+    } else {
+      await patchPo.mutateAsync({ invoice: payload });
+    }
+    setInvoiceDialogMode(null);
+  }
 
   if (isPending) {
     return <PoDetailSkeleton />;
@@ -348,14 +426,24 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
     <div className="space-y-8">
       <PoDetailHeader
         po={po}
+        statusLogs={po.statusLogs}
         saleChannelOptions={distributorSaleChannelOptions}
         onStatusChange={(s) => patchPo.mutate({ status: s })}
+        onSaveStatusLogNote={async (logId, note) => {
+          await saveStatusLogNote.mutateAsync({ logId, note });
+        }}
         onSaleChannelChange={(saleChannelId) => patchPo.mutate({ saleChannelId })}
         onDocumentUpload={uploadDocument}
         isSaving={patchPo.isPending}
         isDocumentSaving={isDocumentSaving}
         onDelete={() => deletePo.mutateAsync()}
         isDeleting={deletePo.isPending}
+      />
+
+      <PoOrderInvoiceSection
+        invoice={po.invoice}
+        onCreate={() => setInvoiceDialogMode("create")}
+        onEdit={() => setInvoiceDialogMode("edit")}
       />
 
       <PoLinesSection
@@ -426,6 +514,18 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         editing={editingProduct}
         manufacturers={manufacturers}
         onSave={saveProductFromPo}
+      />
+
+      <InvoiceUpsertDialog
+        open={!!invoiceDialogMode}
+        onOpenChange={(o) => {
+          if (!o) setInvoiceDialogMode(null);
+        }}
+        title={invoiceDialogMode === "edit" ? "Edit invoice" : "Create invoice"}
+        defaultValues={invoiceDialogDefaults}
+        existingDocumentKey={po.invoice?.documentKey ?? null}
+        resetToken={invoiceResetToken}
+        onSubmit={submitPurchaseOrderInvoice}
       />
     </div>
   );

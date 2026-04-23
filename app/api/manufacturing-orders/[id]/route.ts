@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { manufacturingOrderPatchSchema } from "@/lib/validations/manufacturing-order";
-import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
+import { prisma } from "@/lib/prisma";
+import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-include";
+import { createOrderStatusLog } from "@/lib/order-status-log";
 import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 import { requireStoreContext } from "@/lib/store-context";
+import { manufacturingOrderPatchSchema } from "@/lib/validations/manufacturing-order";
 
 export const runtime = "nodejs";
 
@@ -37,7 +38,7 @@ export async function PATCH(
 ) {
   const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
-  const { storeId } = authz.context;
+  const { storeId, userId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -57,30 +58,44 @@ export async function PATCH(
   }
 
   try {
-    const existing = await prisma.manufacturingOrder.findFirst({
-      where: { id: pid.data.id, storeId },
-      select: { id: true },
-    });
-    if (!existing) return jsonError("Not found", 404);
-
-    if (parsed.data.status === "ready_to_ship") {
-      const pivots = await prisma.manufacturingOrderManufacturer.findMany({
-        where: { manufacturingOrderId: pid.data.id, storeId },
-        select: { status: true, manufacturer: { select: { name: true } } },
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.manufacturingOrder.findFirst({
+        where: { id: pid.data.id, storeId },
+        select: { id: true, status: true },
       });
-      const notReady = pivots.filter((p) => p.status !== "ready_to_pickup");
-      if (notReady.length > 0) {
-        const names = notReady.map((p) => `${p.manufacturer.name} (${p.status})`).join(", ");
-        return jsonError(
-          `Cannot set MO to "Ready to ship" — the following manufacturers are not "Ready to pickup": ${names}`,
-          409,
-        );
+      if (!existing) {
+        throw new Error("MO_NOT_FOUND");
       }
-    }
 
-    await prisma.manufacturingOrder.update({
-      where: { id: pid.data.id },
-      data: parsed.data,
+      if (parsed.data.status === "ready_to_ship") {
+        const pivots = await tx.manufacturingOrderManufacturer.findMany({
+          where: { manufacturingOrderId: pid.data.id, storeId },
+          select: { status: true, manufacturer: { select: { name: true } } },
+        });
+        const notReady = pivots.filter((pivot) => pivot.status !== "ready_to_pickup");
+        if (notReady.length > 0) {
+          const names = notReady
+            .map((pivot) => `${pivot.manufacturer.name} (${pivot.status})`)
+            .join(", ");
+          throw new Error(`MO_READY_TO_SHIP_BLOCKED:${names}`);
+        }
+      }
+
+      await tx.manufacturingOrder.update({
+        where: { id: pid.data.id },
+        data: parsed.data,
+      });
+
+      if (parsed.data.status && parsed.data.status !== existing.status) {
+        await createOrderStatusLog({
+          tx,
+          storeId,
+          createdById: userId,
+          manufacturingOrderId: pid.data.id,
+          fromStatus: existing.status,
+          toStatus: parsed.data.status,
+        });
+      }
     });
 
     const row = await prisma.manufacturingOrder.findFirst({
@@ -89,6 +104,16 @@ export async function PATCH(
     });
     return NextResponse.json(row ? manufacturingOrderDetailFromPrisma(row) : null);
   } catch (e) {
+    if (e instanceof Error && e.message === "MO_NOT_FOUND") {
+      return jsonError("Not found", 404);
+    }
+    if (e instanceof Error && e.message.startsWith("MO_READY_TO_SHIP_BLOCKED:")) {
+      const names = e.message.slice("MO_READY_TO_SHIP_BLOCKED:".length);
+      return jsonError(
+        `Cannot set MO to "Ready to ship" - the following manufacturers are not "Ready to pickup": ${names}`,
+        409,
+      );
+    }
     const j = jsonFromPrisma(e);
     if (j) return j;
     throw e;
@@ -120,8 +145,8 @@ export async function DELETE(
         select: { invoiceId: true },
       });
       const invoiceIds = pivots
-        .map((p) => p.invoiceId)
-        .filter((id): id is string => id != null);
+        .map((pivot) => pivot.invoiceId)
+        .filter((invoiceId): invoiceId is string => invoiceId != null);
       if (invoiceIds.length > 0) {
         await tx.invoice.deleteMany({
           where: { id: { in: invoiceIds }, storeId },

@@ -36,21 +36,42 @@ export async function GET(request: Request) {
     ]);
 
   const kpis: AnalyticsKpi[] = [
-    { label: "Revenue", value: current.revenue, deltaPct: metricDeltaPct(current.revenue, previous.revenue) },
-    { label: "COGS", value: current.cost, deltaPct: metricDeltaPct(current.cost, previous.cost) },
-    { label: "Gross profit", value: current.profit, deltaPct: metricDeltaPct(current.profit, previous.profit) },
+    {
+      label: "Revenue",
+      value: current.revenue,
+      deltaPct: metricDeltaPct(current.revenue, previous.revenue),
+      valueFormat: "currency",
+    },
+    {
+      label: "COGS",
+      value: current.cost,
+      deltaPct: metricDeltaPct(current.cost, previous.cost),
+      valueFormat: "currency",
+    },
+    {
+      label: "Gross profit",
+      value: current.profit,
+      deltaPct: metricDeltaPct(current.profit, previous.profit),
+      valueFormat: "currency",
+    },
     {
       label: "Margin %",
       value: current.revenue > 0 ? (current.profit / current.revenue) * 100 : 0,
       deltaPct: previous.revenue > 0 ? ((current.profit / current.revenue) * 100) - ((previous.profit / previous.revenue) * 100) : null,
+      valueFormat: "percent",
     },
-    { label: "Units sold", value: current.units, deltaPct: metricDeltaPct(current.units, previous.units) },
-    { label: "Closed POs", value: await closedPoCount(storeId, range), deltaPct: null },
-    { label: "Open POs", value: openCounts.openPo, deltaPct: null },
-    { label: "Open SOs", value: openCounts.openSo, deltaPct: null },
-    { label: "Open MOs", value: openCounts.openMo, deltaPct: null },
-    { label: "Manufacturing spend", value: manufacturingSpend, deltaPct: null },
-    { label: "Shipping spend", value: shippingSpend, deltaPct: null },
+    {
+      label: "Units sold",
+      value: current.units,
+      deltaPct: metricDeltaPct(current.units, previous.units),
+      valueFormat: "integer",
+    },
+    { label: "Closed POs", value: await closedPoCount(storeId, range), deltaPct: null, valueFormat: "integer" },
+    { label: "Open POs", value: openCounts.openPo, deltaPct: null, valueFormat: "integer" },
+    { label: "Open SOs", value: openCounts.openSo, deltaPct: null, valueFormat: "integer" },
+    { label: "Open MOs", value: openCounts.openMo, deltaPct: null, valueFormat: "integer" },
+    { label: "Manufacturing spend", value: manufacturingSpend, deltaPct: null, valueFormat: "currency" },
+    { label: "Shipping spend", value: shippingSpend, deltaPct: null, valueFormat: "currency" },
   ];
 
   return NextResponse.json({

@@ -80,14 +80,19 @@ export async function PATCH(
         "depositPaidAmount",
         "depositRefNumber",
         "depositDocumentKey",
+        "depositNote",
         "manufacturingStartedAt",
         "estimatedCompletionAt",
+        "manufacturingNote",
         "balancePaidAt",
         "balancePaidAmount",
         "balanceRefNumber",
         "balanceDocumentKey",
+        "balanceNote",
         "readyAt",
+        "readyNote",
         "pickedUpAt",
+        "pickedUpNote",
       ] as const;
       for (const f of stepFields) {
         const v = parsed.data[f];

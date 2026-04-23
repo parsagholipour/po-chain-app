@@ -1,3 +1,5 @@
+import { orderStatusLogInclude } from "@/lib/order-status-log";
+
 /** Single PO line shape for API responses (detail, line PATCH/POST/GET). */
 export const purchaseOrderLineApiInclude = {
   product: { include: { defaultManufacturer: true, category: true } },
@@ -21,11 +23,11 @@ export const purchaseOrderOsdListInclude = {
     },
   },
   manufacturingOrder: { select: { id: true, number: true, name: true } },
-  manufacturer: { select: { id: true, name: true, region: true } },
 } as const;
 
 /** Prisma `include` for purchase order detail API responses. */
 export const purchaseOrderDetailInclude = {
+  invoice: true,
   saleChannel: true,
   lines: {
     include: purchaseOrderLineApiInclude,
@@ -68,5 +70,9 @@ export const purchaseOrderDetailInclude = {
   osds: {
     orderBy: { createdAt: "desc" as const },
     include: purchaseOrderOsdListInclude,
+  },
+  statusLogs: {
+    orderBy: { createdAt: "desc" as const },
+    include: orderStatusLogInclude,
   },
 } as const;

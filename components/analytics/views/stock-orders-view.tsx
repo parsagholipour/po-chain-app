@@ -9,7 +9,9 @@ import { DoughnutChart } from "@/components/analytics/charts/doughnut-chart";
 import { CHART_COLORS } from "@/components/analytics/charts/chart-setup";
 import { api } from "@/lib/axios";
 import type { InflowOutflowRow } from "@/lib/types/analytics";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { usePagination } from "@/hooks/use-pagination";
 
 type Payload = {
   inflowOutflow: InflowOutflowRow[];
@@ -25,7 +27,10 @@ export function StockOrdersView() {
   });
 
   const statusEntries = Object.entries(dataQuery.data?.statusCounts ?? {});
-  const flow = (dataQuery.data?.inflowOutflow ?? []).slice(0, 15);
+  const inflowOutflowRows = dataQuery.data?.inflowOutflow ?? [];
+  const flow = inflowOutflowRows.slice(0, 15);
+  const pagination = usePagination({ totalItems: inflowOutflowRows.length, resetDeps: [query] });
+  const pagedRows = pagination.sliceItems(inflowOutflowRows);
 
   return (
     <div className="space-y-6">
@@ -79,14 +84,14 @@ export function StockOrdersView() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {(dataQuery.data?.inflowOutflow ?? []).length === 0 ? (
+              {inflowOutflowRows.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="h-20 text-center text-muted-foreground">
                     No stock movement in this range.
                   </TableCell>
                 </TableRow>
               ) : (
-                (dataQuery.data?.inflowOutflow ?? []).map((row) => (
+                pagedRows.map((row) => (
                   <TableRow key={row.id}>
                     <TableCell className="font-medium">{row.label}</TableCell>
                     <TableCell className="text-right tabular-nums">{row.inflowUnits.toLocaleString()}</TableCell>
@@ -102,6 +107,13 @@ export function StockOrdersView() {
               )}
             </TableBody>
           </Table>
+          <div className="border-t border-border/60 px-3 py-2">
+            <TablePagination
+              {...pagination}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
+          </div>
         </div>
       </ChartCard>
     </div>

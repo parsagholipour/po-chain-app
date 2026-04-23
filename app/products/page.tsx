@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { ProductsView } from "./products-view";
 import type { Metadata } from "next";
 
@@ -6,5 +7,9 @@ export const metadata: Metadata = {
 };
 
 export default function ProductsPage() {
-  return <ProductsView />;
+  return (
+    <Suspense fallback={null}>
+      <ProductsView />
+    </Suspense>
+  );
 }

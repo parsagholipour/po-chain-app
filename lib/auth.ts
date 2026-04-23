@@ -17,6 +17,19 @@ function nameFromProfile(profile: Record<string, unknown>) {
   return null;
 }
 
+function realEmailFromProfile(profile: Record<string, unknown>): string | null {
+  const raw = profile.email;
+  return typeof raw === "string" && raw.length > 0 ? raw : null;
+}
+
+function realNameFromProfile(profile: Record<string, unknown>): string | null {
+  const n = profile.name;
+  if (typeof n === "string" && n.length > 0) return n;
+  const p = profile.preferred_username;
+  if (typeof p === "string" && p.length > 0) return p;
+  return null;
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   callbacks: {
@@ -26,13 +39,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         return true;
       }
       const sub = profile.sub;
-      const email = emailFromProfile(sub, profile as Record<string, unknown>);
-      const name = nameFromProfile(profile as Record<string, unknown>);
+      const profileRecord = profile as Record<string, unknown>;
+      const email = emailFromProfile(sub, profileRecord);
+      const name = nameFromProfile(profileRecord);
 
       await syncUserWithDefaultStore({
         keycloakSub: sub,
         email,
         name,
+        realEmail: realEmailFromProfile(profileRecord),
+        realName: realNameFromProfile(profileRecord),
       });
 
       return true;
@@ -56,11 +72,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           : `${sub}@keycloak.local`;
         const name = profileRecord ? nameFromProfile(profileRecord) : null;
 
+        if (profileRecord) {
+          token.realEmail = realEmailFromProfile(profileRecord);
+          token.realName = realNameFromProfile(profileRecord);
+        } else {
+          if (token.realEmail === undefined && typeof token.email === "string" && token.email.length > 0) {
+            token.realEmail = token.email;
+          }
+          if (token.realName === undefined && typeof token.name === "string" && token.name.length > 0) {
+            token.realName = token.name;
+          }
+        }
+
         try {
           const row = await syncUserWithDefaultStore({
             keycloakSub: sub,
             email,
             name,
+            realEmail: token.realEmail ?? null,
+            realName: token.realName ?? null,
           });
           token.appUserId = row.id;
         } catch (err) {

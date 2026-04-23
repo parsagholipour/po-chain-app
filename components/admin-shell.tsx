@@ -1,10 +1,12 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import {
   Boxes,
+  BrainCircuit,
   Building2,
   ChevronLeft,
   ChevronRight,
@@ -22,9 +24,11 @@ import {
 } from "lucide-react";
 
 import { AuthControls } from "@/components/auth-controls";
+import { AssistantSheet } from "@/components/assistant/assistant-sheet";
+import { APP_NAME } from "@/lib/app-name";
 import { ModeToggle } from "@/components/mode-toggle";
 import { StoreSwitcher } from "@/components/store-switcher";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sheet,
@@ -41,6 +45,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { GlobalSearchBar } from "@/components/global-search-bar";
 
 type NavIcon = (typeof Boxes);
 type NavChild = {
@@ -127,14 +132,21 @@ function navGroupActive(pathname: string, item: NavGroup) {
 
 function SidebarBrand({ activeStoreName, isCollapsed }: { activeStoreName: string | null; isCollapsed?: boolean }) {
   return (
-    <div className={cn("flex h-16 items-center border-b border-sidebar-border", isCollapsed ? "justify-center px-0" : "gap-3 px-5")}>
-      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-sidebar-primary to-primary shadow-sm ring-1 ring-sidebar-primary/20">
-        <Package className="size-[22px] text-sidebar-primary-foreground" />
+    <div className={cn("flex h-16 items-center border-b border-sidebar-border", isCollapsed ? "justify-center px-0" : "gap-2 px-5")}>
+      <div className="relative size-10 shrink-0 overflow-hidden">
+        <Image
+          src="/logo.png"
+          alt={isCollapsed ? APP_NAME : ""}
+          width={60}
+          height={60}
+          className="size-10 object-cover h-full w-auto"
+          priority
+        />
       </div>
       {!isCollapsed && (
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate font-semibold tracking-tight text-sidebar-foreground">
-            PO App
+            {APP_NAME}
           </p>
           <p className="truncate text-xs text-muted-foreground">
             {activeStoreName ?? "Operations"}
@@ -367,6 +379,7 @@ export function AdminShell({
   children: React.ReactNode;
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("sidebar:collapsed") === "true";
@@ -392,7 +405,7 @@ export function AdminShell({
               <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm">
                 <Package className="size-4" />
               </span>
-              PO App
+              {APP_NAME}
             </Link>
             <div className="flex items-center gap-2">
               <AuthControls />
@@ -431,6 +444,13 @@ export function AdminShell({
 
       {/* Main column */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-muted/30 dark:bg-background">
+        <AssistantSheet
+          open={assistantOpen}
+          onOpenChange={setAssistantOpen}
+          activeStoreId={activeStoreId}
+          activeStoreName={activeStoreName}
+        />
+
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-border/70 bg-background/90 px-4 backdrop-blur-md md:hidden">
             <SheetTrigger
@@ -450,8 +470,18 @@ export function AdminShell({
               <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
                 <Package className="size-4" />
               </span>
-              <span className="truncate">PO App</span>
+              <span className="truncate">{APP_NAME}</span>
             </Link>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAssistantOpen(true)}
+              disabled={!activeStoreId}
+            >
+              <BrainCircuit className="size-3.5" />
+              AI
+            </Button>
             <ModeToggle />
             <div className="shrink-0">
               <AuthControls />
@@ -474,6 +504,26 @@ export function AdminShell({
             <SidebarFooter stores={stores} activeStoreId={activeStoreId} />
           </SheetContent>
         </Sheet>
+
+        <header className="sticky top-0 z-10 hidden shrink-0 border-b border-border/70 bg-background/90 backdrop-blur-md md:block">
+          <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6 lg:px-8">
+            <div className="min-w-0 flex-1">
+              <Suspense fallback={null}>
+                <GlobalSearchBar />
+              </Suspense>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAssistantOpen(true)}
+              disabled={!activeStoreId}
+            >
+              <BrainCircuit className="size-3.5" />
+              AI
+            </Button>
+          </div>
+        </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">

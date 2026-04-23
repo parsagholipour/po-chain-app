@@ -27,18 +27,39 @@ export async function GET() {
     saleChannelCounts[row.saleChannelId] = row._count._all;
   }
 
-  const byManufacturer = await prisma.manufacturingOrderManufacturer.groupBy({
-    by: ["manufacturerId"],
+  /** Distinct open distributor POs per manufacturer (matches GET /api/purchase-orders manufacturer filter). */
+  const allocations = await prisma.manufacturingOrderPurchaseOrderLine.findMany({
     where: {
       storeId,
-      manufacturingOrder: { status: { not: "closed" } },
+      purchaseOrderLine: {
+        storeId,
+        purchaseOrder: {
+          storeId,
+          type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+          status: { not: "closed" },
+        },
+      },
     },
-    _count: { _all: true },
+    select: {
+      manufacturerId: true,
+      purchaseOrderLine: { select: { purchaseOrderId: true } },
+    },
   });
 
+  const orderIdsByManufacturer = new Map<string, Set<string>>();
+  for (const row of allocations) {
+    const poId = row.purchaseOrderLine.purchaseOrderId;
+    let set = orderIdsByManufacturer.get(row.manufacturerId);
+    if (!set) {
+      set = new Set();
+      orderIdsByManufacturer.set(row.manufacturerId, set);
+    }
+    set.add(poId);
+  }
+
   const manufacturerCounts: Record<string, number> = {};
-  for (const row of byManufacturer) {
-    manufacturerCounts[row.manufacturerId] = row._count._all;
+  for (const [manufacturerId, ids] of orderIdsByManufacturer) {
+    manufacturerCounts[manufacturerId] = ids.size;
   }
 
   return NextResponse.json({

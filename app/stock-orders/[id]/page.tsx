@@ -35,14 +35,23 @@ export async function generateMetadata({
       storeId: storeContext.storeId,
       type: PURCHASE_ORDER_TYPE_STOCK,
     },
-    select: { name: true, number: true },
+    select: {
+      name: true,
+      saleChannel: {
+        select: {
+          name: true,
+        },
+      },
+    },
   });
 
   if (!row) {
-    return { title: "Stock order · Not found" };
+    return { title: "Stock order - Not found" };
   }
 
-  return { title: `${row.name} · Stock #${row.number}` };
+  return {
+    title: row.saleChannel?.name ? `${row.name} - ${row.saleChannel.name}` : row.name,
+  };
 }
 
 export default async function StockOrderDetailPage({

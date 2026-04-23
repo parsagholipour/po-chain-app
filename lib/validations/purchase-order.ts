@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const purchaseOrderStatusSchema = z.enum(["open", "in_transit", "closed"]);
+export const purchaseOrderStatusSchema = z.enum(["open", "in_transit", "invoiced", "closed"]);
 
 export const moManufacturerStatusSchema = z.enum([
   "initial",
@@ -38,6 +38,7 @@ export const purchaseOrderPatchSchema = z.object({
   status: purchaseOrderStatusSchema.optional(),
   documentKey: z.string().min(1).nullable().optional(),
   saleChannelId: z.uuid().optional(),
+  invoice: invoiceUpsertSchema.optional(),
 });
 
 export const stockOrderCreateSchema = z.object({
@@ -59,6 +60,7 @@ export const stockOrderPatchSchema = z.object({
   status: purchaseOrderStatusSchema.optional(),
   documentKey: z.string().min(1).nullable().optional(),
   saleChannelId: z.uuid().optional(),
+  invoice: invoiceUpsertSchema.optional(),
 });
 
 export const purchaseOrderLineCreateSchema = z.object({
@@ -85,19 +87,11 @@ export const osdCreateSchema = z
     type: purchaseOrderOsdTypeSchema,
     resolution: purchaseOrderOsdResolutionSchema,
     manufacturingOrderId: z.uuid().nullable().optional(),
-    manufacturerId: z.uuid().nullable().optional(),
     documentKey: z.string().min(1).nullable().optional(),
     notes: z.string().max(5000).nullable().optional(),
     lines: z.array(osdLineInputSchema).min(1),
   })
   .superRefine((data, ctx) => {
-    if (data.manufacturerId && !data.manufacturingOrderId) {
-      ctx.addIssue({
-        code: "custom",
-        message: "manufacturingOrderId is required when manufacturerId is set",
-        path: ["manufacturingOrderId"],
-      });
-    }
     if (data.type === "damage") {
       if (data.resolution !== "charged") {
         ctx.addIssue({
@@ -123,14 +117,6 @@ export const osdCreateSchema = z
         });
       }
     }
-    const lineIds = data.lines.map((l) => l.purchaseOrderLineId);
-    if (new Set(lineIds).size !== lineIds.length) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Each purchase order line can only appear once",
-        path: ["lines"],
-      });
-    }
   });
 
 export const osdPatchSchema = z
@@ -138,29 +124,9 @@ export const osdPatchSchema = z
     type: purchaseOrderOsdTypeSchema.optional(),
     resolution: purchaseOrderOsdResolutionSchema.optional(),
     manufacturingOrderId: z.uuid().nullable().optional(),
-    manufacturerId: z.uuid().nullable().optional(),
     documentKey: z.string().min(1).nullable().optional(),
     notes: z.string().max(5000).nullable().optional(),
     lines: z.array(osdLineInputSchema).min(1).optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.manufacturerId && data.manufacturingOrderId === null) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Cannot clear manufacturing order while manufacturer is set",
-        path: ["manufacturingOrderId"],
-      });
-    }
-    if (data.lines) {
-      const lineIds = data.lines.map((l) => l.purchaseOrderLineId);
-      if (new Set(lineIds).size !== lineIds.length) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Each purchase order line can only appear once",
-          path: ["lines"],
-        });
-      }
-    }
   });
 
 export type OsdCreateInput = z.infer<typeof osdCreateSchema>;

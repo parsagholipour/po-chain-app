@@ -10,8 +10,10 @@ import { ProductCategoriesTable } from "@/components/po/product-categories/produ
 import type { ProductCategoryFormValues } from "@/components/po/product-categories/product-category-form";
 import { Button } from "@/components/ui/button";
 import { TableContainer } from "@/components/ui/table-container";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
+import { usePagination } from "@/hooks/use-pagination";
 
 const productCategoriesKey = ["product-categories"] as const;
 
@@ -27,6 +29,8 @@ export function ProductCategoriesView() {
       return rows;
     },
   });
+  const pagination = usePagination({ totalItems: data.length });
+  const pagedRows = pagination.sliceItems(data);
 
   const createMut = useMutation({
     mutationFn: async (values: ProductCategoryFormValues) => {
@@ -92,9 +96,17 @@ export function ProductCategoriesView() {
         </Button>
       </div>
 
-      <TableContainer>
+      <TableContainer
+        footer={
+          <TablePagination
+            {...pagination}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+          />
+        }
+      >
         <ProductCategoriesTable
-          rows={data}
+          rows={pagedRows}
           isPending={isPending}
           onEdit={(row) => {
             setEditing(row);

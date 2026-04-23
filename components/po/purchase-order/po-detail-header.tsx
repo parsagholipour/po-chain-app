@@ -33,6 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
+import { OrderStatusLogsDialog } from "@/components/po/order-status-logs-dialog";
 import { PoDocumentLink } from "./po-document-link";
 import { Check, ChevronLeft, FileStack, Factory, Loader2, Pencil, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -57,7 +58,9 @@ function poOrderStatusItemsForValue(currentStatus: string) {
 
 type Props = {
   po: PurchaseOrderDetail;
+  statusLogs: PurchaseOrderDetail["statusLogs"];
   onStatusChange: (status: string) => void;
+  onSaveStatusLogNote?: (logId: string, note: string | null) => Promise<void>;
   /** Distributor PO only — omit for stock orders */
   saleChannelOptions?: SaleChannel[];
   onSaleChannelChange?: (saleChannelId: string) => void;
@@ -70,10 +73,12 @@ type Props = {
 
 export function PoDetailHeader({
   po,
+  statusLogs,
   saleChannelOptions = [],
   onSaleChannelChange,
   onDocumentUpload,
   onStatusChange,
+  onSaveStatusLogNote,
   isSaving = false,
   isDocumentSaving = false,
   onDelete,
@@ -87,6 +92,10 @@ export function PoDetailHeader({
   const backLabel = isStock ? "Back to stock orders" : "Back to purchase orders";
   const orderMonoLabel = isStock ? "Stock order" : "PO";
   const statusFieldLabel = isStock ? "Order status" : "PO status";
+  const statusDialogTitle = isStock ? "Stock order status history" : "Purchase order status history";
+  const statusDialogDescription = isStock
+    ? "Newest first. Each entry shows when the stock order status changed and who changed it."
+    : "Newest first. Each entry shows when the purchase order status changed and who changed it.";
   const statusId = isStock ? "stock-order-status" : "po-status";
   const summaryAria = isStock ? "Stock order summary" : "Purchase order summary";
 
@@ -191,25 +200,34 @@ export function PoDetailHeader({
             <Label htmlFor={statusId} className="text-xs text-muted-foreground">
               {statusFieldLabel}
             </Label>
-            <Select
-              value={po.status}
-              items={poOrderStatusItemsForValue(po.status)}
-              disabled={isSaving}
-              onValueChange={(v) => {
-                if (v) onStatusChange(v);
-              }}
-            >
-              <SelectTrigger id={statusId} className="w-full sm:w-[220px]" aria-busy={isSaving}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {distributorPoStatuses.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {distributorPoStatusLabels[s] ?? s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <Select
+                value={po.status}
+                items={poOrderStatusItemsForValue(po.status)}
+                disabled={isSaving}
+                onValueChange={(v) => {
+                  if (v) onStatusChange(v);
+                }}
+              >
+                <SelectTrigger id={statusId} className="w-full sm:w-[220px]" aria-busy={isSaving}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {distributorPoStatuses.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {distributorPoStatusLabels[s] ?? s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <OrderStatusLogsDialog
+                title={statusDialogTitle}
+                description={statusDialogDescription}
+                logs={statusLogs}
+                statusLabels={distributorPoStatusLabels}
+                onSaveNote={onSaveStatusLogNote}
+              />
+            </div>
             {onDelete ? (
               <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
                 <AlertDialogTrigger

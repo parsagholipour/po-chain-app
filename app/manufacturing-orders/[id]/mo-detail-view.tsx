@@ -7,11 +7,13 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
+import { invalidateNavCounts } from "@/lib/query-invalidation";
 import { invoiceDefaultsForPivot } from "@/lib/po/invoice-defaults";
 import type {
   Manufacturer,
   ManufacturingOrderDetail,
   MoManufacturerPivot,
+  OrderStatusLog,
   Product,
 } from "@/lib/types/api";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
@@ -148,6 +150,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     },
     onSuccess: (row) => {
       qc.setQueryData(moKey, row);
+      void invalidateNavCounts(qc);
       toast.success("Updated");
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
@@ -163,6 +166,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
       qc.invalidateQueries({ queryKey: ["purchase-orders"] });
       qc.invalidateQueries({ queryKey: ["stock-orders"] });
       qc.invalidateQueries({ queryKey: ["manufacturing-order"] });
+      void invalidateNavCounts(qc);
       qc.removeQueries({ queryKey: moKey });
       toast.success("Manufacturing order deleted");
       router.push("/manufacturing-orders");
@@ -197,6 +201,35 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: moKey });
       toast.success("Invoice saved");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const saveStatusLogNote = useMutation({
+    mutationFn: async ({
+      logId,
+      note,
+    }: {
+      logId: string;
+      note: string | null;
+    }) => {
+      const { data } = await api.patch<OrderStatusLog>(`/api/order-status-logs/${logId}`, {
+        note,
+      });
+      return data;
+    },
+    onSuccess: (updatedLog) => {
+      qc.setQueryData<ManufacturingOrderDetail | undefined>(moKey, (current) =>
+        current
+          ? {
+              ...current,
+              statusLogs: current.statusLogs.map((log) =>
+                log.id === updatedLog.id ? updatedLog : log,
+              ),
+            }
+          : current,
+      );
+      toast.success("Note saved");
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
@@ -459,7 +492,11 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     <div className="mx-auto max-w-6xl space-y-6 px-4 pb-10 sm:px-6">
       <MoDetailHeader
         mo={mo}
+        statusLogs={mo.statusLogs}
         onStatusChange={(s) => patchMo.mutate({ status: s })}
+        onSaveStatusLogNote={async (logId, note) => {
+          await saveStatusLogNote.mutateAsync({ logId, note });
+        }}
         isSaving={patchMo.isPending}
         onDelete={() => deleteMo.mutateAsync()}
         isDeleting={deleteMo.isPending}
@@ -501,12 +538,22 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         sectionId="mo-manufacturers"
         title="Manufacturers & invoices"
         summary={manufacturersSummary}
-        description="Pivot status and invoices per manufacturer on this manufacturing order."
+        description="Status and invoices per manufacturer on this manufacturing order."
       >
         <PoManufacturersSection
           manufacturers={mo.manufacturers}
           hideHeading
           onPivotStatusChange={(manufacturerId, status) => {
+            const relatedAllocations = mo.lineAllocations.filter(
+              (a) => a.manufacturerId === manufacturerId,
+            );
+            const allVerified = relatedAllocations.every((a) => a.verified);
+            if (relatedAllocations.length > 0 && !allVerified) {
+              toast.error(
+                "All line allocations for this manufacturer must be verified before changing status.",
+              );
+              return;
+            }
             const row = mo.manufacturers.find((m) => m.manufacturerId === manufacturerId);
             if (row) setStatusChangeTarget({ row, targetStatus: status });
           }}
@@ -537,9 +584,23 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
           allocations={mo.lineAllocations}
           manufacturerOptions={mo.manufacturers}
           onAdd={() => setAllocOpen(true)}
-          onPatch={(purchaseOrderLineId, body) =>
-            patchAlloc.mutate({ purchaseOrderLineId, body })
-          }
+          onPatch={(purchaseOrderLineId, body) => {
+            if (body.verified === false) {
+              const alloc = mo.lineAllocations.find(
+                (a) => a.purchaseOrderLineId === purchaseOrderLineId,
+              );
+              const pivot = mo.manufacturers.find(
+                (m) => m.manufacturerId === alloc?.manufacturerId,
+              );
+              if (pivot && pivot.status !== "initial") {
+                toast.error(
+                  "You can only unverify lines while this manufacturer's pivot status is Initial.",
+                );
+                return;
+              }
+            }
+            patchAlloc.mutate({ purchaseOrderLineId, body });
+          }}
           onDelete={(purchaseOrderLineId) => deleteAlloc.mutate(purchaseOrderLineId)}
           busy={allocBusy}
           hideToolbar

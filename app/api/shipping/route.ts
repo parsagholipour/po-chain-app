@@ -9,7 +9,7 @@ import {
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { shippingDetailInclude } from "@/lib/shipping-include";
 import { shippingRowFromPrisma } from "@/lib/shipping-api";
-import { syncLinkedOrderStatusesForShipping } from "@/lib/shipping-order-status";
+import { reconcileLinkedOrderStatusesForShipping } from "@/lib/shipping-order-status";
 import {
   logisticsPartnerTypeForShippingType,
   type ShippingType,
@@ -208,7 +208,7 @@ export async function POST(request: Request) {
         });
       }
 
-      await syncLinkedOrderStatusesForShipping(tx, {
+      await reconcileLinkedOrderStatusesForShipping(tx, {
         storeId,
         manufacturingOrderIds,
         purchaseOrderIds,

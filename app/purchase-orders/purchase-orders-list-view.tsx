@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/axios";
 import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TableContainer } from "@/components/ui/table-container";
+import { TablePagination } from "@/components/ui/table-pagination";
 import {
   Select,
   SelectContent,
@@ -27,6 +29,7 @@ import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 import { apiErrorMessage } from "@/lib/api-error-message";
+import { invalidateNavCounts } from "@/lib/query-invalidation";
 import { cn } from "@/lib/utils";
 import type { Manufacturer, Product, PurchaseOrderSummary, SaleChannel } from "@/lib/types/api";
 import {
@@ -39,6 +42,7 @@ import {
   ExpandableOrderSummaryRow,
   ExpandableOrderSummaryTableHead,
 } from "@/components/po/order-list-expandable-row";
+import { usePagination } from "@/hooks/use-pagination";
 
 export type { PurchaseOrderSummary } from "@/lib/types/api";
 
@@ -67,7 +71,7 @@ function EntityTabRow({
   selectedId: string;
   onSelect: (id: string) => void;
   emptyMessage: string;
-  label: string;
+  label?: string;
   /** Omit to hide open-count on "All". `null` = loading; number = total non-closed (e.g. sum by channel). */
   allOpenCount?: number | null;
   /** e.g. "all sale channels" for aria/title. */
@@ -87,7 +91,7 @@ function EntityTabRow({
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      {label ? <p className="text-xs font-medium text-muted-foreground">{label}</p> : null}
       <div
         className="-mx-1 flex max-w-full gap-0 overflow-x-auto border-b border-border px-1 pb-px"
         role="tablist"
@@ -408,6 +412,11 @@ export function PurchaseOrdersListView() {
       return rows;
     },
   });
+  const pagination = usePagination({
+    totalItems: data.length,
+    resetDeps: [debouncedQ, status, perspective, selectedSaleChannelId, selectedManufacturerId],
+  });
+  const pagedRows = pagination.sliceItems(data);
 
   const updateProduct = useMutation({
     mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
@@ -430,6 +439,7 @@ export function PurchaseOrdersListView() {
       qc.invalidateQueries({ queryKey: ["purchase-orders"] });
       qc.invalidateQueries({ queryKey: ["manufacturing-orders"] });
       qc.invalidateQueries({ queryKey: ["manufacturing-order"] });
+      void invalidateNavCounts(qc);
       toast.success("Purchase order deleted");
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
@@ -490,7 +500,16 @@ export function PurchaseOrdersListView() {
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+      <TableContainer
+        className="shadow-sm"
+        footer={
+          <TablePagination
+            {...pagination}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+          />
+        }
+      >
         <Tabs
           value={perspective}
           onValueChange={(v) => {
@@ -523,7 +542,6 @@ export function PurchaseOrdersListView() {
                 selectedId={selectedSaleChannelId}
                 onSelect={setSelectedSaleChannelId}
                 emptyMessage="No sale channels yet. Add one under Sale channels."
-                label="Sale channel"
                 allOpenCount={saleChannelAllOpenCount}
                 allCountLabel="all sale channels"
                 entitiesLoading={saleChannelsPending}
@@ -535,7 +553,7 @@ export function PurchaseOrdersListView() {
                 onStatusChange={setStatus}
                 filterReady={filterReady}
                 isPending={isPending}
-                data={data}
+                data={pagedRows}
                 emptyNoScopeMessage="Loading…"
                 emptyFilteredMessage={
                   selectedSaleChannelId === PO_LIST_ALL_SCOPE_ID
@@ -556,7 +574,6 @@ export function PurchaseOrdersListView() {
                 selectedId={selectedManufacturerId}
                 onSelect={setSelectedManufacturerId}
                 emptyMessage="No manufacturers yet. Add one under Manufacturers."
-                label="Manufacturer"
                 allCountLabel="all manufacturers"
                 entitiesLoading={manufacturersPending}
               />
@@ -567,7 +584,7 @@ export function PurchaseOrdersListView() {
                 onStatusChange={setStatus}
                 filterReady={filterReady}
                 isPending={isPending}
-                data={data}
+                data={pagedRows}
                 emptyNoScopeMessage="Loading…"
                 emptyFilteredMessage={
                   selectedManufacturerId === PO_LIST_ALL_SCOPE_ID
@@ -581,7 +598,7 @@ export function PurchaseOrdersListView() {
             </div>
           </TabsContent>
         </Tabs>
-      </div>
+      </TableContainer>
 
       <ProductUpsertDialog
         open={productEditOpen}

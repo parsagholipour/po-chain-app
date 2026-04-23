@@ -9,6 +9,8 @@ import { LogisticsPartnersTable } from "./logistics-partners-table";
 import { LogisticsPartnerUpsertDialog } from "./logistics-partner-upsert-dialog";
 import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/components/confirm-provider";
+import { TableContainer } from "@/components/ui/table-container";
+import { TablePagination } from "@/components/ui/table-pagination";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
@@ -17,6 +19,7 @@ import {
   type LogisticsPartnerType,
 } from "@/lib/shipping";
 import { invalidateLogisticsPartnerQueries } from "@/components/po/shipping/query-utils";
+import { usePagination } from "@/hooks/use-pagination";
 
 export type { LogisticsPartner } from "@/lib/types/api";
 
@@ -38,6 +41,8 @@ export function LogisticsPartnersView() {
       return rows;
     },
   });
+  const pagination = usePagination({ totalItems: data.length, resetDeps: [activeTab] });
+  const pagedRows = pagination.sliceItems(data);
 
   const deleteMut = useMutation({
     mutationFn: async (id: string) => {
@@ -91,7 +96,16 @@ export function LogisticsPartnersView() {
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+      <TableContainer
+        className="shadow-sm"
+        footer={
+          <TablePagination
+            {...pagination}
+            onPageChange={pagination.setPage}
+            onPageSizeChange={pagination.setPageSize}
+          />
+        }
+      >
         <Tabs
           value={activeTab}
           onValueChange={(value) => setActiveTab(value as LogisticsPartnerType)}
@@ -114,7 +128,7 @@ export function LogisticsPartnersView() {
           <TabsContent value={activeTab} className="mt-0 outline-none">
             <div className="p-5 pt-4">
               <LogisticsPartnersTable
-                partners={data}
+                partners={pagedRows}
                 isPending={isPending}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
@@ -122,7 +136,7 @@ export function LogisticsPartnersView() {
             </div>
           </TabsContent>
         </Tabs>
-      </div>
+      </TableContainer>
 
       <LogisticsPartnerUpsertDialog
         open={open}

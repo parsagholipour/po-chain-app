@@ -51,7 +51,13 @@ export function OverviewView() {
               <div key={idx} className="h-28 animate-pulse rounded-xl border bg-muted/20" />
             ))
           : (overview.data?.kpis ?? []).map((kpi) => (
-              <KpiCard key={kpi.label} label={kpi.label} value={kpi.value} deltaPct={kpi.deltaPct} />
+              <KpiCard
+                key={kpi.label}
+                label={kpi.label}
+                value={kpi.value}
+                deltaPct={kpi.deltaPct}
+                valueFormat={kpi.valueFormat}
+              />
             ))}
       </div>
 

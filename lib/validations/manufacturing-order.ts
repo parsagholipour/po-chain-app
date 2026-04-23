@@ -14,6 +14,7 @@ export const manufacturingOrderStatusSchema = z.enum([
 ]);
 
 const optionalIsoDateTime = z.union([z.string().datetime(), z.null()]).optional();
+const optionalNote = z.string().max(5000).nullable().optional();
 
 export const moManufacturerPatchSchema = z.object({
   status: z
@@ -32,17 +33,22 @@ export const moManufacturerPatchSchema = z.object({
   depositPaidAmount: z.number().nonnegative().nullable().optional(),
   depositRefNumber: z.string().nullable().optional(),
   depositDocumentKey: z.string().nullable().optional(),
+  depositNote: optionalNote,
 
   manufacturingStartedAt: optionalIsoDateTime,
   estimatedCompletionAt: optionalIsoDateTime,
+  manufacturingNote: optionalNote,
 
   balancePaidAt: optionalIsoDateTime,
   balancePaidAmount: z.number().nonnegative().nullable().optional(),
   balanceRefNumber: z.string().nullable().optional(),
   balanceDocumentKey: z.string().nullable().optional(),
+  balanceNote: optionalNote,
 
   readyAt: optionalIsoDateTime,
+  readyNote: optionalNote,
   pickedUpAt: optionalIsoDateTime,
+  pickedUpNote: optionalNote,
 });
 
 export const manufacturingOrderCreateSchema = z.object({

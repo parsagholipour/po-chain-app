@@ -35,14 +35,23 @@ export async function generateMetadata({
       storeId: storeContext.storeId,
       type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
     },
-    select: { name: true, number: true },
+    select: {
+      name: true,
+      saleChannel: {
+        select: {
+          name: true,
+        },
+      },
+    },
   });
 
   if (!row) {
-    return { title: "Purchase order · Not found" };
+    return { title: "Purchase order - Not found" };
   }
 
-  return { title: `${row.name} · PO #${row.number}` };
+  return {
+    title: row.saleChannel?.name ? `${row.name} - ${row.saleChannel.name}` : row.name,
+  };
 }
 
 export default async function PurchaseOrderDetailPage({

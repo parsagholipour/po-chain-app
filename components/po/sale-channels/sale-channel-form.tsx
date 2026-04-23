@@ -2,9 +2,10 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRef, useState } from "react";
-import { Controller, useForm, useFormState, useWatch } from "react-hook-form";
 import { z } from "zod";
+import { Controller, useForm, useFormState, useWatch, type Resolver } from "react-hook-form";
 import { uploadFileToStorage } from "@/lib/upload-client";
+import { saleChannelCreateSchema } from "@/lib/validations/master-data";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/field";
 import { ImageFileInput } from "@/components/ui/image-file-input";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -36,13 +38,20 @@ const saleChannelTypeSelectItems = (
   ["distributor", "amazon", "cjdropshipping"] as const
 ).map((t) => ({ value: t, label: saleChannelTypeLabels[t] }));
 
-const schema = z.object({
-  name: z.string().min(1, "Required"),
-  logoKey: z.string().nullable().optional(),
-  type: z.enum(["distributor", "amazon", "cjdropshipping"]),
-});
+export type SaleChannelFormValues = z.infer<typeof saleChannelCreateSchema>;
 
-export type SaleChannelFormValues = z.infer<typeof schema>;
+export function emptySaleChannelFormValues(): SaleChannelFormValues {
+  return {
+    name: "",
+    type: "distributor",
+    logoKey: null,
+    contactNumber: "",
+    address: "",
+    email: "",
+    link: "",
+    notes: "",
+  };
+}
 
 type Props = {
   defaultValues: SaleChannelFormValues;
@@ -57,7 +66,7 @@ export function SaleChannelForm({ defaultValues, editingId, onSubmit, onCancel }
   const [removeStoredLogo, setRemoveStoredLogo] = useState(false);
 
   const form = useForm<SaleChannelFormValues>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(saleChannelCreateSchema) as Resolver<SaleChannelFormValues>,
     defaultValues,
   });
   const { isSubmitting } = useFormState({ control: form.control });
@@ -121,6 +130,46 @@ export function SaleChannelForm({ defaultValues, editingId, onSubmit, onCancel }
                 )}
               />
               <FieldError errors={[form.formState.errors.type]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.contactNumber} className="gap-1.5">
+            <FieldLabel htmlFor="scf-contact">Contact number</FieldLabel>
+            <FieldContent>
+              <Input id="scf-contact" {...form.register("contactNumber")} placeholder="+971…" />
+              <FieldError errors={[form.formState.errors.contactNumber]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.email} className="gap-1.5">
+            <FieldLabel htmlFor="scf-email">Email</FieldLabel>
+            <FieldContent>
+              <Input
+                id="scf-email"
+                type="email"
+                {...form.register("email")}
+                placeholder="name@example.com"
+              />
+              <FieldError errors={[form.formState.errors.email]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.link} className="gap-1.5">
+            <FieldLabel htmlFor="scf-link">Website link</FieldLabel>
+            <FieldContent>
+              <Input id="scf-link" {...form.register("link")} placeholder="https://…" />
+              <FieldError errors={[form.formState.errors.link]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.address} className="gap-1.5">
+            <FieldLabel htmlFor="scf-address">Address</FieldLabel>
+            <FieldContent>
+              <Textarea id="scf-address" rows={3} {...form.register("address")} placeholder="Street, city…" />
+              <FieldError errors={[form.formState.errors.address]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.notes} className="gap-1.5">
+            <FieldLabel htmlFor="scf-notes">Notes</FieldLabel>
+            <FieldContent>
+              <Textarea id="scf-notes" rows={3} {...form.register("notes")} />
+              <FieldError errors={[form.formState.errors.notes]} />
             </FieldContent>
           </Field>
           <Field className="gap-1.5">

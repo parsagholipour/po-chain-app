@@ -4,11 +4,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { uploadFileToStorage } from "@/lib/upload-client";
-import type { Manufacturer, Product, PurchaseOrderDetail, SaleChannel } from "@/lib/types/api";
+import type {
+  Manufacturer,
+  OrderStatusLog,
+  Product,
+  PurchaseOrderDetail,
+  SaleChannel,
+} from "@/lib/types/api";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
 import { AddPoLineDialog } from "@/components/po/purchase-order/add-po-line-dialog";
@@ -16,6 +22,11 @@ import { PoDetailHeader } from "@/components/po/purchase-order/po-detail-header"
 import { PoLinesSection } from "@/components/po/purchase-order/po-lines-section";
 import { PoLinkedMosSection } from "@/components/po/purchase-order/po-linked-mos-section";
 import { PoShipmentsSection } from "@/components/po/purchase-order/po-shipments-section";
+import { PoOrderInvoiceSection } from "@/components/po/purchase-order/po-order-invoice-section";
+import { InvoiceUpsertDialog } from "@/components/po/purchase-order/invoice-upsert-dialog";
+import { invoiceDefaultsForPivot } from "@/lib/po/invoice-defaults";
+import type { InvoiceApiPayload, InvoiceFormValues } from "@/lib/po/invoice-form";
+import { invalidateNavCounts } from "@/lib/query-invalidation";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -94,7 +105,50 @@ export function StockOrderDetailView({ stockOrderId }: { stockOrderId: string })
     },
     onSuccess: (row) => {
       qc.setQueryData(soKey, row);
+      void invalidateNavCounts(qc);
       toast.success("Updated");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const patchInvoice = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
+      await api.patch(`/api/invoices/${id}`, body);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: soKey });
+      toast.success("Invoice saved");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const saveStatusLogNote = useMutation({
+    mutationFn: async ({
+      logId,
+      note,
+    }: {
+      logId: string;
+      note: string | null;
+    }) => {
+      const { data } = await api.patch<OrderStatusLog>(`/api/order-status-logs/${logId}`, {
+        note,
+      });
+      return data;
+    },
+    onSuccess: (updatedLog) => {
+      qc.setQueryData<Extract<PurchaseOrderDetail, { type: "stock" }> | undefined>(
+        soKey,
+        (current) =>
+          current
+            ? {
+                ...current,
+                statusLogs: current.statusLogs.map((log) =>
+                  log.id === updatedLog.id ? updatedLog : log,
+                ),
+              }
+            : current,
+      );
+      toast.success("Note saved");
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
@@ -107,6 +161,7 @@ export function StockOrderDetailView({ stockOrderId }: { stockOrderId: string })
       qc.invalidateQueries({ queryKey: ["stock-orders"] });
       qc.invalidateQueries({ queryKey: ["manufacturing-orders"] });
       qc.invalidateQueries({ queryKey: ["manufacturing-order"] });
+      void invalidateNavCounts(qc);
       qc.removeQueries({ queryKey: soKey });
       toast.success("Stock order deleted");
       router.push("/stock-orders");
@@ -170,6 +225,7 @@ export function StockOrderDetailView({ stockOrderId }: { stockOrderId: string })
   const [productEditOpen, setProductEditOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isDocumentSaving, setIsDocumentSaving] = useState(false);
+  const [invoiceDialogMode, setInvoiceDialogMode] = useState<"create" | "edit" | null>(null);
 
   async function saveProductFromSo(payload: {
     id?: string;
@@ -215,6 +271,33 @@ export function StockOrderDetailView({ stockOrderId }: { stockOrderId: string })
   }
 
   const linkedMos = po?.manufacturingOrderPurchaseOrders.map((r) => r.manufacturingOrder) ?? [];
+
+  const invoiceDialogDefaults = useMemo((): InvoiceFormValues => {
+    if (!po || !invoiceDialogMode) {
+      return { invoiceNumber: "" };
+    }
+    return invoiceDefaultsForPivot(
+      { invoice: po.invoice },
+      invoiceDialogMode === "edit" ? "edit" : "create",
+    );
+  }, [po, invoiceDialogMode]);
+
+  const invoiceResetToken = po
+    ? `so-invoice-${invoiceDialogMode}-${po.invoice?.id ?? "new"}`
+    : "";
+
+  async function submitStockOrderInvoice(payload: InvoiceApiPayload) {
+    if (!po || !invoiceDialogMode) return;
+    if (invoiceDialogMode === "edit" && po.invoice) {
+      await patchInvoice.mutateAsync({
+        id: po.invoice.id,
+        body: payload,
+      });
+    } else {
+      await patchSo.mutateAsync({ invoice: payload });
+    }
+    setInvoiceDialogMode(null);
+  }
 
   if (isPending) {
     return <StockOrderDetailSkeleton />;
@@ -290,14 +373,24 @@ export function StockOrderDetailView({ stockOrderId }: { stockOrderId: string })
     <div className="space-y-8">
       <PoDetailHeader
         po={po}
+        statusLogs={po.statusLogs}
         saleChannelOptions={nonDistributorSaleChannelOptions}
         onStatusChange={(s) => patchSo.mutate({ status: s })}
+        onSaveStatusLogNote={async (logId, note) => {
+          await saveStatusLogNote.mutateAsync({ logId, note });
+        }}
         onSaleChannelChange={(saleChannelId) => patchSo.mutate({ saleChannelId })}
         onDocumentUpload={uploadDocument}
         isSaving={patchSo.isPending}
         isDocumentSaving={isDocumentSaving}
         onDelete={() => deleteSo.mutateAsync()}
         isDeleting={deleteSo.isPending}
+      />
+
+      <PoOrderInvoiceSection
+        invoice={po.invoice}
+        onCreate={() => setInvoiceDialogMode("create")}
+        onEdit={() => setInvoiceDialogMode("edit")}
       />
 
       <PoLinesSection
@@ -339,6 +432,18 @@ export function StockOrderDetailView({ stockOrderId }: { stockOrderId: string })
         editing={editingProduct}
         manufacturers={manufacturers}
         onSave={saveProductFromSo}
+      />
+
+      <InvoiceUpsertDialog
+        open={!!invoiceDialogMode}
+        onOpenChange={(o) => {
+          if (!o) setInvoiceDialogMode(null);
+        }}
+        title={invoiceDialogMode === "edit" ? "Edit invoice" : "Create invoice"}
+        defaultValues={invoiceDialogDefaults}
+        existingDocumentKey={po.invoice?.documentKey ?? null}
+        resetToken={invoiceResetToken}
+        onSubmit={submitStockOrderInvoice}
       />
     </div>
   );

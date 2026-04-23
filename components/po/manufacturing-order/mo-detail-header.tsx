@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { OrderStatusLogsDialog } from "@/components/po/order-status-logs-dialog";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -46,7 +47,9 @@ function moOrderStatusItemsForValue(currentStatus: string) {
 
 type Props = {
   mo: ManufacturingOrderDetail;
+  statusLogs: ManufacturingOrderDetail["statusLogs"];
   onStatusChange: (status: string) => void;
+  onSaveStatusLogNote?: (logId: string, note: string | null) => Promise<void>;
   isSaving?: boolean;
   /** Deletes the MO (linked POs and their lines are kept). */
   onDelete?: () => Promise<void>;
@@ -55,7 +58,9 @@ type Props = {
 
 export function MoDetailHeader({
   mo,
+  statusLogs,
   onStatusChange,
+  onSaveStatusLogNote,
   isSaving = false,
   onDelete,
   isDeleting = false,
@@ -124,25 +129,34 @@ export function MoDetailHeader({
             <Label htmlFor="mo-status" className="text-xs text-muted-foreground">
               Manufacturing status
             </Label>
-            <Select
-              value={mo.status}
-              items={moOrderStatusItemsForValue(mo.status)}
-              disabled={isSaving}
-              onValueChange={(v) => {
-                if (v) onStatusChange(v);
-              }}
-            >
-              <SelectTrigger id="mo-status" className="w-full sm:w-[220px]" aria-busy={isSaving}>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {moStatuses.map((s) => (
-                  <SelectItem key={s} value={s}>
-                    {moStatusLabels[s] ?? s}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex w-full items-center gap-2 sm:w-auto">
+              <Select
+                value={mo.status}
+                items={moOrderStatusItemsForValue(mo.status)}
+                disabled={isSaving}
+                onValueChange={(v) => {
+                  if (v) onStatusChange(v);
+                }}
+              >
+                <SelectTrigger id="mo-status" className="w-full sm:w-[220px]" aria-busy={isSaving}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {moStatuses.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {moStatusLabels[s] ?? s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <OrderStatusLogsDialog
+                title="Manufacturing order status history"
+                description="Newest first. Each entry shows when the manufacturing order status changed and who changed it."
+                logs={statusLogs}
+                statusLabels={moStatusLabels}
+                onSaveNote={onSaveStatusLogNote}
+              />
+            </div>
             {onDelete ? (
               <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
                 <AlertDialogTrigger

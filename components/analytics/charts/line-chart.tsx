@@ -2,6 +2,7 @@
 
 import { Line } from "react-chartjs-2";
 import type { ChartData, ChartOptions } from "chart.js";
+import { formatUsd } from "@/lib/format-usd";
 import { cn } from "@/lib/utils";
 import { CHART_PALETTE, registerChartJs, withAlpha } from "./chart-setup";
 
@@ -53,7 +54,7 @@ export function LineChart({
           label: (ctx) => {
             const value = Number(ctx.parsed.y ?? 0);
             const formatted = currency
-              ? value.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 })
+              ? formatUsd(value, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
               : value.toLocaleString();
             return `${ctx.dataset.label}: ${formatted}`;
           },
@@ -72,7 +73,7 @@ export function LineChart({
         ticks: {
           callback: (value) =>
             currency
-              ? `$${Number(value).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+              ? formatUsd(Number(value), { minimumFractionDigits: 0, maximumFractionDigits: 0 })
               : Number(value).toLocaleString(),
         },
       },

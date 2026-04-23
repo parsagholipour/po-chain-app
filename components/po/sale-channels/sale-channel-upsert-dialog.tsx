@@ -7,7 +7,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import type { SaleChannel } from "@/lib/types/api";
-import { SaleChannelForm, type SaleChannelFormValues } from "./sale-channel-form";
+import {
+  SaleChannelForm,
+  emptySaleChannelFormValues,
+  type SaleChannelFormValues,
+} from "./sale-channel-form";
 
 type Props = {
   open: boolean;
@@ -19,12 +23,21 @@ type Props = {
 export function SaleChannelUpsertDialog({ open, onOpenChange, editing, onSave }: Props) {
   const resetKey = editing?.id ?? "new";
   const defaultValues: SaleChannelFormValues = editing
-    ? { name: editing.name, type: editing.type, logoKey: editing.logoKey }
-    : { name: "", type: "distributor", logoKey: null };
+    ? {
+        name: editing.name,
+        type: editing.type,
+        logoKey: editing.logoKey,
+        contactNumber: editing.contactNumber ?? "",
+        address: editing.address ?? "",
+        email: editing.email ?? "",
+        link: editing.link ?? "",
+        notes: editing.notes ?? "",
+      }
+    : emptySaleChannelFormValues();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit sale channel" : "New sale channel"}</DialogTitle>
         </DialogHeader>
