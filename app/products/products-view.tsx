@@ -1,26 +1,37 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
-import type { Manufacturer, Product } from "@/lib/types/api";
+import type { Manufacturer, Product, ProductCategory } from "@/lib/types/api";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import { ProductsTable } from "@/components/po/products/products-table";
 import type { ProductFormValues } from "@/components/po/products/product-form";
 import { Button } from "@/components/ui/button";
+import { ListFilters } from "@/components/ui/list-filters";
 import { TableContainer } from "@/components/ui/table-container";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { parseUuidParam, useClearIdSearchParam } from "@/lib/url-id-param";
 import { usePagination } from "@/hooks/use-pagination";
+import {
+  LIST_FILTER_ALL_VALUE,
+  useDebouncedValue,
+  useListFilterState,
+} from "@/hooks/use-list-filters";
 
 export type { Product } from "@/lib/types/api";
 
 const productsKey = ["products"] as const;
 const manufacturersKey = ["manufacturers"] as const;
+const productCategoriesKey = ["product-categories"] as const;
+const uncategorizedFilterValue = "__uncategorized__";
+const productFilterDefaults: Record<"category", string> = {
+  category: LIST_FILTER_ALL_VALUE,
+};
 
 export function ProductsView() {
   const qc = useQueryClient();
@@ -30,6 +41,10 @@ export function ProductsView() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const productFilters = useListFilterState({
+    initialFilters: productFilterDefaults,
+  });
+  const debouncedSearch = useDebouncedValue(productFilters.search);
 
   const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: manufacturersKey,
@@ -40,13 +55,45 @@ export function ProductsView() {
   });
 
   const { data = [], isPending } = useQuery({
-    queryKey: productsKey,
+    queryKey: [...productsKey, debouncedSearch, productFilters.filters.category],
     queryFn: async () => {
-      const { data: rows } = await api.get<Product[]>("/api/products");
+      const params = new URLSearchParams();
+      const q = debouncedSearch.trim();
+      if (q) params.set("q", q);
+      if (productFilters.filters.category !== LIST_FILTER_ALL_VALUE) {
+        params.set(
+          "categoryId",
+          productFilters.filters.category === uncategorizedFilterValue
+            ? "none"
+            : productFilters.filters.category,
+        );
+      }
+      const qs = params.toString();
+      const { data: rows } = await api.get<Product[]>(`/api/products${qs ? `?${qs}` : ""}`);
       return rows;
     },
   });
-  const pagination = usePagination({ totalItems: data.length });
+
+  const { data: categories = [], isPending: categoriesPending } = useQuery({
+    queryKey: productCategoriesKey,
+    queryFn: async () => {
+      const { data: rows } = await api.get<ProductCategory[]>("/api/product-categories");
+      return rows;
+    },
+  });
+
+  const categoryFilterOptions = useMemo(
+    () => [
+      { value: uncategorizedFilterValue, label: "No category" },
+      ...categories.map((category) => ({ value: category.id, label: category.name })),
+    ],
+    [categories],
+  );
+
+  const pagination = usePagination({
+    totalItems: data.length,
+    resetDeps: [debouncedSearch, productFilters.filters.category],
+  });
   const pagedRows = pagination.sliceItems(data);
 
   useEffect(() => {
@@ -177,9 +224,37 @@ export function ProductsView() {
           />
         }
       >
+        <ListFilters
+          className="border-b border-border/80 bg-muted/20"
+          searchValue={productFilters.search}
+          onSearchChange={productFilters.setSearch}
+          searchAriaLabel="Search products"
+          searchPlaceholder="Search products..."
+          selects={[
+            {
+              key: "category",
+              value: productFilters.filters.category,
+              onValueChange: (value) => productFilters.setFilter("category", value),
+              allLabel: "All categories",
+              ariaLabel: "Filter by category",
+              placeholder: "Category",
+              options: categoryFilterOptions,
+              disabled: categoriesPending,
+            },
+          ]}
+          hasActiveFilters={productFilters.hasActiveFilters}
+          onClear={productFilters.resetFilters}
+          resultCount={data.length}
+          totalCount={data.length}
+        />
         <ProductsTable
           rows={pagedRows}
           isPending={isPending}
+          emptyMessage={
+            productFilters.hasActiveFilters
+              ? "No products match your filters."
+              : "No products yet."
+          }
           onEdit={(row) => {
             setEditing(row);
             setOpen(true);

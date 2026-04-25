@@ -1,18 +1,42 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { productCreateSchema } from "@/lib/validations/master-data";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { requireStoreContext } from "@/lib/store-context";
+import type { Prisma } from "@/app/generated/prisma/client";
 
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
   const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
 
+  const { searchParams } = new URL(request.url);
+  const q = searchParams.get("q")?.trim() ?? "";
+  const categoryIdRaw = searchParams.get("categoryId");
+
+  const where: Prisma.ProductWhereInput = { storeId };
+  if (q.length > 0) {
+    where.OR = [
+      { name: { contains: q, mode: "insensitive" } },
+      { sku: { contains: q, mode: "insensitive" } },
+      { defaultManufacturer: { name: { contains: q, mode: "insensitive" } } },
+      { category: { name: { contains: q, mode: "insensitive" } } },
+    ];
+  }
+  if (categoryIdRaw === "none") {
+    where.categoryId = null;
+  } else {
+    const categoryId = categoryIdRaw ? z.uuid().safeParse(categoryIdRaw) : null;
+    if (categoryId?.success) {
+      where.categoryId = categoryId.data;
+    }
+  }
+
   const rows = await prisma.product.findMany({
-    where: { storeId },
+    where,
     orderBy: { name: "asc" },
     include: {
       defaultManufacturer: true,

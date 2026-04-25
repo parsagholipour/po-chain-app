@@ -20,11 +20,18 @@ import { PriceView } from "@/components/ui/price-view";
 type Props = {
   rows: Product[];
   isPending: boolean;
+  emptyMessage?: string;
   onEdit: (row: Product) => void;
   onDelete: (row: Product) => void;
 };
 
-export function ProductsTable({ rows, isPending, onEdit, onDelete }: Props) {
+export function ProductsTable({
+  rows,
+  isPending,
+  emptyMessage = "No products yet.",
+  onEdit,
+  onDelete,
+}: Props) {
   const confirm = useConfirm();
 
   return (
@@ -48,13 +55,13 @@ export function ProductsTable({ rows, isPending, onEdit, onDelete }: Props) {
         {isPending ? (
           <TableRow>
             <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
-              Loading…
+              Loading...
             </TableCell>
           </TableRow>
         ) : rows.length === 0 ? (
           <TableRow>
             <TableCell colSpan={11} className="h-24 text-center text-muted-foreground">
-              No products yet.
+              {emptyMessage}
             </TableCell>
           </TableRow>
         ) : (
