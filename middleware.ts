@@ -1,9 +1,26 @@
 import NextAuth from "next-auth";
+import { NextResponse } from "next/server";
 import authConfig from "./auth.config";
+import { isSuperAdminEmail } from "./lib/super-admin-constants";
 
 const { auth } = NextAuth(authConfig);
 
-export default auth;
+export default auth((req) => {
+  const pathname = req.nextUrl.pathname;
+
+  if (pathname.startsWith("/super-admin") && req.auth?.user?.email) {
+    if (!isSuperAdminEmail(req.auth.user.email)) {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+  }
+
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", pathname);
+
+  return NextResponse.next({
+    request: { headers: requestHeaders },
+  });
+});
 
 export const config = {
   matcher: [
