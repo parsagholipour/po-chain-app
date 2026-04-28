@@ -21,6 +21,7 @@ const MODEL_ORDER = [
   "Store",
   "UserStore",
   "ProductCategory",
+  "ProductType",
   "Manufacturer",
   "SaleChannel",
   "Product",

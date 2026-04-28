@@ -77,6 +77,7 @@ export function RevenueView() {
           <TabsList variant="line">
             <TabsTrigger value="channel">By channel</TabsTrigger>
             <TabsTrigger value="category">By category</TabsTrigger>
+            <TabsTrigger value="type">By type</TabsTrigger>
             <TabsTrigger value="manufacturer">By manufacturer</TabsTrigger>
           </TabsList>
         </Tabs>

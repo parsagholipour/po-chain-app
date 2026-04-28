@@ -39,6 +39,8 @@ export async function GET(request: Request) {
           select: {
             categoryId: true,
             category: { select: { name: true } },
+            typeId: true,
+            type: { select: { name: true } },
             defaultManufacturerId: true,
             defaultManufacturer: { select: { name: true } },
           },
@@ -51,6 +53,8 @@ export async function GET(request: Request) {
       const target =
         by === "category"
           ? { id: line.product.categoryId ?? "uncategorized", label: line.product.category?.name ?? "Uncategorized" }
+          : by === "type"
+            ? { id: line.product.typeId ?? "untyped", label: line.product.type?.name ?? "No type" }
           : {
               id: line.product.defaultManufacturerId,
               label: line.product.defaultManufacturer.name,

@@ -107,7 +107,10 @@ const nav: readonly NavItem[] = [
     href: "/products",
     label: "Products",
     icon: Boxes,
-    children: [{ href: "/product-categories", label: "Product Categories" }],
+    children: [
+      { href: "/product-categories", label: "Product Categories" },
+      { href: "/product-types", label: "Product Types" },
+    ],
   },
   { kind: "link", href: "/sale-channels", label: "Sale channels", icon: Radio },
   { kind: "link", href: "/logistics-partners", label: "Logistics Partners", icon: Truck },

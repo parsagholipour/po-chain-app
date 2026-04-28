@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { productUpdateSchema } from "@/lib/validations/master-data";
+import { productTypeUpdateSchema } from "@/lib/validations/master-data";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { requireStoreContext } from "@/lib/store-context";
 import { z } from "zod";
@@ -21,9 +21,8 @@ export async function GET(
   const pid = paramsSchema.safeParse({ id });
   if (!pid.success) return jsonFromZod(pid.error);
 
-  const row = await prisma.product.findFirst({
+  const row = await prisma.productType.findFirst({
     where: { id: pid.data.id, storeId },
-    include: { defaultManufacturer: true, category: true, type: true },
   });
   if (!row) return jsonError("Not found", 404);
   return NextResponse.json(row);
@@ -48,62 +47,22 @@ export async function PATCH(
     return jsonError("Invalid JSON", 400);
   }
 
-  const parsed = productUpdateSchema.safeParse(body);
+  const parsed = productTypeUpdateSchema.safeParse(body);
   if (!parsed.success) return jsonFromZod(parsed.error);
   if (Object.keys(parsed.data).length === 0) {
     return jsonError("No fields to update", 400);
   }
 
   try {
-    const existing = await prisma.product.findFirst({
+    const existing = await prisma.productType.findFirst({
       where: { id: pid.data.id, storeId },
       select: { id: true },
     });
     if (!existing) return jsonError("Not found", 404);
 
-    if (parsed.data.defaultManufacturerId) {
-      const manufacturer = await prisma.manufacturer.findFirst({
-        where: {
-          id: parsed.data.defaultManufacturerId,
-          storeId,
-        },
-        select: { id: true },
-      });
-      if (!manufacturer) {
-        return jsonError("Default manufacturer was not found", 400);
-      }
-    }
-
-    if (parsed.data.categoryId) {
-      const category = await prisma.productCategory.findFirst({
-        where: {
-          id: parsed.data.categoryId,
-          storeId,
-        },
-        select: { id: true },
-      });
-      if (!category) {
-        return jsonError("Product category was not found", 400);
-      }
-    }
-
-    if (parsed.data.typeId) {
-      const type = await prisma.productType.findFirst({
-        where: {
-          id: parsed.data.typeId,
-          storeId,
-        },
-        select: { id: true },
-      });
-      if (!type) {
-        return jsonError("Product type was not found", 400);
-      }
-    }
-
-    const row = await prisma.product.update({
+    const row = await prisma.productType.update({
       where: { id: pid.data.id },
       data: parsed.data,
-      include: { defaultManufacturer: true, category: true, type: true },
     });
     return NextResponse.json(row);
   } catch (e) {
@@ -126,7 +85,7 @@ export async function DELETE(
   if (!pid.success) return jsonFromZod(pid.error);
 
   try {
-    const deleted = await prisma.product.deleteMany({
+    const deleted = await prisma.productType.deleteMany({
       where: { id: pid.data.id, storeId },
     });
     if (deleted.count === 0) return jsonError("Not found", 404);

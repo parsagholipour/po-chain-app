@@ -132,6 +132,7 @@ model Store {
   customFieldDefinitions               CustomFieldDefinition[]
   customFieldValues                    CustomFieldValue[]
   productCategories                    ProductCategory[]
+  productTypes                         ProductType[]
   purchaseOrderOsds                    PurchaseOrderOsd[]
   purchaseOrderOsdLines                PurchaseOrderOsdLine[]
   orderStatusLogs                      OrderStatusLog[]
@@ -175,6 +176,7 @@ model User {
   manufacturingOrderPurchaseOrderLinesCreated ManufacturingOrderPurchaseOrderLine[] @relation("MOPurchaseOrderLineCreatedBy")
   customFieldDefinitionsCreated               CustomFieldDefinition[]               @relation("CustomFieldDefinitionCreatedBy")
   productCategoriesCreated                    ProductCategory[]                     @relation("ProductCategoryCreatedBy")
+  productTypesCreated                         ProductType[]                         @relation("ProductTypeCreatedBy")
   purchaseOrderOsdsCreated                    PurchaseOrderOsd[]                    @relation("PurchaseOrderOsdCreatedBy")
   orderStatusLogsCreated                      OrderStatusLog[]
 }
@@ -240,6 +242,8 @@ model Product {
   defaultManufacturer   Manufacturer     @relation("ProductDefaultManufacturer", fields: [defaultManufacturerId], references: [id], onDelete: Restrict)
   categoryId            String?          @db.Uuid
   category              ProductCategory? @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  typeId                String?          @db.Uuid
+  type                  ProductType?     @relation(fields: [typeId], references: [id], onDelete: Restrict)
   verified              Boolean          @default(false)
   storeId               String           @db.Uuid
   store                 Store            @relation(fields: [storeId], references: [id], onDelete: Restrict)
@@ -254,6 +258,7 @@ model Product {
   @@index([storeId, name])
   @@index([storeId, defaultManufacturerId])
   @@index([storeId, categoryId])
+  @@index([storeId, typeId])
   @@index([storeId, createdAt])
   @@index([storeId, verified])
   @@index([storeId], where: raw("\"cost\" IS NULL OR \"price\" IS NULL"), name: "Product_storeId_missing_pricing_idx")
@@ -268,6 +273,22 @@ model ProductCategory {
   updatedAt   DateTime @updatedAt
   createdById String   @db.Uuid
   createdBy   User     @relation("ProductCategoryCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  products Product[]
+
+  @@index([storeId, name])
+  @@index([storeId, createdAt])
+}
+
+model ProductType {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  storeId     String   @db.Uuid
+  store       Store    @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String   @db.Uuid
+  createdBy   User     @relation("ProductTypeCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   products Product[]
 

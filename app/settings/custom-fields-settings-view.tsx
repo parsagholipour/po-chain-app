@@ -17,6 +17,7 @@ import { usePagination } from "@/hooks/use-pagination";
 const ENTITY_TYPES = [
   { value: "product", label: "Products" },
   { value: "product_category", label: "Product Categories" },
+  { value: "product_type", label: "Product Types" },
   { value: "manufacturer", label: "Manufacturers" },
   { value: "sale_channel", label: "Sale Channels" },
   { value: "logistics_partner", label: "Logistics Partners" },

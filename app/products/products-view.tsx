@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
-import type { Manufacturer, Product, ProductCategory } from "@/lib/types/api";
+import type { Manufacturer, Product, ProductCategory, ProductType } from "@/lib/types/api";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import { ProductsTable } from "@/components/po/products/products-table";
 import type { ProductFormValues } from "@/components/po/products/product-form";
@@ -28,9 +28,12 @@ export type { Product } from "@/lib/types/api";
 const productsKey = ["products"] as const;
 const manufacturersKey = ["manufacturers"] as const;
 const productCategoriesKey = ["product-categories"] as const;
+const productTypesKey = ["product-types"] as const;
 const uncategorizedFilterValue = "__uncategorized__";
-const productFilterDefaults: Record<"category", string> = {
+const untypedFilterValue = "__untyped__";
+const productFilterDefaults: Record<"category" | "type", string> = {
   category: LIST_FILTER_ALL_VALUE,
+  type: LIST_FILTER_ALL_VALUE,
 };
 
 export function ProductsView() {
@@ -55,7 +58,12 @@ export function ProductsView() {
   });
 
   const { data = [], isPending } = useQuery({
-    queryKey: [...productsKey, debouncedSearch, productFilters.filters.category],
+    queryKey: [
+      ...productsKey,
+      debouncedSearch,
+      productFilters.filters.category,
+      productFilters.filters.type,
+    ],
     queryFn: async () => {
       const params = new URLSearchParams();
       const q = debouncedSearch.trim();
@@ -66,6 +74,14 @@ export function ProductsView() {
           productFilters.filters.category === uncategorizedFilterValue
             ? "none"
             : productFilters.filters.category,
+        );
+      }
+      if (productFilters.filters.type !== LIST_FILTER_ALL_VALUE) {
+        params.set(
+          "typeId",
+          productFilters.filters.type === untypedFilterValue
+            ? "none"
+            : productFilters.filters.type,
         );
       }
       const qs = params.toString();
@@ -82,6 +98,14 @@ export function ProductsView() {
     },
   });
 
+  const { data: productTypes = [], isPending: productTypesPending } = useQuery({
+    queryKey: productTypesKey,
+    queryFn: async () => {
+      const { data: rows } = await api.get<ProductType[]>("/api/product-types");
+      return rows;
+    },
+  });
+
   const categoryFilterOptions = useMemo(
     () => [
       { value: uncategorizedFilterValue, label: "No category" },
@@ -90,9 +114,17 @@ export function ProductsView() {
     [categories],
   );
 
+  const typeFilterOptions = useMemo(
+    () => [
+      { value: untypedFilterValue, label: "No type" },
+      ...productTypes.map((type) => ({ value: type.id, label: type.name })),
+    ],
+    [productTypes],
+  );
+
   const pagination = usePagination({
     totalItems: data.length,
-    resetDeps: [debouncedSearch, productFilters.filters.category],
+    resetDeps: [debouncedSearch, productFilters.filters.category, productFilters.filters.type],
   });
   const pagedRows = pagination.sliceItems(data);
 
@@ -119,6 +151,7 @@ export function ProductsView() {
         price: values.price ?? null,
         defaultManufacturerId: values.defaultManufacturerId,
         categoryId: values.categoryId,
+        typeId: values.typeId,
         verified: values.verified,
         imageKey: values.imageKey,
         barcodeKey: values.barcodeKey,
@@ -171,6 +204,7 @@ export function ProductsView() {
         price: payload.values.price ?? null,
         defaultManufacturerId: payload.values.defaultManufacturerId,
         categoryId: payload.values.categoryId,
+        typeId: payload.values.typeId,
         verified: payload.values.verified,
       };
       if (payload.patchImageKey) {
@@ -240,6 +274,16 @@ export function ProductsView() {
               placeholder: "Category",
               options: categoryFilterOptions,
               disabled: categoriesPending,
+            },
+            {
+              key: "type",
+              value: productFilters.filters.type,
+              onValueChange: (value) => productFilters.setFilter("type", value),
+              allLabel: "All types",
+              ariaLabel: "Filter by type",
+              placeholder: "Type",
+              options: typeFilterOptions,
+              disabled: productTypesPending,
             },
           ]}
           hasActiveFilters={productFilters.hasActiveFilters}

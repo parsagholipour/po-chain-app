@@ -77,6 +77,12 @@ export const productCategoryCreateSchema = z.object({
 
 export const productCategoryUpdateSchema = productCategoryCreateSchema.partial();
 
+export const productTypeCreateSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+});
+
+export const productTypeUpdateSchema = productTypeCreateSchema.partial();
+
 export const productCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   sku: z.string().min(1, "SKU is required"),
@@ -87,6 +93,7 @@ export const productCreateSchema = z.object({
   packagingKey: nullableOptionalString,
   defaultManufacturerId: z.uuid(),
   categoryId: z.preprocess(blankToNull, z.string().uuid().nullable().optional()),
+  typeId: z.preprocess(blankToNull, z.string().uuid().nullable().optional()),
   verified: z.boolean().optional(),
 });
 

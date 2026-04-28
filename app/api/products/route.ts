@@ -16,6 +16,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim() ?? "";
   const categoryIdRaw = searchParams.get("categoryId");
+  const typeIdRaw = searchParams.get("typeId");
 
   const where: Prisma.ProductWhereInput = { storeId };
   if (q.length > 0) {
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
       { sku: { contains: q, mode: "insensitive" } },
       { defaultManufacturer: { name: { contains: q, mode: "insensitive" } } },
       { category: { name: { contains: q, mode: "insensitive" } } },
+      { type: { name: { contains: q, mode: "insensitive" } } },
     ];
   }
   if (categoryIdRaw === "none") {
@@ -34,6 +36,14 @@ export async function GET(request: Request) {
       where.categoryId = categoryId.data;
     }
   }
+  if (typeIdRaw === "none") {
+    where.typeId = null;
+  } else {
+    const typeId = typeIdRaw ? z.uuid().safeParse(typeIdRaw) : null;
+    if (typeId?.success) {
+      where.typeId = typeId.data;
+    }
+  }
 
   const rows = await prisma.product.findMany({
     where,
@@ -41,6 +51,7 @@ export async function GET(request: Request) {
     include: {
       defaultManufacturer: true,
       category: true,
+      type: true,
     },
   });
   return NextResponse.json(rows);
@@ -86,6 +97,19 @@ export async function POST(request: Request) {
       }
     }
 
+    if (parsed.data.typeId) {
+      const type = await prisma.productType.findFirst({
+        where: {
+          id: parsed.data.typeId,
+          storeId,
+        },
+        select: { id: true },
+      });
+      if (!type) {
+        return jsonError("Product type was not found", 400);
+      }
+    }
+
     const row = await prisma.product.create({
       data: {
         name: parsed.data.name,
@@ -98,10 +122,11 @@ export async function POST(request: Request) {
         storeId,
         defaultManufacturerId: parsed.data.defaultManufacturerId,
         categoryId: parsed.data.categoryId ?? null,
+        typeId: parsed.data.typeId ?? null,
         verified: parsed.data.verified ?? false,
         createdById: userId,
       },
-      include: { defaultManufacturer: true, category: true },
+      include: { defaultManufacturer: true, category: true, type: true },
     });
     return NextResponse.json(row, { status: 201 });
   } catch (e) {

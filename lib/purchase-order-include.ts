@@ -2,7 +2,7 @@ import { orderStatusLogInclude } from "@/lib/order-status-log";
 
 /** Single PO line shape for API responses (detail, line PATCH/POST/GET). */
 export const purchaseOrderLineApiInclude = {
-  product: { include: { defaultManufacturer: true, category: true } },
+  product: { include: { defaultManufacturer: true, category: true, type: true } },
   manufacturingOrderLines: {
     select: {
       manufacturingOrderId: true,
@@ -18,7 +18,7 @@ export const purchaseOrderOsdListInclude = {
   lines: {
     include: {
       purchaseOrderLine: {
-        include: { product: { include: { defaultManufacturer: true, category: true } } },
+        include: { product: { include: { defaultManufacturer: true, category: true, type: true } } },
       },
     },
   },

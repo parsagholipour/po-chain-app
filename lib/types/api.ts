@@ -54,6 +54,13 @@ export type ProductCategory = {
   updatedAt: string;
 };
 
+export type ProductType = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Manufacturer = {
   id: string;
   name: string;
@@ -107,9 +114,11 @@ export type Product = {
   packagingKey: string | null;
   defaultManufacturerId: string;
   categoryId: string | null;
+  typeId: string | null;
   verified: boolean;
   defaultManufacturer: Manufacturer;
   category: ProductCategory | null;
+  type: ProductType | null;
 };
 
 export type PurchaseOrderSummaryManufacturer = {

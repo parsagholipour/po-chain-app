@@ -12,6 +12,7 @@ import { uploadFileToStorage } from "@/lib/upload-client";
 export type CustomFieldEntityType =
   | "product"
   | "product_category"
+  | "product_type"
   | "manufacturer"
   | "sale_channel"
   | "logistics_partner"

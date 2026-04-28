@@ -32,7 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DialogFooter } from "@/components/ui/dialog";
-import type { Manufacturer, ProductCategory } from "@/lib/types/api";
+import type { Manufacturer, ProductCategory, ProductType } from "@/lib/types/api";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -61,6 +61,7 @@ const schema = z.object({
   ),
   defaultManufacturerId: z.string().uuid(),
   categoryId: z.preprocess(noneToNull, z.string().uuid().nullable().optional()),
+  typeId: z.preprocess(noneToNull, z.string().uuid().nullable().optional()),
   verified: z.boolean(),
   imageKey: z.string().nullable().optional(),
   barcodeKey: z.string().nullable().optional(),
@@ -72,6 +73,7 @@ export type ProductFormValues = z.infer<typeof schema>;
 type Props = {
   manufacturers: Manufacturer[];
   categories: ProductCategory[];
+  productTypes: ProductType[];
   defaultValues: ProductFormValues;
   editingId?: string | null;
   onSubmit: (
@@ -88,6 +90,7 @@ type Props = {
 export function ProductForm({
   manufacturers,
   categories,
+  productTypes,
   defaultValues,
   editingId,
   onSubmit,
@@ -167,6 +170,9 @@ export function ProductForm({
     const payloadValues = { ...values };
     if (payloadValues.categoryId === "none") {
       payloadValues.categoryId = null;
+    }
+    if (payloadValues.typeId === "none") {
+      payloadValues.typeId = null;
     }
 
     const entityId = await onSubmit(
@@ -291,6 +297,41 @@ export function ProductForm({
                 )}
               />
               <FieldError errors={[form.formState.errors.categoryId]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.typeId} className="gap-1.5">
+            <FieldLabel>Type</FieldLabel>
+            <FieldContent>
+              <Controller
+                control={form.control}
+                name="typeId"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? undefined}
+                    onValueChange={field.onChange}
+                    items={[
+                      { value: "none", label: "No type" },
+                      ...productTypes.map((type) => ({
+                        value: type.id,
+                        label: type.name,
+                      })),
+                    ]}
+                  >
+                    <SelectTrigger className="w-full min-w-0">
+                      <SelectValue placeholder="Type (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No type</SelectItem>
+                      {productTypes.map((type) => (
+                        <SelectItem key={type.id} value={type.id}>
+                          {type.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <FieldError errors={[form.formState.errors.typeId]} />
             </FieldContent>
           </Field>
           <Field orientation="horizontal" className="gap-2">

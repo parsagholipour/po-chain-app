@@ -10,7 +10,7 @@ export const manufacturingOrderDetailInclude = {
     include: {
       purchaseOrderLine: {
         include: {
-          product: { include: { defaultManufacturer: true, category: true } },
+          product: { include: { defaultManufacturer: true, category: true, type: true } },
           purchaseOrder: {
             select: {
               id: true,

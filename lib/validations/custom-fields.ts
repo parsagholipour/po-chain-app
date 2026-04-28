@@ -12,6 +12,7 @@ export const customFieldTypeSchema = z.enum([
 export const customFieldEntityTypeSchema = z.enum([
   "product",
   "product_category",
+  "product_type",
   "manufacturer",
   "sale_channel",
   "logistics_partner",

@@ -63,6 +63,7 @@ const NATIVE_FIELDS: Record<string, NativeField[]> = {
     { value: "verified", label: "Verified" },
   ],
   product_category: [{ value: "name", label: "Name" }],
+  product_type: [{ value: "name", label: "Name" }],
   manufacturer: [
     { value: "name", label: "Name" },
     { value: "region", label: "Region" },
