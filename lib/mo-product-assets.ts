@@ -45,12 +45,11 @@ export function formatMissingProductAssetsError<T extends ProductAssetValidation
   missingLines: MissingProductAssetLine<T>[],
   actionLabel: string,
 ) {
-  const preview = missingLines.slice(0, 5).map((line) => {
+  const preview = missingLines.map((line) => {
     const order = orderLabel(line);
     const product = productLabel(line);
     const missing = line.missingFields.join(" and ");
     return `${order ? `${order} / ` : ""}${product} (${missing})`;
   });
-  const extra = missingLines.length > preview.length ? `; +${missingLines.length - preview.length} more` : "";
-  return `${actionLabel} because order line products must include barcode, packaging, and verified status. Missing: ${preview.join("; ")}${extra}.`;
+  return `${actionLabel} because order line products must include barcode, packaging, and verified status. Missing: ${preview.join("; ")}.`;
 }

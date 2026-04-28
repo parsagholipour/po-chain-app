@@ -153,6 +153,22 @@ export type PurchaseOrderSummary = {
   shippingBadges: ShippingStatusBadge[];
 };
 
+export type PurchaseOrderPdfLineImportItem = {
+  sku: string;
+  quantity: number;
+};
+
+export type PurchaseOrderPdfLineImportLine = PurchaseOrderPdfLineImportItem & {
+  productId: string;
+  productName: string;
+};
+
+export type PurchaseOrderPdfLineImportResponse = {
+  extracted: PurchaseOrderPdfLineImportItem[];
+  lines: PurchaseOrderPdfLineImportLine[];
+  unmatched: PurchaseOrderPdfLineImportItem[];
+};
+
 export type LinkedManufacturingOrderRef = {
   id: string;
   number: number;

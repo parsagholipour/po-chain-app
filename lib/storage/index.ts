@@ -8,6 +8,7 @@ export {
   buildObjectKey,
   deleteObject,
   ensureBucket,
+  getObjectBuffer,
   getPresignedGetUrl,
   getPresignedPutUrl,
   putObject,

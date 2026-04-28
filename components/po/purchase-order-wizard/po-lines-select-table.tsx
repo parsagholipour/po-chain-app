@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect, type SearchableSelectItem } from "@/components/ui/searchable-select";
@@ -54,6 +55,58 @@ export function PoLinesSelectTable({
 }: Props) {
   const pagination = usePagination({ totalItems: rows.length });
   const pagedRows = pagination.sliceItems(rows);
+  const quantityInputRefs = useRef(new Map<number, HTMLInputElement>());
+  const pendingQuantityFocusIndex = useRef<number | null>(null);
+
+  const focusPendingQuantityInput = useCallback(() => {
+    const index = pendingQuantityFocusIndex.current;
+    if (index === null) return false;
+
+    const input = quantityInputRefs.current.get(index);
+    if (!input || input.disabled) return false;
+
+    input.focus();
+    input.select();
+    pendingQuantityFocusIndex.current = null;
+    return true;
+  }, []);
+
+  useEffect(() => {
+    if (pendingQuantityFocusIndex.current === null) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      focusPendingQuantityInput();
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [focusPendingQuantityInput, pagination.page, pagination.startIndex, pagination.endIndex, rows]);
+
+  function setQuantityInputRef(index: number, input: HTMLInputElement | null) {
+    if (input) {
+      quantityInputRefs.current.set(index, input);
+    } else {
+      quantityInputRefs.current.delete(index);
+    }
+  }
+
+  function handleQuantityKeyDown(event: KeyboardEvent<HTMLInputElement>, index: number) {
+    if (event.key !== "Enter") return;
+
+    event.preventDefault();
+
+    const nextIndex = index + 1;
+    if (nextIndex >= rows.length) return;
+
+    pendingQuantityFocusIndex.current = nextIndex;
+
+    const nextPage = Math.floor(nextIndex / pagination.pageSize) + 1;
+    if (nextPage !== pagination.page) {
+      pagination.setPage(nextPage);
+      return;
+    }
+
+    focusPendingQuantityInput();
+  }
 
   if (isPending) {
     return <p className="text-sm text-muted-foreground">Loading…</p>;
@@ -95,6 +148,7 @@ export function PoLinesSelectTable({
                   </TableCell>
                   <TableCell>
                     <Input
+                      ref={(input) => setQuantityInputRef(i, input)}
                       type="number"
                       min={1}
                       className="w-24"
@@ -106,6 +160,7 @@ export function PoLinesSelectTable({
                           quantity: Math.max(1, Number(e.target.value) || 1),
                         })
                       }
+                      onKeyDown={(event) => handleQuantityKeyDown(event, i)}
                     />
                   </TableCell>
                   <TableCell>

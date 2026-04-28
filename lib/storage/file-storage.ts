@@ -79,6 +79,33 @@ export async function deleteObject(key: string): Promise<void> {
   );
 }
 
+export async function getObjectBuffer(key: string): Promise<{
+  buffer: Buffer;
+  contentType: string | null;
+  contentLength: number | null;
+}> {
+  const cfg = getObjectStorageConfig();
+  const objectKey = s3ObjectKeyFromStoredValue(key);
+  const response = await getS3Client().send(
+    new GetObjectCommand({
+      Bucket: cfg.bucket,
+      Key: objectKey,
+    }),
+  );
+
+  const bytes = await response.Body?.transformToByteArray();
+  if (!bytes) {
+    throw new Error("Storage object response was empty");
+  }
+
+  return {
+    buffer: Buffer.from(bytes),
+    contentType: response.ContentType ?? null,
+    contentLength:
+      typeof response.ContentLength === "number" ? response.ContentLength : null,
+  };
+}
+
 /** Presigned PUT for direct browser → MinIO uploads. */
 export async function getPresignedPutUrl(key: string, contentType: string): Promise<string> {
   const cfg = getObjectStorageConfig();

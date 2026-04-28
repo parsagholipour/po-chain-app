@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import {
   CustomFieldsRenderer,
@@ -120,15 +120,10 @@ export function ShippingForm({
   requiredPurchaseOrderIds = [],
   statusLogs = [],
 }: ShippingFormProps) {
-  const [customFieldsHandle, setCustomFieldsHandle] = useState<CustomFieldsHandle | null>(
-    null,
-  );
+  const customFieldsRef = useRef<CustomFieldsHandle>(null);
   const invoiceDocumentInputRef = useRef<HTMLInputElement>(null);
   const [invoiceDocumentFile, setInvoiceDocumentFile] = useState<File | null>(null);
   const [removeStoredInvoiceDocument, setRemoveStoredInvoiceDocument] = useState(false);
-  const handleCustomFieldsRef = useCallback((handle: CustomFieldsHandle | null) => {
-    setCustomFieldsHandle(handle);
-  }, []);
 
   const form = useForm<ShippingFormValues>({
     resolver: zodResolver(shippingCreateSchema) as Resolver<ShippingFormValues>,
@@ -232,13 +227,18 @@ export function ShippingForm({
         ...requiredPurchaseOrderIds,
       ]),
     });
-    if (customFieldsHandle?.hasFields) {
-      await customFieldsHandle.save(entityId);
+    if (customFieldsRef.current?.hasFields) {
+      await customFieldsRef.current.save(entityId);
     }
   }
 
   return (
-    <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+    <form
+      onSubmit={(event) => {
+        void form.handleSubmit(handleSubmit)(event);
+      }}
+      className="space-y-4"
+    >
       <FieldSet>
         <Field>
           <FieldLabel>Type</FieldLabel>
@@ -588,7 +588,7 @@ export function ShippingForm({
         )}
 
         <CustomFieldsRenderer
-          ref={handleCustomFieldsRef}
+          ref={customFieldsRef}
           entityType="shipping"
           entityId={editingId}
           disabled={isSubmitting}

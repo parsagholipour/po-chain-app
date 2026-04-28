@@ -14,12 +14,14 @@ import {
   WizardStepLines,
   emptyLineDraft,
   filledLines,
+  lineDraftProductAssetIssues,
   type LineDraft,
 } from "@/components/po/purchase-order-wizard/wizard-step-lines";
 import { WizardStepReview } from "@/components/po/purchase-order-wizard/wizard-step-review";
 import { WizardStepSaleChannels } from "@/components/po/purchase-order-wizard/wizard-step-sale-channels";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { isPdfDocument } from "@/components/ui/document-pdf-preview";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { invalidateNavCounts } from "@/lib/query-invalidation";
@@ -132,6 +134,7 @@ export function NewStockOrderWizard() {
   function canNext(): boolean {
     if (step === 0) return name.trim().length > 0 && !isDocUploading;
     if (step === 1) return saleChannelId.length > 0;
+    if (step === 2) return productAssetIssues.length === 0;
     return true;
   }
 
@@ -169,6 +172,12 @@ export function NewStockOrderWizard() {
 
   const saleChannelName =
     nonDistributorChannels.find((s) => s.id === saleChannelId)?.name ?? null;
+  const productAssetIssues = lineDraftProductAssetIssues(lines, products);
+  const documentName = documentDisplayName(documentKey, docFile);
+  const hasPdfPreview =
+    step === 3 &&
+    Boolean(documentKey) &&
+    isPdfDocument({ documentKey, file: docFile, fileName: documentName });
 
   const stepDescriptions = [
     "Name the stock order and attach an optional document.",
@@ -178,7 +187,7 @@ export function NewStockOrderWizard() {
   ] as const;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className={cn("mx-auto space-y-8", hasPdfPreview ? "max-w-6xl" : "max-w-3xl")}>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <Link
@@ -257,8 +266,9 @@ export function NewStockOrderWizard() {
             <WizardStepReview
               name={name}
               hasDocument={!!(documentKey || docFile)}
-              documentName={documentDisplayName(documentKey, docFile)}
+              documentName={documentName}
               documentKey={documentKey}
+              documentFile={docFile}
               saleChannelName={saleChannelName}
               manufacturerNames={[]}
               lines={filledLines(lines)}
@@ -284,7 +294,15 @@ export function NewStockOrderWizard() {
                 <ChevronRight className="size-4" />
               </Button>
             ) : (
-              <Button type="submit" disabled={isFinishing || !name.trim() || !saleChannelId}>
+              <Button
+                type="submit"
+                disabled={
+                  isFinishing ||
+                  !name.trim() ||
+                  !saleChannelId ||
+                  productAssetIssues.length > 0
+                }
+              >
                 {isFinishing ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (

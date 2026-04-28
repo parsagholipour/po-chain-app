@@ -12,6 +12,10 @@ import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_STOCK } from "@/lib/purchase-order-type";
 import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
 import { productPricingSnapshot } from "@/lib/purchase-order-line-pricing";
+import {
+  findLinesMissingProductAssets,
+  formatMissingProductAssetsError,
+} from "@/lib/mo-product-assets";
 
 export const runtime = "nodejs";
 
@@ -144,10 +148,30 @@ export async function POST(request: Request) {
         const pIds = [...new Set(lines.map((l) => l.productId))];
         const products = await tx.product.findMany({
           where: { id: { in: pIds }, storeId },
-          select: { id: true, cost: true, price: true },
+          select: {
+            id: true,
+            cost: true,
+            price: true,
+            name: true,
+            sku: true,
+            barcodeKey: true,
+            packagingKey: true,
+            verified: true,
+          },
         });
         if (products.length !== pIds.length) {
           throw new Error("PRODUCT_NOT_FOUND");
+        }
+        const missingProductAssets = findLinesMissingProductAssets(
+          products.map((product) => ({ product })),
+        );
+        if (missingProductAssets.length > 0) {
+          throw new Error(
+            formatMissingProductAssetsError(
+              missingProductAssets,
+              "Cannot create this stock order",
+            ),
+          );
         }
         for (const product of products) {
           productPricingById.set(product.id, product);
@@ -210,6 +234,9 @@ export async function POST(request: Request) {
       }
       if (e.message === "SALE_CHANNEL_NOT_FOUND") {
         return jsonError("Sale channel not found", 400);
+      }
+      if (e.message.startsWith("Cannot create this stock order")) {
+        return jsonError(e.message, 400);
       }
     }
     const j = jsonFromPrisma(e);

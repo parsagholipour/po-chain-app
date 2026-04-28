@@ -20,6 +20,9 @@ type Props = {
   onDocFileChange: (file: File | null) => void;
   isDocUploading?: boolean;
   onRetryDocUpload?: () => void;
+  isImportingLines?: boolean;
+  lineImportMessage?: string | null;
+  onRetryLineImport?: () => void;
 };
 
 export function WizardStepBasics({
@@ -30,6 +33,9 @@ export function WizardStepBasics({
   onDocFileChange,
   isDocUploading = false,
   onRetryDocUpload,
+  isImportingLines = false,
+  lineImportMessage = null,
+  onRetryLineImport,
 }: Props) {
   const displayName = documentDisplayName(documentKey, docFile);
 
@@ -69,6 +75,21 @@ export function WizardStepBasics({
             <span className="font-medium break-all">{displayName}</span>
             {documentKey ? (
               <DocumentDownloadLink documentKey={documentKey} fileName={displayName} fallback={null} />
+            ) : null}
+          </div>
+        ) : null}
+        {isImportingLines ? (
+          <p className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" />
+            Reading PDF and importing SKU quantities...
+          </p>
+        ) : lineImportMessage ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs text-muted-foreground">{lineImportMessage}</p>
+            {onRetryLineImport ? (
+              <Button type="button" variant="secondary" size="sm" onClick={onRetryLineImport}>
+                Retry AI import
+              </Button>
             ) : null}
           </div>
         ) : null}

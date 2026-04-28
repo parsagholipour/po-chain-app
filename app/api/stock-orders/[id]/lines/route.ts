@@ -9,6 +9,10 @@ import { productPricingSnapshot } from "@/lib/purchase-order-line-pricing";
 import { purchaseOrderLineApiInclude } from "@/lib/purchase-order-include";
 import { purchaseOrderLineFromPrisma } from "@/lib/shipping-api";
 import { recomputeLineQuantities } from "@/lib/po/osd-recompute";
+import {
+  findLinesMissingProductAssets,
+  formatMissingProductAssetsError,
+} from "@/lib/mo-product-assets";
 
 export const runtime = "nodejs";
 
@@ -70,6 +74,16 @@ export async function POST(
     where: { id: parsed.data.productId, storeId },
   });
   if (!product) return jsonError("Product not found", 404);
+  const missingProductAssets = findLinesMissingProductAssets([{ product }]);
+  if (missingProductAssets.length > 0) {
+    return jsonError(
+      formatMissingProductAssetsError(
+        missingProductAssets,
+        "Cannot add this stock order line",
+      ),
+      400,
+    );
+  }
 
   try {
     const line = await prisma.$transaction(async (tx) => {

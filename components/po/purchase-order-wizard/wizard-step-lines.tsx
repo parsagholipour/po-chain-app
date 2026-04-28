@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { ExternalLink } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
@@ -21,6 +23,8 @@ import {
 } from "@/components/ui/table";
 import type { Manufacturer, Product } from "@/lib/types/api";
 import { PoLinesSelectTable } from "@/components/po/purchase-order-wizard/po-lines-select-table";
+import { findLinesMissingProductAssets } from "@/lib/mo-product-assets";
+import { cn } from "@/lib/utils";
 
 export type LineDraft = {
   productId: string;
@@ -36,6 +40,80 @@ export function emptyLineDraft(): LineDraft {
 /** Lines that should be sent to the API (blank template row omitted). */
 export function filledLines(lines: LineDraft[]): LineDraft[] {
   return lines.filter((l) => l.productId.length > 0);
+}
+
+export type LineDraftProductAssetIssue = {
+  key: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  missingFields: string[];
+};
+
+export function lineDraftProductAssetIssues(
+  lines: LineDraft[],
+  products: Product[],
+): LineDraftProductAssetIssue[] {
+  return filledLines(lines).flatMap((line, i) => {
+    const product = products.find((p) => p.id === line.productId);
+    if (!product) return [];
+    const [missingLine] = findLinesMissingProductAssets([{ product }]);
+    if (!missingLine) return [];
+    return [
+      {
+        key: `${line.productId}-${i}`,
+        productId: product.id,
+        productName: product.name,
+        sku: product.sku,
+        missingFields: missingLine.missingFields,
+      },
+    ];
+  });
+}
+
+function ProductAssetIssueList({
+  issues,
+}: {
+  issues: LineDraftProductAssetIssue[];
+}) {
+  if (issues.length === 0) return null;
+
+  return (
+    <div className="space-y-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3">
+      <p className="text-xs font-medium text-destructive">
+        Selected products need barcode, packaging, and verified status before creating the order:
+      </p>
+      <ul className="space-y-1.5 text-xs text-destructive/80">
+        {issues.map((issue) => (
+          <li
+            key={issue.key}
+            className="flex items-center gap-2 rounded-md border border-destructive/20 bg-background/70 p-2"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="font-mono">{issue.sku}</span>
+              {" - "}
+              <span>{issue.productName}</span>
+              <span className="text-destructive/70">
+                {" "}
+                ({issue.missingFields.join(" and ")})
+              </span>
+            </span>
+            <Link
+              href={`/products?id=${issue.productId}`}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "icon-sm" }),
+                "border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive",
+              )}
+              aria-label={`Open product ${issue.productName}`}
+              title="Open product"
+            >
+              <ExternalLink className="size-3.5" aria-hidden />
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 type Props = {
@@ -79,6 +157,7 @@ export function WizardStepLines({
       }),
     [manufacturerIdList, manufacturers],
   );
+  const productAssetIssues = lineDraftProductAssetIssues(lines, products);
 
   if (hideManufacturer) {
     if (isPending) {
@@ -88,20 +167,23 @@ export function WizardStepLines({
       return <p className="text-sm text-muted-foreground">Add products first.</p>;
     }
     return (
-      <PoLinesSelectTable
-        selectColumnLabel="Product"
-        selectPlaceholder="Select product"
-        emptyItemsMessage="Add products first."
-        items={productSelectItems}
-        rows={lines.map((l) => ({ entityId: l.productId, quantity: l.quantity }))}
-        onUpdateRow={(i, patch) => {
-          const p: Partial<LineDraft> = {};
-          if (patch.entityId !== undefined) p.productId = patch.entityId;
-          if (patch.quantity !== undefined) p.quantity = patch.quantity;
-          onUpdateLine(i, p);
-        }}
-        onRemoveRow={onRemoveLine}
-      />
+      <div className="space-y-3">
+        <PoLinesSelectTable
+          selectColumnLabel="Product"
+          selectPlaceholder="Select product"
+          emptyItemsMessage="Add products first."
+          items={productSelectItems}
+          rows={lines.map((l) => ({ entityId: l.productId, quantity: l.quantity }))}
+          onUpdateRow={(i, patch) => {
+            const p: Partial<LineDraft> = {};
+            if (patch.entityId !== undefined) p.productId = patch.entityId;
+            if (patch.quantity !== undefined) p.quantity = patch.quantity;
+            onUpdateLine(i, p);
+          }}
+          onRemoveRow={onRemoveLine}
+        />
+        <ProductAssetIssueList issues={productAssetIssues} />
+      </div>
     );
   }
 
@@ -191,6 +273,7 @@ export function WizardStepLines({
           </TableBody>
         </Table>
       </div>
+      <ProductAssetIssueList issues={productAssetIssues} />
     </div>
   );
 }

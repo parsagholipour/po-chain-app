@@ -14,8 +14,13 @@ import { uploadFileToStorage } from "@/lib/upload-client";
 import { useWizardDocumentUpload } from "@/lib/use-wizard-document-upload";
 import type { Manufacturer, PurchaseOrderDetail, PurchaseOrderSummary } from "@/lib/types/api";
 import { WizardStepBasics, documentDisplayName } from "@/components/po/purchase-order-wizard/wizard-step-basics";
+import {
+  WizardLinesPreview,
+  type WizardLinePreviewItem,
+} from "@/components/po/purchase-order-wizard/wizard-step-review";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { DocumentDownloadLink } from "@/components/ui/document-download-link";
+import { DocumentPdfPreview, isPdfDocument } from "@/components/ui/document-pdf-preview";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,6 +29,7 @@ import { distributorPoStatusLabels } from "@/lib/po/status-labels";
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
 import { invalidateNavCounts } from "@/lib/query-invalidation";
 import { cn } from "@/lib/utils";
+import { MoLinkedOrderLabel } from "@/components/po/mo-linked-order-label";
 
 const STEPS = ["Basics", "POs & stock orders", "Manufacturers", "Review"] as const;
 
@@ -145,6 +151,29 @@ export function NewManufacturingOrderWizard() {
     purchaseOrderIdList.length > 0 &&
     orderDetailQueries.some((q) => q.isPending || q.isFetching);
 
+  const reviewLineItems: WizardLinePreviewItem[] = orderDetailQueries.flatMap((q) => {
+    const order = q.data;
+    if (!order) return [];
+    return order.lines.map((line) => ({
+      key: `${order.id}-${line.id}`,
+      productId: line.product.id,
+      productName: line.product.name,
+      sku: line.product.sku,
+      imageKey: line.product.imageKey,
+      quantity: line.quantity,
+      manufacturerName: line.product.defaultManufacturer.name,
+      source: (
+        <MoLinkedOrderLabel
+          type={order.type}
+          name={order.name}
+          saleChannelName={order.saleChannel?.name ?? null}
+          className="text-xs text-muted-foreground"
+          badgeClassName="text-[9px]"
+        />
+      ),
+    }));
+  });
+
   const allSelectedManufacturerIds = new Set(requiredManufacturerIds);
   for (const id of extraManufacturerIds) allSelectedManufacturerIds.add(id);
 
@@ -242,9 +271,14 @@ export function NewManufacturingOrderWizard() {
     "Manufacturers implied by linked lines are selected automatically and cannot be cleared. Add more manufacturers when several factories are involved.",
     "Confirm and create.",
   ] as const;
+  const documentName = documentDisplayName(documentKey, docFile);
+  const hasPdfPreview =
+    step === 3 &&
+    Boolean(documentKey) &&
+    isPdfDocument({ documentKey, file: docFile, fileName: documentName });
 
   return (
-    <div className="mx-auto max-w-3xl space-y-8">
+    <div className={cn("mx-auto space-y-8", hasPdfPreview ? "max-w-6xl" : "max-w-3xl")}>
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <Link
@@ -353,19 +387,38 @@ export function NewManufacturingOrderWizard() {
                 </p>
               ) : null}
               {missingProductAssetLines.length > 0 ? (
-                <div className="space-y-1">
+                <div className="space-y-2">
                   <p className="text-xs font-medium text-destructive">
                     Selected order line products need barcode, packaging, and verified status before creating an MO:
                   </p>
-                  <ul className="text-xs text-destructive/80 list-disc list-inside">
-                    {missingProductAssetLines.slice(0, 5).map((line, i) => (
-                      <li key={`${line.product.sku}-${i}`}>
-                        {line.product.sku} - {line.product.name} ({line.missingFields.join(" and ")})
+                  <ul className="space-y-1.5 text-xs text-destructive/80">
+                    {missingProductAssetLines.map((line, i) => (
+                      <li
+                        key={`${line.product.id}-${i}`}
+                        className="flex items-center gap-2 rounded-md border border-destructive/20 bg-destructive/5 p-2"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="font-mono">{line.product.sku}</span>
+                          {" - "}
+                          <span>{line.product.name}</span>
+                          <span className="text-destructive/70">
+                            {" "}
+                            ({line.missingFields.join(" and ")})
+                          </span>
+                        </span>
+                        <Link
+                          href={`/products?id=${line.product.id}`}
+                          className={cn(
+                            buttonVariants({ variant: "outline", size: "icon-sm" }),
+                            "border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive",
+                          )}
+                          aria-label={`Open product ${line.product.name}`}
+                          title="Open product"
+                        >
+                          <ExternalLink className="size-3.5" aria-hidden />
+                        </Link>
                       </li>
                     ))}
-                    {missingProductAssetLines.length > 5 && (
-                      <li>+{missingProductAssetLines.length - 5} more</li>
-                    )}
                   </ul>
                 </div>
               ) : null}
@@ -425,7 +478,15 @@ export function NewManufacturingOrderWizard() {
           ) : null}
 
           {step === 3 ? (
-            <div className="space-y-3 text-sm">
+            <div
+              className={cn(
+                "text-sm",
+                hasPdfPreview
+                  ? "grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.95fr)] lg:items-start"
+                  : "space-y-3",
+              )}
+            >
+              <div className="space-y-3">
               <div>
                 <span className="text-muted-foreground">Name: </span>
                 <span className="font-medium">{name.trim()}</span>
@@ -433,11 +494,11 @@ export function NewManufacturingOrderWizard() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-muted-foreground">Document:</span>
                 {documentKey || docFile ? (
-                  documentDisplayName(documentKey, docFile) ? (
+                  documentName ? (
                     <>
-                      <span className="font-medium break-all">{documentDisplayName(documentKey, docFile)}</span>
+                      <span className="font-medium break-all">{documentName}</span>
                       {documentKey ? (
-                        <DocumentDownloadLink documentKey={documentKey} fileName={documentDisplayName(documentKey, docFile)} fallback={null} />
+                        <DocumentDownloadLink documentKey={documentKey} fileName={documentName} fallback={null} />
                       ) : null}
                     </>
                   ) : "Yes"
@@ -484,6 +545,28 @@ export function NewManufacturingOrderWizard() {
                 )}
               </div>
               <div>
+                <span className="text-muted-foreground">Lines: </span>
+                {orderDefaultsLoading && reviewLineItems.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Loading selected order lines…
+                  </p>
+                ) : (
+                  <WizardLinesPreview
+                    lines={reviewLineItems}
+                    emptyMessage={
+                      purchaseOrderIds.size === 0
+                        ? "No linked order lines."
+                        : "No lines found on selected orders."
+                    }
+                  />
+                )}
+                {orderDefaultsLoading && reviewLineItems.length > 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Loading more selected order lines…
+                  </p>
+                ) : null}
+              </div>
+              <div>
                 <span className="text-muted-foreground">Manufacturers: </span>
                 {allSelectedManufacturerIds.size === 0 ? (
                   "None"
@@ -524,6 +607,16 @@ export function NewManufacturingOrderWizard() {
                 <p className="text-xs font-medium text-destructive">
                   Selected order line products need barcode and packaging before creating an MO.
                 </p>
+              ) : null}
+              </div>
+
+              {hasPdfPreview ? (
+                <DocumentPdfPreview
+                  documentKey={documentKey}
+                  file={docFile}
+                  fileName={documentName}
+                  className="lg:sticky lg:top-4"
+                />
               ) : null}
             </div>
           ) : null}
