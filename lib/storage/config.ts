@@ -69,7 +69,7 @@ export function getObjectStorageConfig(): ObjectStorageConfig {
     accessKeyId: required("MINIO_ACCESS_KEY"),
     secretAccessKey: required("MINIO_SECRET_KEY"),
     bucket: required("MINIO_BUCKET"),
-    maxUploadBytes: parsePositiveInt("STORAGE_MAX_UPLOAD_BYTES", 10 * 1024 * 1024),
+    maxUploadBytes: parsePositiveInt("STORAGE_MAX_UPLOAD_BYTES", 300 * 1024 * 1024),
     presignExpiresSeconds: parsePositiveInt("STORAGE_PRESIGN_EXPIRES_SECONDS", 900),
   };
 
