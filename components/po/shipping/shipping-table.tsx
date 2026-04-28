@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Pencil, Trash2, ExternalLink } from "lucide-react";
-import { shippingStatusLabels } from "@/lib/po/status-labels";
+import { shippingStatusLabels, statusBadgeClassName } from "@/lib/po/status-labels";
 import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import { shippingOrderHref } from "@/lib/shipping";
 import { PriceView } from "@/components/ui/price-view";
@@ -55,7 +55,7 @@ export function ShippingTable({ shippings, isPending = false, onEdit, onDelete }
             <TableRow key={shipping.id}>
               <TableCell className="font-medium">{shipping.trackingNumber}</TableCell>
               <TableCell>
-                <Badge variant="secondary">
+                <Badge variant="secondary" className={statusBadgeClassName(shipping.status)}>
                   {shippingStatusLabels[shipping.status] ?? shipping.status}
                 </Badge>
               </TableCell>

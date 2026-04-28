@@ -25,7 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { distributorPoStatusLabels } from "@/lib/po/status-labels";
+import { distributorPoStatusLabels, statusBadgeClassName } from "@/lib/po/status-labels";
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
 import { invalidateNavCounts } from "@/lib/query-invalidation";
 import { cn } from "@/lib/utils";
@@ -364,7 +364,10 @@ export function NewManufacturingOrderWizard() {
                         <span className="text-xs text-muted-foreground ml-auto shrink-0">
                           {new Date(o.createdAt).toLocaleDateString()}
                         </span>
-                        <Badge variant="secondary" className="text-[10px] shrink-0">
+                        <Badge
+                          variant="secondary"
+                          className={`${statusBadgeClassName(o.status)} text-[10px] shrink-0`}
+                        >
                           {distributorPoStatusLabels[o.status] ?? o.status}
                         </Badge>
                         <a
@@ -527,7 +530,10 @@ export function NewManufacturingOrderWizard() {
                           <span className="text-xs text-muted-foreground ml-auto shrink-0">
                             {new Date(o.createdAt).toLocaleDateString()}
                           </span>
-                          <Badge variant="secondary" className="text-[10px] shrink-0">
+                          <Badge
+                            variant="secondary"
+                            className={`${statusBadgeClassName(o.status)} text-[10px] shrink-0`}
+                          >
                             {distributorPoStatusLabels[o.status] ?? o.status}
                           </Badge>
                           <a

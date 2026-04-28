@@ -19,7 +19,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
 import type { PoLineRow, Product, PurchaseOrderSummary } from "@/lib/types/api";
-import { distributorPoStatusLabels, moStatusLabels, shippingStatusLabels } from "@/lib/po/status-labels";
+import {
+  distributorPoStatusLabels,
+  moStatusLabels,
+  shippingStatusLabels,
+  statusBadgeClassName,
+} from "@/lib/po/status-labels";
 import { ChevronDown, ChevronRight, Loader2, Trash2 } from "lucide-react";
 
 export type OrderListLinesApiScope = "purchase-orders" | "stock-orders";
@@ -113,7 +118,10 @@ export function ExpandableOrderSummaryRow({
                       <Link href={`/manufacturing-orders/${mo.id}`} className="text-xs hover:underline">
                         {mo.name}
                       </Link>
-                      <Badge variant="outline" className="text-[10px] font-medium">
+                      <Badge
+                        variant="outline"
+                        className={`${statusBadgeClassName(mo.status)} text-[10px] font-medium`}
+                      >
                         {moStatusLabels[mo.status] ?? mo.status}
                       </Badge>
                     </div>
@@ -127,14 +135,18 @@ export function ExpandableOrderSummaryRow({
         ) : null}
         <TableCell>
           <div className="flex flex-col gap-1.5">
-            <Badge variant="secondary">
+            <Badge variant="secondary" className={statusBadgeClassName(row.status)}>
               {distributorPoStatusLabels[row.status] ?? row.status}
             </Badge>
             {row.shippingBadges && row.shippingBadges.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs font-medium text-foreground">Shipping</span>
                 {row.shippingBadges.map((s) => (
-                  <Badge key={s.id} variant="outline" className="text-[10px] font-medium">
+                  <Badge
+                    key={s.id}
+                    variant="outline"
+                    className={`${statusBadgeClassName(s.status)} text-[10px] font-medium`}
+                  >
                     {shippingStatusLabels[s.status] ?? s.status}
                   </Badge>
                 ))}

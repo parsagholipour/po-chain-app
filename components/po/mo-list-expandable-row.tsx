@@ -15,7 +15,7 @@ import type {
   Product,
 } from "@/lib/types/api";
 import { MoLinkedOrderLabel } from "@/components/po/mo-linked-order-label";
-import { moStatusLabels, shippingStatusLabels } from "@/lib/po/status-labels";
+import { moStatusLabels, shippingStatusLabels, statusBadgeClassName } from "@/lib/po/status-labels";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 function linkedOrderHref(type: "distributor" | "stock", id: string) {
@@ -139,7 +139,10 @@ export function ExpandableManufacturingOrderSummaryRow({
             <div className="flex max-w-md flex-col gap-2">
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs font-medium text-foreground">MO</span>
-                <Badge variant="secondary" className="shrink-0 text-[10px] font-medium">
+                <Badge
+                  variant="secondary"
+                  className={`${statusBadgeClassName(row.status)} shrink-0 text-[10px] font-medium`}
+                >
                   {moStatusLabels[row.status] ?? row.status}
                 </Badge>
               </div>
@@ -152,7 +155,10 @@ export function ExpandableManufacturingOrderSummaryRow({
                     >
                       {m.name}
                     </span>
-                    <Badge variant="secondary" className="shrink-0 text-[10px] font-medium">
+                    <Badge
+                      variant="secondary"
+                      className={`${statusBadgeClassName(m.status)} shrink-0 text-[10px] font-medium`}
+                    >
                       {moStatusLabels[m.status] ?? m.status}
                     </Badge>
                   </li>
@@ -162,7 +168,11 @@ export function ExpandableManufacturingOrderSummaryRow({
                 <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2">
                   <span className="text-xs font-medium text-foreground">Shipping</span>
                   {row.shippingBadges.map((s) => (
-                    <Badge key={s.id} variant="outline" className="shrink-0 text-[10px] font-medium">
+                    <Badge
+                      key={s.id}
+                      variant="outline"
+                      className={`${statusBadgeClassName(s.status)} shrink-0 text-[10px] font-medium`}
+                    >
                       {shippingStatusLabels[s.status] ?? s.status}
                     </Badge>
                   ))}
@@ -170,7 +180,9 @@ export function ExpandableManufacturingOrderSummaryRow({
               )}
             </div>
           ) : (
-            <Badge variant="secondary">{moStatusLabels[row.status] ?? row.status}</Badge>
+            <Badge variant="secondary" className={statusBadgeClassName(row.status)}>
+              {moStatusLabels[row.status] ?? row.status}
+            </Badge>
           )}
         </TableCell>
         <TableCell className="text-muted-foreground text-xs">

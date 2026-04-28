@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import type { PoShippingRow } from "@/lib/types/api";
-import { shippingStatusLabels } from "@/lib/po/status-labels";
+import { shippingStatusLabels, statusBadgeClassName } from "@/lib/po/status-labels";
 import type { ShippingType } from "@/lib/shipping";
 import { ShippingUpsertDialog } from "@/components/po/shipping/shipping-upsert-dialog";
 import { invalidateShippingRelatedQueries } from "@/components/po/shipping/query-utils";
@@ -104,7 +104,7 @@ export function PoShipmentsSection({
                   <div className="space-y-2 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-mono font-medium">{shipping.trackingNumber}</p>
-                      <Badge variant="secondary">
+                      <Badge variant="secondary" className={statusBadgeClassName(shipping.status)}>
                         {shippingStatusLabels[shipping.status] ?? shipping.status}
                       </Badge>
                       {shipping.logisticsPartner ? (

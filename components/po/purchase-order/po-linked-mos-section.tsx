@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import type { LinkedManufacturingOrderRef } from "@/lib/types/api";
-import { moStatusLabels } from "@/lib/po/status-labels";
+import { moStatusLabels, statusBadgeClassName } from "@/lib/po/status-labels";
 import { Badge } from "@/components/ui/badge";
 import { Factory } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -44,7 +44,10 @@ export function PoLinkedMosSection({ manufacturingOrders }: Props) {
                   </span>
                   <span className="block truncate font-medium">{mo.name}</span>
                 </span>
-                <Badge variant="secondary" className="shrink-0 text-[10px]">
+                <Badge
+                  variant="secondary"
+                  className={`${statusBadgeClassName(mo.status)} shrink-0 text-[10px]`}
+                >
                   {moStatusLabels[mo.status] ?? mo.status}
                 </Badge>
               </Link>

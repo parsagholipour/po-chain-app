@@ -29,6 +29,7 @@ import {
   distributorPoStatusLabels,
   distributorPoStatuses,
   shippingStatusLabels,
+  statusBadgeClassName,
 } from "@/lib/po/status-labels";
 import { Badge } from "@/components/ui/badge";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
@@ -187,7 +188,11 @@ export function PoDetailHeader({
               <div className="flex flex-wrap items-center gap-2 pt-2">
                 <span className="text-xs font-medium text-foreground">Shipping</span>
                 {po.shippings.map((shipping) => (
-                  <Badge key={shipping.id} variant="outline" className="text-xs font-medium">
+                  <Badge
+                    key={shipping.id}
+                    variant="outline"
+                    className={`${statusBadgeClassName(shipping.status)} text-xs font-medium`}
+                  >
                     {shippingStatusLabels[shipping.status] ?? shipping.status}
                     {" · "}
                     {shipping.trackingNumber}

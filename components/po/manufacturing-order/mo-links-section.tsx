@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import type { ManufacturingOrderDetail, PurchaseOrderDetail } from "@/lib/types/api";
-import { distributorPoStatusLabels } from "@/lib/po/status-labels";
+import { distributorPoStatusLabels, statusBadgeClassName } from "@/lib/po/status-labels";
 import {
   findLinesMissingProductAssets,
   formatMissingProductAssetsError,
@@ -83,7 +83,10 @@ function MoLinkedOrderRow({
             </span>
           ) : null}
         </span>
-        <Badge variant="secondary" className="shrink-0 text-[10px]">
+        <Badge
+          variant="secondary"
+          className={`${statusBadgeClassName(row.purchaseOrder.status)} shrink-0 text-[10px]`}
+        >
           {statusLabel}
         </Badge>
       </Link>
@@ -488,4 +491,3 @@ export function MoLinksSection({
     </Card>
   );
 }
-
