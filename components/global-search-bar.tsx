@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "nextjs-toploader/app";
+import Link from "next/link";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { History, Loader2, Search, X } from "lucide-react";
@@ -103,7 +103,6 @@ function recommendedSubtitle(item: RecommendedOpenItem): string {
 }
 
 export function GlobalSearchBar() {
-  const router = useRouter();
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -445,16 +444,14 @@ export function GlobalSearchBar() {
   const showEmpty = searchActive && !loading && hits.length === 0;
   const showMoreHint = searchActive && loading && hits.length > 0;
 
-  function navigateToHit(hit: Hit) {
+  function handleHitNavigate() {
     pushRecentSearch({ query: q, scope: activeScope });
-    router.push(hitHref(hit));
     setPanelOpen(false);
     setQuery("");
     setBurstQuery(null);
   }
 
-  function navigateRecommended(item: RecommendedOpenItem) {
-    router.push(recommendedItemHref(item));
+  function handleRecommendedNavigate() {
     setPanelOpen(false);
     setQuery("");
     setBurstQuery(null);
@@ -607,9 +604,10 @@ export function GlobalSearchBar() {
                                   delay: Math.min(index, 6) * 0.03,
                                 }}
                               >
-                                <button
-                                  type="button"
-                                  onClick={() => navigateToHit(hit)}
+                                <Link
+                                  href={hitHref(hit)}
+                                  prefetch={false}
+                                  onNavigate={handleHitNavigate}
                                   className="group flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-muted/80"
                                 >
                                   <Badge
@@ -622,7 +620,7 @@ export function GlobalSearchBar() {
                                     <span className="block truncate font-medium">{hit.title}</span>
                                     <span className="block truncate text-xs text-muted-foreground">{hit.subtitle}</span>
                                   </span>
-                                </button>
+                                </Link>
                               </motion.li>
                             ))}
                           </ul>
@@ -668,9 +666,10 @@ export function GlobalSearchBar() {
                                     delay: Math.min(index, 6) * 0.03,
                                   }}
                                 >
-                                  <button
-                                    type="button"
-                                    onClick={() => navigateRecommended(item)}
+                                  <Link
+                                    href={recommendedItemHref(item)}
+                                    prefetch={false}
+                                    onNavigate={handleRecommendedNavigate}
                                     className="group flex w-full items-start gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-muted/80"
                                   >
                                     <Badge
@@ -685,7 +684,7 @@ export function GlobalSearchBar() {
                                         {recommendedSubtitle(item)}
                                       </span>
                                     </span>
-                                  </button>
+                                  </Link>
                                 </motion.li>
                               ))}
                             </ul>

@@ -132,7 +132,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     [distributorPoList, stockOrderList],
   );
 
-  const { data: manufacturers = [] } = useQuery({
+  const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: ["manufacturers"] as const,
     queryFn: async () => {
       const { data } = await api.get<Manufacturer[]>("/api/manufacturers");
@@ -602,6 +602,14 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
             patchAlloc.mutate({ purchaseOrderLineId, body });
           }}
           onDelete={(purchaseOrderLineId) => deleteAlloc.mutate(purchaseOrderLineId)}
+          onEditProduct={
+            !manufacturersPending && manufacturers.length > 0
+              ? (product) => {
+                  setEditingProduct(product);
+                  setProductEditOpen(true);
+                }
+              : undefined
+          }
           busy={allocBusy}
           hideToolbar
         />

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import { parseStoredImageReference } from "@/lib/storage/storage-key";
-import { presignedFileUrl } from "@/lib/upload-client";
+import { storageImagePreviewUrl } from "@/lib/upload-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +17,9 @@ export type StorageObjectImageProps = {
   /** CSS `aspect-ratio` when width/height are missing on the reference (default `1 / 1`). */
   aspectFallback?: string;
   objectFit?: "contain" | "cover" | "fill" | "none" | "scale-down";
+  /** Pixel width requested from the optimized preview endpoint. */
+  previewWidth?: number;
+  previewQuality?: number;
 };
 
 const fitClass: Record<NonNullable<StorageObjectImageProps["objectFit"]>, string> = {
@@ -39,6 +42,8 @@ export function StorageObjectImage({
   fallback,
   aspectFallback = "1 / 1",
   objectFit = "contain",
+  previewWidth = 384,
+  previewQuality = 72,
 }: StorageObjectImageProps) {
   const { objectKey, width, height } = parseStoredImageReference(reference);
   const hasDims =
@@ -51,32 +56,14 @@ export function StorageObjectImage({
     ? { aspectRatio: `${width} / ${height}` }
     : { aspectRatio: aspectFallback };
 
-  const [url, setUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (!reference || !objectKey) {
-      setUrl(null);
-      setFailed(false);
-      return;
-    }
-    setFailed(false);
-    setUrl(null);
-    let cancelled = false;
-    presignedFileUrl(reference)
-      .then((u) => {
-        if (!cancelled) setUrl(u);
+  const url = objectKey
+    ? storageImagePreviewUrl(reference ?? objectKey, {
+        width: previewWidth,
+        quality: previewQuality,
       })
-      .catch(() => {
-        if (!cancelled) {
-          setUrl(null);
-          setFailed(true);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reference, objectKey]);
+    : null;
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const failed = url !== null && failedUrl === url;
 
   if (!objectKey) {
     if (fallback !== undefined) return <>{fallback}</>;
@@ -88,17 +75,19 @@ export function StorageObjectImage({
       className={cn("relative overflow-hidden rounded-md ring-1 ring-border", className)}
       style={boxStyle}
     >
-      {url ? (
+      {url && !failed ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={url}
           alt={alt}
+          loading="lazy"
+          decoding="async"
           className={cn(
             "absolute inset-0 size-full",
             fitClass[objectFit],
             imgClassName,
           )}
-          onError={() => setFailed(true)}
+          onError={() => setFailedUrl(url)}
         />
       ) : failed ? (
         <div className="absolute inset-0 flex items-center justify-center bg-muted/30 text-muted-foreground text-xs">

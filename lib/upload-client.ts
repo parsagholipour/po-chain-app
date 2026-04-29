@@ -34,3 +34,17 @@ export async function presignedFileUrl(key: string): Promise<string> {
   if (!data.url) throw new Error("Missing url");
   return data.url;
 }
+
+export function storageImagePreviewUrl(
+  key: string,
+  options: { width?: number; quality?: number } = {},
+): string {
+  const params = new URLSearchParams({ key });
+  if (typeof options.width === "number" && Number.isFinite(options.width)) {
+    params.set("width", String(Math.round(options.width)));
+  }
+  if (typeof options.quality === "number" && Number.isFinite(options.quality)) {
+    params.set("quality", String(Math.round(options.quality)));
+  }
+  return `/api/storage/image?${params.toString()}`;
+}

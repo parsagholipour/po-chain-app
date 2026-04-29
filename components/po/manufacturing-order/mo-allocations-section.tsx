@@ -22,7 +22,7 @@ import {
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { MoLinkedOrderLabel } from "@/components/po/mo-linked-order-label";
 import { TablePagination } from "@/components/ui/table-pagination";
-import type { MoLineAllocationRow, MoManufacturerPivot } from "@/lib/types/api";
+import type { MoLineAllocationRow, MoManufacturerPivot, Product } from "@/lib/types/api";
 import { usePagination } from "@/hooks/use-pagination";
 import { Plus, Trash2 } from "lucide-react";
 
@@ -35,6 +35,7 @@ type Props = {
     body: { manufacturerId?: string; verified?: boolean },
   ) => void;
   onDelete: (purchaseOrderLineId: string) => void;
+  onEditProduct?: (product: Product) => void;
   busy?: boolean;
   /** Hide title row and Add button when the parent supplies them (e.g. collapsible header). */
   hideToolbar?: boolean;
@@ -46,6 +47,7 @@ export function MoAllocationsSection({
   onAdd,
   onPatch,
   onDelete,
+  onEditProduct,
   busy = false,
   hideToolbar = false,
 }: Props) {
@@ -95,17 +97,38 @@ export function MoAllocationsSection({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pagedAllocations.map((row) => (
-                <TableRow key={row.purchaseOrderLineId}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <StorageObjectImage
-                        reference={row.purchaseOrderLine.product.imageKey}
-                        alt=""
-                        className="size-11 shrink-0 rounded-md"
-                        imgClassName="rounded-md"
-                        objectFit="contain"
-                      />
+              {pagedAllocations.map((row) => {
+                const product = row.purchaseOrderLine.product;
+                const openProduct = onEditProduct ? () => onEditProduct(product) : undefined;
+
+                return (
+                  <TableRow key={row.purchaseOrderLineId}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        {openProduct ? (
+                          <button
+                            type="button"
+                            className="shrink-0 rounded-md text-left transition-opacity hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            onClick={openProduct}
+                            aria-label={`Edit product ${product.name}`}
+                          >
+                            <StorageObjectImage
+                              reference={product.imageKey}
+                              alt=""
+                              className="size-11 rounded-md"
+                              imgClassName="rounded-md"
+                              objectFit="contain"
+                            />
+                          </button>
+                        ) : (
+                          <StorageObjectImage
+                            reference={product.imageKey}
+                            alt=""
+                            className="size-11 shrink-0 rounded-md"
+                            imgClassName="rounded-md"
+                            objectFit="contain"
+                          />
+                        )}
                       <div className="min-w-0 text-sm">
                         <div className="min-w-0 text-xs text-muted-foreground">
                           <MoLinkedOrderLabel
@@ -117,9 +140,19 @@ export function MoAllocationsSection({
                             className="text-xs text-muted-foreground"
                           />
                         </div>
-                        <div className="font-medium">{row.purchaseOrderLine.product.name}</div>
+                        {openProduct ? (
+                          <button
+                            type="button"
+                            className="min-w-0 text-left font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                            onClick={openProduct}
+                          >
+                            {product.name}
+                          </button>
+                        ) : (
+                          <div className="font-medium">{product.name}</div>
+                        )}
                         <div className="text-xs text-muted-foreground font-mono">
-                          {row.purchaseOrderLine.product.sku}
+                          {product.sku}
                         </div>
                       </div>
                     </div>
@@ -194,7 +227,8 @@ export function MoAllocationsSection({
                     </Button>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
           <div className="border-t border-border/60 px-3 py-2">

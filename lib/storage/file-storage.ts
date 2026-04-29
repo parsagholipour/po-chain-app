@@ -3,6 +3,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadBucketCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   type PutObjectCommandInput,
 } from "@aws-sdk/client-s3";
@@ -77,6 +78,28 @@ export async function deleteObject(key: string): Promise<void> {
       Key: objectKey,
     }),
   );
+}
+
+export async function getObjectMetadata(key: string): Promise<{
+  contentType: string | null;
+  contentLength: number | null;
+  etag: string | null;
+}> {
+  const cfg = getObjectStorageConfig();
+  const objectKey = s3ObjectKeyFromStoredValue(key);
+  const response = await getS3Client().send(
+    new HeadObjectCommand({
+      Bucket: cfg.bucket,
+      Key: objectKey,
+    }),
+  );
+
+  return {
+    contentType: response.ContentType ?? null,
+    contentLength:
+      typeof response.ContentLength === "number" ? response.ContentLength : null,
+    etag: response.ETag ?? null,
+  };
 }
 
 export async function getObjectBuffer(key: string): Promise<{
