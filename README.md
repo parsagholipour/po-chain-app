@@ -41,6 +41,32 @@ Next.js (App Router) starter with PostgreSQL via Prisma, shadcn/ui on Tailwind C
 
    Open [http://localhost:4000](http://localhost:4000) (this repo runs `next dev -p 4000`).
 
+## Email (SendGrid)
+
+Transactional email is handled by the server-only [`EmailService`](lib/services/email.ts), which calls SendGrid's Mail Send API.
+
+Required environment variables:
+
+| Variable | Purpose |
+| -------- | ------- |
+| `SENDGRID_API_KEY` | SendGrid API key with Mail Send access. |
+| `EMAIL_FROM` | Default verified sender email address. |
+| `EMAIL_FROM_NAME` | Optional default sender display name. |
+| `EMAIL_REPLY_TO` / `EMAIL_REPLY_TO_NAME` | Optional default reply-to address. |
+
+Example:
+
+```ts
+import { EmailService } from "@/lib/services/email";
+
+await EmailService.send({
+  to: "customer@example.com",
+  subject: "Purchase order update",
+  text: "Your purchase order was updated.",
+  html: "<p>Your purchase order was updated.</p>",
+});
+```
+
 ## Object storage (MinIO)
 
 The app includes an **S3-compatible** file layer aimed at **MinIO**: server-side uploads, presigned PUT/GET URLs, and deletes. Implementation lives under [`lib/storage/`](lib/storage/); HTTP endpoints are under [`app/api/storage/`](app/api/storage/).

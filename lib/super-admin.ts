@@ -16,10 +16,10 @@ export async function requireSuperAdmin(): Promise<{ userId: string }> {
 
   const row = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { email: true },
+    select: { email: true, realEmail: true },
   });
 
-  if (!row || !isSuperAdminEmail(row.email)) {
+  if (!row || !isSuperAdminEmail(row.realEmail)) {
     redirect("/");
   }
 

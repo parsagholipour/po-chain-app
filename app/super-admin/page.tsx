@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SuperAdminStoresTable } from "./stores-table";
 
 export const metadata: Metadata = {
   title: "Super admin",
@@ -35,6 +36,8 @@ export default async function SuperAdminPage() {
         id: true,
         name: true,
         slug: true,
+        email: true,
+        website: true,
         createdAt: true,
         _count: { select: { userStores: true } },
       },
@@ -67,30 +70,17 @@ export default async function SuperAdminPage() {
           <CardDescription>{stores.length} store(s)</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Slug</TableHead>
-                <TableHead className="text-right">Users</TableHead>
-                <TableHead>Created</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {stores.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-medium">{s.name}</TableCell>
-                  <TableCell className="font-mono text-xs">{s.slug}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {s._count.userStores}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(s.createdAt)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <SuperAdminStoresTable
+            stores={stores.map((store) => ({
+              id: store.id,
+              name: store.name,
+              slug: store.slug,
+              email: store.email,
+              website: store.website,
+              userCount: store._count.userStores,
+              createdAtLabel: formatDate(store.createdAt),
+            }))}
+          />
         </CardContent>
       </Card>
 

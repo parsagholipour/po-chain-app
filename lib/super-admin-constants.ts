@@ -5,5 +5,6 @@ export function normalizeEmail(email: string | null | undefined): string {
 }
 
 export function isSuperAdminEmail(email: string | null | undefined): boolean {
+  console.log("email", email, SUPER_ADMIN_EMAIL);
   return normalizeEmail(email) === normalizeEmail(SUPER_ADMIN_EMAIL);
 }
