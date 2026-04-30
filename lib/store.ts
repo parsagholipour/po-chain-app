@@ -52,15 +52,19 @@ export async function syncUserWithDefaultStore({
   realName?: string | null;
 }) {
   return prisma.$transaction(async (tx) => {
-    const store = await tx.store.upsert({
+    await tx.store.createMany({
+      data: [
+        {
+          slug: DEFAULT_STORE_SLUG,
+          name: DEFAULT_STORE_NAME,
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    const store = await tx.store.findUniqueOrThrow({
       where: { slug: DEFAULT_STORE_SLUG },
-      create: {
-        slug: DEFAULT_STORE_SLUG,
-        name: DEFAULT_STORE_NAME,
-      },
-      update: {
-        name: DEFAULT_STORE_NAME,
-      },
+      select: { id: true },
     });
 
     const user = await tx.user.upsert({
@@ -80,21 +84,28 @@ export async function syncUserWithDefaultStore({
       },
     });
 
-    await tx.userStore.upsert({
-      where: {
-        userId_storeId: {
+    await tx.userStore.createMany({
+      data: [
+        {
           userId: user.id,
           storeId: store.id,
         },
-      },
-      create: {
-        userId: user.id,
-        storeId: store.id,
-      },
-      update: {},
+      ],
+      skipDuplicates: true,
     });
 
     return user;
+  });
+}
+
+export async function findUserByKeycloakSub(keycloakSub: string) {
+  return prisma.user.findUnique({
+    where: { keycloakSub },
+    select: {
+      id: true,
+      realEmail: true,
+      realName: true,
+    },
   });
 }
 

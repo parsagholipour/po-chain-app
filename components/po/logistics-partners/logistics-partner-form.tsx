@@ -105,7 +105,7 @@ export function LogisticsPartnerForm({
         <input type="hidden" {...form.register("type")} />
 
         <Field>
-          <FieldLabel>Name</FieldLabel>
+          <FieldLabel required>Name</FieldLabel>
           <FieldContent>
             <Input {...form.register("name")} placeholder="Partner name" />
           </FieldContent>

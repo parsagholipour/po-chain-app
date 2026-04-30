@@ -42,7 +42,7 @@ export function WizardStepBasics({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="po-name">Name</Label>
+        <Label htmlFor="po-name" required>Name</Label>
         <Input
           id="po-name"
           value={name}

@@ -56,7 +56,7 @@ export function ProductCategoryForm({ defaultValues, editingId, onSubmit, onCanc
       <FieldSet className="gap-4">
         <FieldGroup className="gap-4">
           <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">
-            <FieldLabel htmlFor="pc-name">Name</FieldLabel>
+            <FieldLabel htmlFor="pc-name" required>Name</FieldLabel>
             <FieldContent>
               <Input id="pc-name" {...form.register("name")} />
               <FieldError errors={[form.formState.errors.name]} />

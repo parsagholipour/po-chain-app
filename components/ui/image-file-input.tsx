@@ -61,6 +61,7 @@ export type ImageFileInputProps = {
   onRemoveStored?: () => void;
   /** Shown in the field header; pairs with default hint unless overridden. */
   label?: string;
+  required?: boolean;
   labelClassName?: string;
   /**
    * Helper under the control. Default when `label` is set; omit both for a bare control.
@@ -89,6 +90,7 @@ export function ImageFileInput({
   existingObjectKey,
   onRemoveStored,
   label,
+  required,
   labelClassName,
   description,
   variant = "image",
@@ -146,7 +148,7 @@ export function ImageFileInput({
       ? null
       : typeof description === "string"
         ? description
-        : label
+        : label && !required
           ? copy.hint
           : null;
 
@@ -364,7 +366,7 @@ export function ImageFileInput({
   return (
     <>
       {label ? (
-        <FieldLabel htmlFor={id} className={labelClassName}>
+        <FieldLabel htmlFor={id} required={required} className={labelClassName}>
           {label}
         </FieldLabel>
       ) : null}

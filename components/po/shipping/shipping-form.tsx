@@ -241,7 +241,7 @@ export function ShippingForm({
     >
       <FieldSet>
         <Field>
-          <FieldLabel>Type</FieldLabel>
+          <FieldLabel required>Type</FieldLabel>
           <FieldContent>
             <Select
               value={type}
@@ -268,7 +268,7 @@ export function ShippingForm({
 
         <Field>
           <div className="flex items-center gap-2">
-            <FieldLabel>Status</FieldLabel>
+            <FieldLabel required>Status</FieldLabel>
             {showStatusHistory ? (
               <OrderStatusLogsDialog
                 title="Shipping status history"

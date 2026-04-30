@@ -39,7 +39,7 @@ export function WizardStepSaleChannels({ saleChannels, value, onChange, isPendin
 
   return (
     <div className="space-y-2">
-      <Label>Sale channel</Label>
+      <Label required>Sale channel</Label>
       <Select
         value={value}
         items={saleChannelItems}

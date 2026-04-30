@@ -100,14 +100,14 @@ export function SaleChannelForm({ defaultValues, editingId, onSubmit, onCancel }
       <FieldSet className="gap-4">
         <FieldGroup className="gap-4">
           <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">
-            <FieldLabel htmlFor="scf-name">Name</FieldLabel>
+            <FieldLabel htmlFor="scf-name" required>Name</FieldLabel>
             <FieldContent>
               <Input id="scf-name" {...form.register("name")} />
               <FieldError errors={[form.formState.errors.name]} />
             </FieldContent>
           </Field>
           <Field data-invalid={!!form.formState.errors.type} className="gap-1.5">
-            <FieldLabel>Type</FieldLabel>
+            <FieldLabel required>Type</FieldLabel>
             <FieldContent>
               <Controller
                 control={form.control}

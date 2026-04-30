@@ -86,13 +86,13 @@ export function AddShipmentDialog({ open, onOpenChange, onSubmit }: Props) {
           <FieldSet className="gap-4">
             <FieldGroup className="gap-3">
               <Field className="gap-1.5">
-                <FieldLabel>Tracking #</FieldLabel>
+                <FieldLabel required>Tracking #</FieldLabel>
                 <FieldContent>
                   <Input {...form.register("trackingNumber", { required: true })} />
                 </FieldContent>
               </Field>
               <Field className="gap-1.5">
-                <FieldLabel>Ship date</FieldLabel>
+                <FieldLabel required>Ship date</FieldLabel>
                 <FieldContent>
                   <Input
                     type="datetime-local"

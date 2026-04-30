@@ -16,6 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ImageFileInput } from "@/components/ui/image-file-input";
+import { RequiredIndicator } from "@/components/ui/label";
 import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import { Button } from "@/components/ui/button";
 import type { CustomFieldDefinition, CustomFieldCondition } from "@/lib/types/api";
@@ -281,7 +282,9 @@ function CustomField({
     case "text":
       return (
         <Field className="gap-1.5">
-          <FieldLabel htmlFor={fieldId}>{definition.name}</FieldLabel>
+          <FieldLabel htmlFor={fieldId} required={definition.required}>
+            {definition.name}
+          </FieldLabel>
           <FieldContent>
             <Input
               id={fieldId}
@@ -297,7 +300,9 @@ function CustomField({
     case "number":
       return (
         <Field className="gap-1.5">
-          <FieldLabel htmlFor={fieldId}>{definition.name}</FieldLabel>
+          <FieldLabel htmlFor={fieldId} required={definition.required}>
+            {definition.name}
+          </FieldLabel>
           <FieldContent>
             <Input
               id={fieldId}
@@ -319,7 +324,9 @@ function CustomField({
     case "date":
       return (
         <Field className="gap-1.5">
-          <FieldLabel htmlFor={fieldId}>{definition.name}</FieldLabel>
+          <FieldLabel htmlFor={fieldId} required={definition.required}>
+            {definition.name}
+          </FieldLabel>
           <FieldContent>
             <Input
               id={fieldId}
@@ -346,7 +353,12 @@ function CustomField({
             onCheckedChange={(v) =>
               onChange({ booleanValue: v === true })
             }
-            label={<span className="font-normal">{definition.name}</span>}
+            label={
+              <span className="inline-flex items-baseline gap-0.5 font-normal">
+                {definition.name}
+                {definition.required ? <RequiredIndicator /> : null}
+              </span>
+            }
           />
         </Field>
       );
@@ -362,6 +374,7 @@ function CustomField({
           <ImageFileInput
             id={fieldId}
             label={definition.name}
+            required={definition.required}
             variant="image"
             disabled={disabled}
             value={value?.pendingFile ?? null}
@@ -398,7 +411,7 @@ function CustomField({
 
       return (
         <Field className="gap-1.5">
-          <FieldLabel>{definition.name}</FieldLabel>
+          <FieldLabel required={definition.required}>{definition.name}</FieldLabel>
           <FileFieldInput
             definitionId={definition.id}
             storedKey={storedKey}

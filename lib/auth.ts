@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import authConfig from "@/auth.config";
-import { syncUserWithDefaultStore } from "@/lib/store";
+import { findUserByKeycloakSub, syncUserWithDefaultStore } from "@/lib/store";
 
 function emailFromProfile(sub: string, profile: Record<string, unknown>) {
   const raw = profile.email;
@@ -28,6 +28,29 @@ function realNameFromProfile(profile: Record<string, unknown>): string | null {
   const p = profile.preferred_username;
   if (typeof p === "string" && p.length > 0) return p;
   return null;
+}
+
+function emailFromToken(sub: string, token: JWT) {
+  if (typeof token.email === "string" && token.email.length > 0) return token.email;
+  return `${sub}@keycloak.local`;
+}
+
+function nameFromToken(token: JWT) {
+  return typeof token.name === "string" && token.name.length > 0 ? token.name : null;
+}
+
+function applyUserToToken(
+  token: JWT,
+  user: { id: string; realEmail: string | null; realName: string | null },
+) {
+  token.appUserId = user.id;
+
+  if (token.realEmail === undefined) {
+    token.realEmail = user.realEmail;
+  }
+  if (token.realName === undefined) {
+    token.realName = user.realName;
+  }
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -67,11 +90,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             ? (profile as Record<string, unknown>)
             : undefined;
 
-        const email = profileRecord
-          ? emailFromProfile(sub, profileRecord)
-          : `${sub}@keycloak.local`;
-        const name = profileRecord ? nameFromProfile(profileRecord) : null;
-
         if (profileRecord) {
           token.realEmail = realEmailFromProfile(profileRecord);
           token.realName = realNameFromProfile(profileRecord);
@@ -84,17 +102,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         }
 
+        if (typeof token.appUserId === "string" && token.appUserId.length > 0) {
+          return token;
+        }
+
         try {
-          const row = await syncUserWithDefaultStore({
-            keycloakSub: sub,
-            email,
-            name,
-            realEmail: token.realEmail ?? null,
-            realName: token.realName ?? null,
-          });
-          token.appUserId = row.id;
+          const existingUser = await findUserByKeycloakSub(sub);
+
+          if (existingUser) {
+            applyUserToToken(token, existingUser);
+          } else {
+            const row = await syncUserWithDefaultStore({
+              keycloakSub: sub,
+              email: profileRecord ? emailFromProfile(sub, profileRecord) : emailFromToken(sub, token),
+              name: profileRecord ? nameFromProfile(profileRecord) : nameFromToken(token),
+              realEmail: token.realEmail ?? null,
+              realName: token.realName ?? null,
+            });
+
+            token.appUserId = row.id;
+          }
         } catch (err) {
-          console.error("[auth] jwt user upsert failed for keycloakSub", sub, err);
+          console.error("[auth] jwt user lookup failed for keycloakSub", sub, err);
         }
       }
       return token;

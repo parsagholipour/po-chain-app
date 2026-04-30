@@ -117,7 +117,7 @@ function StoreEditDialog({
           <FieldSet className="gap-4">
             <FieldGroup className="gap-4">
               <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">
-                <FieldLabel htmlFor="store-name">Name</FieldLabel>
+                <FieldLabel htmlFor="store-name" required>Name</FieldLabel>
                 <FieldContent>
                   <Input id="store-name" {...form.register("name")} />
                   <FieldError errors={[form.formState.errors.name]} />
@@ -125,7 +125,7 @@ function StoreEditDialog({
               </Field>
 
               <Field data-invalid={!!form.formState.errors.slug} className="gap-1.5">
-                <FieldLabel htmlFor="store-slug">Slug</FieldLabel>
+                <FieldLabel htmlFor="store-slug" required>Slug</FieldLabel>
                 <FieldContent>
                   <Input id="store-slug" {...form.register("slug")} />
                   <FieldError errors={[form.formState.errors.slug]} />

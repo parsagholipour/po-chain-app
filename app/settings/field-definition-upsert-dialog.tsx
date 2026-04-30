@@ -335,14 +335,14 @@ function CreateForm({
       <FieldSet className="gap-4">
         <FieldGroup className="gap-4">
           <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">
-            <FieldLabel htmlFor="cfd-name">Name</FieldLabel>
+            <FieldLabel htmlFor="cfd-name" required>Name</FieldLabel>
             <FieldContent>
               <Input id="cfd-name" {...form.register("name")} placeholder="e.g. Warranty Period" />
               <FieldError errors={[form.formState.errors.name]} />
             </FieldContent>
           </Field>
           <Field data-invalid={!!form.formState.errors.fieldKey} className="gap-1.5">
-            <FieldLabel htmlFor="cfd-key">Key</FieldLabel>
+            <FieldLabel htmlFor="cfd-key" required>Key</FieldLabel>
             <FieldContent>
               <Input
                 id="cfd-key"
@@ -353,7 +353,7 @@ function CreateForm({
             </FieldContent>
           </Field>
           <Field data-invalid={!!form.formState.errors.type} className="gap-1.5">
-            <FieldLabel>Type</FieldLabel>
+            <FieldLabel required>Type</FieldLabel>
             <FieldContent>
               <Controller
                 control={form.control}
@@ -384,7 +384,7 @@ function CreateForm({
             </FieldContent>
           </Field>
           <Field data-invalid={!!form.formState.errors.sortOrder} className="gap-1.5">
-            <FieldLabel htmlFor="cfd-sort">Sort order</FieldLabel>
+            <FieldLabel htmlFor="cfd-sort" required>Sort order</FieldLabel>
             <FieldContent>
               <Input
                 id="cfd-sort"
@@ -469,7 +469,7 @@ function EditForm({
       <FieldSet className="gap-4">
         <FieldGroup className="gap-4">
           <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">
-            <FieldLabel htmlFor="cfd-name">Name</FieldLabel>
+            <FieldLabel htmlFor="cfd-name" required>Name</FieldLabel>
             <FieldContent>
               <Input id="cfd-name" {...form.register("name")} />
               <FieldError errors={[form.formState.errors.name]} />
@@ -494,7 +494,7 @@ function EditForm({
             </FieldContent>
           </Field>
           <Field data-invalid={!!form.formState.errors.sortOrder} className="gap-1.5">
-            <FieldLabel htmlFor="cfd-sort">Sort order</FieldLabel>
+            <FieldLabel htmlFor="cfd-sort" required>Sort order</FieldLabel>
             <FieldContent>
               <Input
                 id="cfd-sort"

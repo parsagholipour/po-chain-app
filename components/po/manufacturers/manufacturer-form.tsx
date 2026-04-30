@@ -88,14 +88,14 @@ export function ManufacturerForm({ defaultValues, editingId, onSubmit, onCancel 
       <FieldSet className="gap-4">
         <FieldGroup className="gap-4">
           <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">
-            <FieldLabel htmlFor="mf-name">Name</FieldLabel>
+            <FieldLabel htmlFor="mf-name" required>Name</FieldLabel>
             <FieldContent>
               <Input id="mf-name" {...form.register("name")} />
               <FieldError errors={[form.formState.errors.name]} />
             </FieldContent>
           </Field>
           <Field data-invalid={!!form.formState.errors.region} className="gap-1.5">
-            <FieldLabel htmlFor="mf-region">Region</FieldLabel>
+            <FieldLabel htmlFor="mf-region" required>Region</FieldLabel>
             <FieldContent>
               <Input id="mf-region" {...form.register("region")} />
               <FieldError errors={[form.formState.errors.region]} />

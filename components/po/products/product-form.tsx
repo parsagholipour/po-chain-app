@@ -198,14 +198,14 @@ export function ProductForm({
       <FieldSet className="gap-4">
         <FieldGroup className="gap-4">
           <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">
-            <FieldLabel htmlFor="pf-name">Name</FieldLabel>
+            <FieldLabel htmlFor="pf-name" required>Name</FieldLabel>
             <FieldContent>
               <Input id="pf-name" {...form.register("name")} />
               <FieldError errors={[form.formState.errors.name]} />
             </FieldContent>
           </Field>
           <Field data-invalid={!!form.formState.errors.sku} className="gap-1.5">
-            <FieldLabel htmlFor="pf-sku">SKU</FieldLabel>
+            <FieldLabel htmlFor="pf-sku" required>SKU</FieldLabel>
             <FieldContent>
               <Input id="pf-sku" {...form.register("sku")} />
               <FieldError errors={[form.formState.errors.sku]} />
@@ -234,7 +234,7 @@ export function ProductForm({
             </FieldContent>
           </Field>
           <Field data-invalid={!!form.formState.errors.defaultManufacturerId} className="gap-1.5">
-            <FieldLabel>Default manufacturer</FieldLabel>
+            <FieldLabel required>Default manufacturer</FieldLabel>
             <FieldContent>
               <Controller
                 control={form.control}

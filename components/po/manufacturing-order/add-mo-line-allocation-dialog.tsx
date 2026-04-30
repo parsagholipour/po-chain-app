@@ -140,7 +140,7 @@ export function AddMoLineAllocationDialog({
           }}
         >
           <div className="space-y-2">
-            <Label>Order</Label>
+            <Label required>Order</Label>
             <Select
               value={purchaseOrderId}
               items={poItems}
@@ -163,7 +163,7 @@ export function AddMoLineAllocationDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Line</Label>
+            <Label required>Line</Label>
             <Select
               value={lineId}
               items={lineOptions}
@@ -193,7 +193,7 @@ export function AddMoLineAllocationDialog({
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Manufacturer</Label>
+            <Label required>Manufacturer</Label>
             <Select
               value={manufacturerId}
               items={mfrItems}

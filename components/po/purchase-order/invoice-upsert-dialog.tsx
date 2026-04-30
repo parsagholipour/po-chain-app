@@ -101,7 +101,7 @@ function InvoiceUpsertDialogForm({
           <FieldSet className="gap-4">
             <FieldGroup className="gap-3">
               <Field className="gap-1.5">
-                <FieldLabel>Invoice #</FieldLabel>
+                <FieldLabel required>Invoice #</FieldLabel>
                 <FieldContent>
                   <Input {...form.register("invoiceNumber")} />
                   <FieldError errors={[form.formState.errors.invoiceNumber]} />

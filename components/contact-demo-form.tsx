@@ -59,7 +59,7 @@ export function ContactDemoForm() {
             data-invalid={!!form.formState.errors.name}
             className="gap-1.5"
           >
-            <FieldLabel htmlFor="demo-name">Name</FieldLabel>
+            <FieldLabel htmlFor="demo-name" required>Name</FieldLabel>
             <FieldContent>
               <Input
                 id="demo-name"
@@ -74,7 +74,7 @@ export function ContactDemoForm() {
             data-invalid={!!form.formState.errors.email}
             className="gap-1.5"
           >
-            <FieldLabel htmlFor="demo-email">Email</FieldLabel>
+            <FieldLabel htmlFor="demo-email" required>Email</FieldLabel>
             <FieldContent>
               <Input
                 id="demo-email"

@@ -260,7 +260,7 @@ export function AddOsdDialog({
         </DialogHeader>
         <form className="space-y-4" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <Label>Type</Label>
+            <Label required>Type</Label>
             <Select
               value={type}
               items={(["overage", "shortage", "damage"] as const).map((t) => ({
@@ -287,7 +287,7 @@ export function AddOsdDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Resolution</Label>
+            <Label required>Resolution</Label>
             <Select
               value={resolution}
               items={resolutionChoices.map((r) => ({ value: r, label: resolutionLabels[r] }))}
@@ -310,7 +310,7 @@ export function AddOsdDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Lines</Label>
+            <Label required>Lines</Label>
             <PoLinesSelectTable
               selectColumnLabel="Product line"
               selectPlaceholder="Select line"
@@ -343,7 +343,7 @@ export function AddOsdDialog({
 
           {moRequired ? (
             <div className="space-y-2">
-              <Label>Manufacturing order (required)</Label>
+              <Label required>Manufacturing order</Label>
               {moOptions.length === 0 ? (
                 <p className="text-sm text-destructive">
                   Selected lines are not all allocated to a common manufacturing order. Adjust line

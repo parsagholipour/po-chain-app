@@ -79,7 +79,7 @@ export function AddPoLineDialog({ open, onOpenChange, onSubmit }: Props) {
           }}
         >
           <div className="space-y-2">
-            <Label>Product</Label>
+            <Label required>Product</Label>
             <SearchableSelect
               className="w-full"
               items={productSelectItems}
@@ -90,7 +90,7 @@ export function AddPoLineDialog({ open, onOpenChange, onSubmit }: Props) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Quantity</Label>
+            <Label required>Quantity</Label>
             <Input
               type="number"
               min={1}
