@@ -167,7 +167,7 @@ export function MoAllocationsSection({
                         if (v) onPatch(row.purchaseOrderLineId, { manufacturerId: v });
                       }}
                     >
-                      <SelectTrigger className="w-full">
+                      <SelectTrigger className="w-full max-w-30">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>

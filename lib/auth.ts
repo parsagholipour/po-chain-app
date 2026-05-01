@@ -1,7 +1,7 @@
 import NextAuth from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import authConfig from "@/auth.config";
-import { findUserByKeycloakSub, syncUserWithDefaultStore } from "@/lib/store";
+import { findUserById, findUserByKeycloakSub, syncUserWithDefaultStore } from "@/lib/store";
 
 function emailFromProfile(sub: string, profile: Record<string, unknown>) {
   const raw = profile.email;
@@ -53,6 +53,23 @@ function applyUserToToken(
   }
 }
 
+async function syncUserForToken(
+  sub: string,
+  token: JWT,
+  profileRecord?: Record<string, unknown>,
+) {
+  const existingUser = await findUserByKeycloakSub(sub);
+  if (existingUser) return existingUser;
+
+  return syncUserWithDefaultStore({
+    keycloakSub: sub,
+    email: profileRecord ? emailFromProfile(sub, profileRecord) : emailFromToken(sub, token),
+    name: profileRecord ? nameFromProfile(profileRecord) : nameFromToken(token),
+    realEmail: token.realEmail ?? null,
+    realName: token.realName ?? null,
+  });
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
   callbacks: {
@@ -102,24 +119,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           }
         }
 
-        if (typeof token.appUserId === "string" && token.appUserId.length > 0) {
-          return token;
-        }
-
         try {
-          const existingUser = await findUserByKeycloakSub(sub);
+          const appUserId = typeof token.appUserId === "string" ? token.appUserId : null;
+          const existingTokenUser = appUserId ? await findUserById(appUserId) : null;
 
-          if (existingUser) {
-            applyUserToToken(token, existingUser);
+          if (existingTokenUser) {
+            applyUserToToken(token, existingTokenUser);
           } else {
-            const row = await syncUserWithDefaultStore({
-              keycloakSub: sub,
-              email: profileRecord ? emailFromProfile(sub, profileRecord) : emailFromToken(sub, token),
-              name: profileRecord ? nameFromProfile(profileRecord) : nameFromToken(token),
-              realEmail: token.realEmail ?? null,
-              realName: token.realName ?? null,
-            });
-
+            if (appUserId) {
+              delete token.appUserId;
+              console.warn("[auth] jwt appUserId was stale; resyncing user for keycloakSub", sub);
+            }
+            const row = await syncUserForToken(sub, token, profileRecord);
             token.appUserId = row.id;
           }
         } catch (err) {
@@ -129,13 +140,41 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      if (session.user && token.appUserId) {
-        session.user.id = token.appUserId as string;
-      } else if (session.user) {
-        console.warn(
-          "[auth] session without appUserId — API routes using createdById may fail (sign in again)",
-        );
+      if (!session.user) return session;
+
+      const appUserId = typeof token.appUserId === "string" ? token.appUserId : null;
+      const sub = typeof token.sub === "string" ? token.sub : null;
+
+      try {
+        const existingTokenUser = appUserId ? await findUserById(appUserId) : null;
+        if (existingTokenUser) {
+          applyUserToToken(token, existingTokenUser);
+          session.user.id = existingTokenUser.id;
+          return session;
+        }
+
+        if (appUserId) {
+          delete token.appUserId;
+          console.warn("[auth] session appUserId was stale; resyncing user for keycloakSub", sub);
+        }
+
+        if (sub) {
+          const row = await syncUserForToken(sub, token);
+          applyUserToToken(token, row);
+          session.user.id = row.id;
+          return session;
+        }
+      } catch (err) {
+        if (sub) {
+          console.error("[auth] session user lookup failed for keycloakSub", sub, err);
+        } else {
+          console.error("[auth] session user lookup failed", err);
+        }
       }
+
+      console.warn(
+        "[auth] session without appUserId - API routes using createdById may fail",
+      );
       return session;
     },
   },

@@ -109,6 +109,58 @@ export async function findUserByKeycloakSub(keycloakSub: string) {
   });
 }
 
+export async function findUserById(id: string) {
+  return prisma.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      realEmail: true,
+      realName: true,
+    },
+  });
+}
+
+export async function ensureDefaultStoreForUser(userId: string): Promise<StoreOption | null> {
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    });
+    if (!user) return null;
+
+    await tx.store.createMany({
+      data: [
+        {
+          slug: DEFAULT_STORE_SLUG,
+          name: DEFAULT_STORE_NAME,
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    const store = await tx.store.findUniqueOrThrow({
+      where: { slug: DEFAULT_STORE_SLUG },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+      },
+    });
+
+    await tx.userStore.createMany({
+      data: [
+        {
+          userId,
+          storeId: store.id,
+        },
+      ],
+      skipDuplicates: true,
+    });
+
+    return store;
+  });
+}
+
 export async function canAccessStore(userId: string, storeId: string) {
   const row = await prisma.userStore.findUnique({
     where: { userId_storeId: { userId, storeId } },

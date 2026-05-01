@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { jsonError } from "@/lib/json-error";
 import {
   ACTIVE_STORE_COOKIE,
+  ensureDefaultStoreForUser,
   listUserStores,
   type StoreContext,
 } from "@/lib/store";
@@ -13,8 +14,12 @@ import {
 export async function getStoreContextForUserId(
   userId: string,
 ): Promise<StoreContext | null> {
-  const stores = await listUserStores(userId);
-  if (stores.length === 0) return null;
+  let stores = await listUserStores(userId);
+  if (stores.length === 0) {
+    const defaultStore = await ensureDefaultStoreForUser(userId);
+    if (!defaultStore) return null;
+    stores = [defaultStore];
+  }
 
   const cookieStore = await cookies();
   const requestedStoreId = cookieStore.get(ACTIVE_STORE_COOKIE)?.value ?? null;
