@@ -18,6 +18,7 @@ import {
   Field,
   FieldContent,
   FieldError,
+  FieldGroup,
   FieldLabel,
   FieldSet,
 } from "@/components/ui/field";
@@ -254,6 +255,7 @@ export function ShippingForm({
       className="space-y-4"
     >
       <FieldSet>
+        <FieldGroup className="grid gap-4 md:grid-cols-2">
         <Field>
           <FieldLabel required>Type</FieldLabel>
           <FieldContent>
@@ -265,7 +267,7 @@ export function ShippingForm({
               }
               disabled={!!defaultValues?.type}
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full min-w-0">
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
@@ -301,7 +303,7 @@ export function ShippingForm({
                 form.setValue("status", value as ShippingFormValues["status"])
               }
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full min-w-0">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
@@ -328,7 +330,7 @@ export function ShippingForm({
           <FieldError>{form.formState.errors.cost?.message}</FieldError>
         </Field>
 
-        <Field orientation="horizontal" className="gap-2">
+        <Field orientation="horizontal" className="gap-2 md:self-end md:pb-1">
           <Controller
             control={form.control}
             name="deliveryDutiesPaid"
@@ -355,7 +357,7 @@ export function ShippingForm({
                 )
               }
             >
-              <SelectTrigger>
+              <SelectTrigger className="w-full min-w-0">
                 <SelectValue placeholder={`Select ${partnerLabel.toLowerCase()}`} />
               </SelectTrigger>
               <SelectContent>
@@ -404,7 +406,7 @@ export function ShippingForm({
           <FieldError>{form.formState.errors.trackingLink?.message}</FieldError>
         </Field>
 
-        <Field>
+        <Field className="md:col-span-2">
           <FieldLabel>Notes</FieldLabel>
           <FieldContent>
             <Textarea
@@ -416,7 +418,7 @@ export function ShippingForm({
           <FieldError>{form.formState.errors.notes?.message}</FieldError>
         </Field>
 
-        <Field>
+        <Field className="md:col-span-2">
           <FieldLabel>Shipping Document</FieldLabel>
           <FieldContent>
             <Input
@@ -474,7 +476,7 @@ export function ShippingForm({
         </Field>
 
         {type === "manufacturing_order" ? (
-          <Field>
+          <Field className="md:col-span-2">
             <FieldLabel>Manufacturing Orders</FieldLabel>
             <FieldContent>
               <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
@@ -555,7 +557,7 @@ export function ShippingForm({
             <FieldError>{form.formState.errors.manufacturingOrderIds?.message}</FieldError>
           </Field>
         ) : type === "warehouse_order" ? (
-          <Field>
+          <Field className="md:col-span-2">
             <FieldLabel>Warehouse Orders</FieldLabel>
             <FieldContent>
               <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
@@ -600,7 +602,7 @@ export function ShippingForm({
             <FieldError>{form.formState.errors.warehouseOrderIds?.message}</FieldError>
           </Field>
         ) : (
-          <Field>
+          <Field className="md:col-span-2">
             <FieldLabel>{type === "stock_order" ? "Stock Orders" : "Purchase Orders"}</FieldLabel>
             <FieldContent>
               <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
@@ -653,6 +655,7 @@ export function ShippingForm({
           disabled={isSubmitting}
           nativeValues={allValues as Record<string, unknown>}
         />
+        </FieldGroup>
       </FieldSet>
 
       <DialogFooter>

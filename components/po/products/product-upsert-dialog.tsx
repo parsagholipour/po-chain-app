@@ -106,7 +106,7 @@ export function ProductUpsertDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent size="3xl">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit product" : "New product"}</DialogTitle>
         </DialogHeader>

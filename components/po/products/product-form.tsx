@@ -211,8 +211,8 @@ export function ProductForm({
   return (
     <form onSubmit={handleFormSubmit}>
       <FieldSet className="gap-4">
-        <FieldGroup className="gap-4">
-          <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">
+        <FieldGroup className="grid gap-4 md:grid-cols-2">
+          <Field data-invalid={!!form.formState.errors.name} className="gap-1.5 md:col-span-2">
             <FieldLabel htmlFor="pf-name" required>Name</FieldLabel>
             <FieldContent>
               <Input id="pf-name" {...form.register("name")} />
@@ -384,7 +384,7 @@ export function ProductForm({
               <FieldError errors={[form.formState.errors.collectionId]} />
             </FieldContent>
           </Field>
-          <Field orientation="horizontal" className="gap-2">
+          <Field orientation="horizontal" className="gap-2 md:self-end md:pb-1">
             <Controller
               control={form.control}
               name="verified"
@@ -450,7 +450,7 @@ export function ProductForm({
               removeStoredLabel="Remove barcode"
             />
           </Field>
-          <Field className="gap-1.5">
+          <Field className="gap-1.5 md:col-span-2">
             <FieldLabel htmlFor="pf-packaging">Packaging</FieldLabel>
             <FieldContent>
               <Input

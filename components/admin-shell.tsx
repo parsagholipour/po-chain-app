@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useState, type FocusEvent, type MouseEvent } from "react";
+import { createPortal } from "react-dom";
 import {
   Boxes,
   BrainCircuit,
@@ -70,6 +71,18 @@ type NavGroup = {
 };
 
 type NavItem = NavLink | NavGroup;
+
+type CollapsedNavPreview = {
+  active: boolean;
+  count?: number;
+  Icon: NavIcon;
+  label: string;
+  rect: {
+    height: number;
+    left: number;
+    top: number;
+  };
+};
 
 const nav: readonly NavItem[] = [
   { kind: "link", href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -184,6 +197,49 @@ function NavCountBadge({ count }: { count: number | undefined }) {
   );
 }
 
+function CollapsedNavPreviewCard({ preview }: { preview: CollapsedNavPreview }) {
+  if (typeof document === "undefined") return null;
+
+  const Icon = preview.Icon;
+
+  return createPortal(
+    <div
+      aria-hidden
+      className={cn(
+        "pointer-events-none fixed z-50 flex w-[224px] items-center overflow-hidden rounded-lg border border-sidebar-border/80 bg-sidebar-accent/95 text-sm font-medium text-sidebar-accent-foreground shadow-lg shadow-black/10 ring-1 ring-foreground/5 backdrop-blur-md animate-in fade-in-0 slide-in-from-left-1 zoom-in-95 duration-150 dark:shadow-black/35",
+        preview.active && "bg-sidebar-accent",
+      )}
+      style={{
+        height: preview.rect.height,
+        left: preview.rect.left,
+        top: preview.rect.top,
+      }}
+    >
+      {preview.active ? (
+        <span
+          className="absolute inset-y-1 left-0 w-1 rounded-full bg-sidebar-primary"
+          aria-hidden
+        />
+      ) : null}
+      <span className="flex h-full w-10 shrink-0 items-center justify-center">
+        <Icon
+          className={cn(
+            "size-[18px] shrink-0",
+            preview.active ? "text-sidebar-primary" : "opacity-90",
+          )}
+        />
+      </span>
+      <span className="min-w-0 flex-1 truncate pr-2">{preview.label}</span>
+      {preview.count ? (
+        <span className="flex shrink-0 pr-3">
+          <NavCountBadge count={preview.count} />
+        </span>
+      ) : null}
+    </div>,
+    document.body,
+  );
+}
+
 function NavList({
   onNavigate,
   className,
@@ -195,6 +251,7 @@ function NavList({
 }) {
   const pathname = usePathname();
   const { data: navCounts } = useNavCounts();
+  const [collapsedPreview, setCollapsedPreview] = useState<CollapsedNavPreview | null>(null);
 
   const countByHref: Record<string, number | undefined> = {
     "/purchase-orders-overview": navCounts?.purchaseOrders,
@@ -203,151 +260,199 @@ function NavList({
     "/warehouse-orders": navCounts?.warehouseOrders,
   };
 
+  const showCollapsedPreview = (
+    label: string,
+    Icon: NavIcon,
+    active: boolean,
+    count: number | undefined,
+    event: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>,
+  ) => {
+    if (!isCollapsed) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setCollapsedPreview({
+      active,
+      count,
+      Icon,
+      label,
+      rect: {
+        height: rect.height,
+        left: rect.left,
+        top: rect.top,
+      },
+    });
+  };
+
+  const hideCollapsedPreview = () => setCollapsedPreview(null);
+
+  const handleNavigate = () => {
+    hideCollapsedPreview();
+    onNavigate?.();
+  };
+
   return (
-    <nav className={cn("flex flex-col gap-0.5 p-3", className)}>
-      {!isCollapsed && (
-        <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          Menu
-        </p>
-      )}
-      {nav.map((item) => {
-        if (item.kind === "link") {
-          const active = navActive(pathname, item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={onNavigate}
-              title={isCollapsed ? item.label : undefined}
-              className={cn(
-                "group relative flex items-center gap-3 rounded-lg py-2.5 text-sm font-medium transition-colors",
-                isCollapsed ? "justify-center px-0" : "px-3",
-                active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                  : "text-sidebar-foreground/85 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
-              )}
-            >
-              {active && !isCollapsed ? (
-                <span
-                  className="absolute inset-y-1 left-0 w-1 rounded-full bg-sidebar-primary"
-                  aria-hidden
-                />
-              ) : null}
-              <item.icon
+    <>
+      <nav className={cn("flex flex-col gap-0.5 p-3", className)}>
+        {!isCollapsed && (
+          <p className="px-3 pb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            Menu
+          </p>
+        )}
+        {nav.map((item) => {
+          if (item.kind === "link") {
+            const active = navActive(pathname, item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={handleNavigate}
+                aria-label={isCollapsed ? item.label : undefined}
+                onMouseEnter={(event) =>
+                  showCollapsedPreview(item.label, item.icon, active, countByHref[item.href], event)
+                }
+                onFocus={(event) =>
+                  showCollapsedPreview(item.label, item.icon, active, countByHref[item.href], event)
+                }
+                onMouseLeave={hideCollapsedPreview}
+                onBlur={hideCollapsedPreview}
                 className={cn(
-                  "relative size-[18px] shrink-0 transition-colors",
-                  active ? "text-sidebar-primary" : "opacity-80 group-hover:opacity-100",
-                )}
-              />
-              {!isCollapsed && <span className="relative truncate">{item.label}</span>}
-              {!isCollapsed && <NavCountBadge count={countByHref[item.href]} />}
-            </Link>
-          );
-        }
-
-        const groupActive = navGroupActive(pathname, item);
-        const parentActive = navActive(pathname, item.href);
-
-        if (isCollapsed) {
-          return (
-            <DropdownMenu key={item.href}>
-              <DropdownMenuTrigger
-                title={item.label}
-                className={cn(
-                  "group relative flex w-full items-center justify-center rounded-lg py-2.5 transition-colors",
-                  groupActive
+                  "group relative flex items-center gap-3 rounded-lg py-2.5 text-sm font-medium transition-colors",
+                  isCollapsed ? "justify-center px-0" : "px-3",
+                  active
                     ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
                     : "text-sidebar-foreground/85 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
                 )}
               >
+                {active && !isCollapsed ? (
+                  <span
+                    className="absolute inset-y-1 left-0 w-1 rounded-full bg-sidebar-primary"
+                    aria-hidden
+                  />
+                ) : null}
+                <item.icon
+                  className={cn(
+                    "relative size-[18px] shrink-0 transition-colors",
+                    active ? "text-sidebar-primary" : "opacity-80 group-hover:opacity-100",
+                  )}
+                />
+                {!isCollapsed && <span className="relative truncate">{item.label}</span>}
+                {!isCollapsed && <NavCountBadge count={countByHref[item.href]} />}
+              </Link>
+            );
+          }
+
+          const groupActive = navGroupActive(pathname, item);
+          const parentActive = navActive(pathname, item.href);
+
+          if (isCollapsed) {
+            return (
+              <DropdownMenu key={item.href}>
+                <DropdownMenuTrigger
+                  aria-label={item.label}
+                  onMouseEnter={(event) =>
+                    showCollapsedPreview(item.label, item.icon, groupActive, undefined, event)
+                  }
+                  onFocus={(event) =>
+                    showCollapsedPreview(item.label, item.icon, groupActive, undefined, event)
+                  }
+                  onMouseLeave={hideCollapsedPreview}
+                  onBlur={hideCollapsedPreview}
+                  className={cn(
+                    "group relative flex w-full items-center justify-center rounded-lg py-2.5 transition-colors",
+                    groupActive
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                      : "text-sidebar-foreground/85 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+                  )}
+                >
+                  <item.icon
+                    className={cn(
+                      "relative size-[18px] shrink-0 transition-colors",
+                      groupActive ? "text-sidebar-primary" : "opacity-80 group-hover:opacity-100",
+                    )}
+                  />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" side="right" sideOffset={8} className="w-56">
+                  <DropdownMenuItem
+                    render={
+                      <Link href={item.href} onClick={handleNavigate}>
+                        {item.label}
+                      </Link>
+                    }
+                  />
+                  {item.children.map((child) => (
+                    <DropdownMenuItem
+                      key={child.href}
+                      render={
+                        <Link href={child.href} onClick={handleNavigate}>
+                          {child.label}
+                        </Link>
+                      }
+                    />
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            );
+          }
+
+          return (
+            <div key={item.href} className="space-y-0.5">
+              <Link
+                href={item.href}
+                onClick={handleNavigate}
+                className={cn(
+                  "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  parentActive
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                    : "text-sidebar-foreground/85 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+                )}
+              >
+                {parentActive ? (
+                  <span
+                    className="absolute inset-y-1 left-0 w-1 rounded-full bg-sidebar-primary"
+                    aria-hidden
+                  />
+                ) : null}
                 <item.icon
                   className={cn(
                     "relative size-[18px] shrink-0 transition-colors",
                     groupActive ? "text-sidebar-primary" : "opacity-80 group-hover:opacity-100",
                   )}
                 />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" side="right" sideOffset={8} className="w-56">
-                <DropdownMenuItem
-                  render={
-                    <Link href={item.href} onClick={onNavigate}>
-                      {item.label}
-                    </Link>
-                  }
-                />
-                {item.children.map((child) => (
-                  <DropdownMenuItem
-                    key={child.href}
-                    render={
-                      <Link href={child.href} onClick={onNavigate}>
-                        {child.label}
+                <span className="relative truncate">{item.label}</span>
+              </Link>
+              {groupActive ? (
+                <div className="ml-6 border-l border-sidebar-border/70 pl-2">
+                  {item.children.map((child) => {
+                    const childActive = navActive(pathname, child.href);
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        onClick={handleNavigate}
+                        className={cn(
+                          "group relative flex items-center rounded-md px-3 py-2 text-sm transition-colors",
+                          childActive
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                            : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                        )}
+                      >
+                        {childActive ? (
+                          <span
+                            className="absolute inset-y-1 left-0 w-1 rounded-full bg-sidebar-primary"
+                            aria-hidden
+                          />
+                        ) : null}
+                        <span className="truncate">{child.label}</span>
                       </Link>
-                    }
-                  />
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          );
-        }
-
-        return (
-          <div key={item.href} className="space-y-0.5">
-            <Link
-              href={item.href}
-              onClick={onNavigate}
-              className={cn(
-                "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                parentActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                  : "text-sidebar-foreground/85 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
-              )}
-            >
-              {parentActive ? (
-                <span
-                  className="absolute inset-y-1 left-0 w-1 rounded-full bg-sidebar-primary"
-                  aria-hidden
-                />
+                    );
+                  })}
+                </div>
               ) : null}
-              <item.icon
-                className={cn(
-                  "relative size-[18px] shrink-0 transition-colors",
-                  groupActive ? "text-sidebar-primary" : "opacity-80 group-hover:opacity-100",
-                )}
-              />
-              <span className="relative truncate">{item.label}</span>
-            </Link>
-            {groupActive ? (
-              <div className="ml-6 border-l border-sidebar-border/70 pl-2">
-                {item.children.map((child) => {
-                  const childActive = navActive(pathname, child.href);
-                  return (
-                    <Link
-                      key={child.href}
-                      href={child.href}
-                      onClick={onNavigate}
-                      className={cn(
-                        "group relative flex items-center rounded-md px-3 py-2 text-sm transition-colors",
-                        childActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-                      )}
-                    >
-                      {childActive ? (
-                        <span
-                          className="absolute inset-y-1 left-0 w-1 rounded-full bg-sidebar-primary"
-                          aria-hidden
-                        />
-                      ) : null}
-                      <span className="truncate">{child.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
-    </nav>
+            </div>
+          );
+        })}
+      </nav>
+      {collapsedPreview ? <CollapsedNavPreviewCard preview={collapsedPreview} /> : null}
+    </>
   );
 }
 
