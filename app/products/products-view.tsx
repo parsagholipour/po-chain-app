@@ -5,7 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
-import type { Manufacturer, Product, ProductCategory, ProductType } from "@/lib/types/api";
+import type {
+  Manufacturer,
+  Product,
+  ProductCategory,
+  ProductCollection,
+  ProductType,
+} from "@/lib/types/api";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import { ProductsTable } from "@/components/po/products/products-table";
 import type { ProductFormValues } from "@/components/po/products/product-form";
@@ -29,11 +35,14 @@ const productsKey = ["products"] as const;
 const manufacturersKey = ["manufacturers"] as const;
 const productCategoriesKey = ["product-categories"] as const;
 const productTypesKey = ["product-types"] as const;
+const productCollectionsKey = ["product-collections"] as const;
 const uncategorizedFilterValue = "__uncategorized__";
 const untypedFilterValue = "__untyped__";
-const productFilterDefaults: Record<"category" | "type", string> = {
+const uncollectedFilterValue = "__uncollected__";
+const productFilterDefaults: Record<"category" | "type" | "collection", string> = {
   category: LIST_FILTER_ALL_VALUE,
   type: LIST_FILTER_ALL_VALUE,
+  collection: LIST_FILTER_ALL_VALUE,
 };
 
 export function ProductsView() {
@@ -63,6 +72,7 @@ export function ProductsView() {
       debouncedSearch,
       productFilters.filters.category,
       productFilters.filters.type,
+      productFilters.filters.collection,
     ],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -81,7 +91,15 @@ export function ProductsView() {
           "typeId",
           productFilters.filters.type === untypedFilterValue
             ? "none"
-            : productFilters.filters.type,
+          : productFilters.filters.type,
+        );
+      }
+      if (productFilters.filters.collection !== LIST_FILTER_ALL_VALUE) {
+        params.set(
+          "collectionId",
+          productFilters.filters.collection === uncollectedFilterValue
+            ? "none"
+            : productFilters.filters.collection,
         );
       }
       const qs = params.toString();
@@ -106,6 +124,14 @@ export function ProductsView() {
     },
   });
 
+  const { data: productCollections = [], isPending: productCollectionsPending } = useQuery({
+    queryKey: productCollectionsKey,
+    queryFn: async () => {
+      const { data: rows } = await api.get<ProductCollection[]>("/api/product-collections");
+      return rows;
+    },
+  });
+
   const categoryFilterOptions = useMemo(
     () => [
       { value: uncategorizedFilterValue, label: "No category" },
@@ -122,9 +148,22 @@ export function ProductsView() {
     [productTypes],
   );
 
+  const collectionFilterOptions = useMemo(
+    () => [
+      { value: uncollectedFilterValue, label: "No collection" },
+      ...productCollections.map((collection) => ({ value: collection.id, label: collection.name })),
+    ],
+    [productCollections],
+  );
+
   const pagination = usePagination({
     totalItems: data.length,
-    resetDeps: [debouncedSearch, productFilters.filters.category, productFilters.filters.type],
+    resetDeps: [
+      debouncedSearch,
+      productFilters.filters.category,
+      productFilters.filters.type,
+      productFilters.filters.collection,
+    ],
   });
   const pagedRows = pagination.sliceItems(data);
 
@@ -152,6 +191,7 @@ export function ProductsView() {
         defaultManufacturerId: values.defaultManufacturerId,
         categoryId: values.categoryId,
         typeId: values.typeId,
+        collectionId: values.collectionId,
         verified: values.verified,
         imageKey: values.imageKey,
         barcodeKey: values.barcodeKey,
@@ -205,6 +245,7 @@ export function ProductsView() {
         defaultManufacturerId: payload.values.defaultManufacturerId,
         categoryId: payload.values.categoryId,
         typeId: payload.values.typeId,
+        collectionId: payload.values.collectionId,
         verified: payload.values.verified,
       };
       if (payload.patchImageKey) {
@@ -284,6 +325,16 @@ export function ProductsView() {
               placeholder: "Type",
               options: typeFilterOptions,
               disabled: productTypesPending,
+            },
+            {
+              key: "collection",
+              value: productFilters.filters.collection,
+              onValueChange: (value) => productFilters.setFilter("collection", value),
+              allLabel: "All collections",
+              ariaLabel: "Filter by collection",
+              placeholder: "Collection",
+              options: collectionFilterOptions,
+              disabled: productCollectionsPending,
             },
           ]}
           hasActiveFilters={productFilters.hasActiveFilters}

@@ -15,7 +15,7 @@ export default {
   },
   callbacks: {
     authorized({ auth, request }) {
-      if (request.nextUrl.pathname.startsWith("/auth/error")) {
+      if (request.nextUrl.pathname === "/" || request.nextUrl.pathname.startsWith("/auth/error")) {
         return true;
       }
       return !!auth?.user;

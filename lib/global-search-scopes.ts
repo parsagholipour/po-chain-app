@@ -2,6 +2,7 @@ export type GlobalSearchScope =
   | "po"
   | "mo"
   | "so"
+  | "wo"
   | "manufacturer"
   | "product"
   | "shipping"
@@ -14,6 +15,7 @@ export const GLOBAL_SEARCH_SCOPES: readonly {
   { scope: "po", label: "PO" },
   { scope: "mo", label: "MO" },
   { scope: "so", label: "SO" },
+  { scope: "wo", label: "WO" },
   { scope: "manufacturer", label: "Manufacturer" },
   { scope: "product", label: "Product" },
   { scope: "shipping", label: "Shipping" },

@@ -36,6 +36,9 @@ type ShippingValidationDb = {
       where: { id: { in: string[] }; storeId: string; type: "distributor" | "stock" };
     }): Promise<number>;
   };
+  warehouseOrder: {
+    count(args: { where: { id: { in: string[] }; storeId: string } }): Promise<number>;
+  };
 };
 
 function uniqueIds(ids: string[] | undefined) {
@@ -50,16 +53,19 @@ async function validateShippingWrite(
     logisticsPartnerId,
     manufacturingOrderIds,
     purchaseOrderIds,
+    warehouseOrderIds,
   }: {
     storeId: string;
     type: ShippingType;
     logisticsPartnerId?: string | null;
     manufacturingOrderIds?: string[];
     purchaseOrderIds?: string[];
+    warehouseOrderIds?: string[];
   },
 ) {
   const normalizedManufacturingOrderIds = uniqueIds(manufacturingOrderIds);
   const normalizedPurchaseOrderIds = uniqueIds(purchaseOrderIds);
+  const normalizedWarehouseOrderIds = uniqueIds(warehouseOrderIds);
 
   if (logisticsPartnerId) {
     const partner = await db.logisticsPartner.findFirst({
@@ -75,7 +81,7 @@ async function validateShippingWrite(
   }
 
   if (type === "manufacturing_order") {
-    if (normalizedPurchaseOrderIds.length > 0) {
+    if (normalizedPurchaseOrderIds.length > 0 || normalizedWarehouseOrderIds.length > 0) {
       throw new Error("ORDER_LINK_TYPE_MISMATCH");
     }
     if (normalizedManufacturingOrderIds.length > 0) {
@@ -90,10 +96,35 @@ async function validateShippingWrite(
     return {
       manufacturingOrderIds: normalizedManufacturingOrderIds,
       purchaseOrderIds: [] as string[],
+      warehouseOrderIds: [] as string[],
     };
   }
 
   if (normalizedManufacturingOrderIds.length > 0) {
+    throw new Error("ORDER_LINK_TYPE_MISMATCH");
+  }
+
+  if (type === "warehouse_order") {
+    if (normalizedPurchaseOrderIds.length > 0) {
+      throw new Error("ORDER_LINK_TYPE_MISMATCH");
+    }
+    if (normalizedWarehouseOrderIds.length > 0) {
+      const count = await db.warehouseOrder.count({
+        where: { id: { in: normalizedWarehouseOrderIds }, storeId },
+      });
+      if (count !== normalizedWarehouseOrderIds.length) {
+        throw new Error("ORDER_NOT_FOUND");
+      }
+    }
+
+    return {
+      manufacturingOrderIds: [] as string[],
+      purchaseOrderIds: [] as string[],
+      warehouseOrderIds: normalizedWarehouseOrderIds,
+    };
+  }
+
+  if (normalizedWarehouseOrderIds.length > 0) {
     throw new Error("ORDER_LINK_TYPE_MISMATCH");
   }
 
@@ -116,6 +147,7 @@ async function validateShippingWrite(
   return {
     manufacturingOrderIds: [] as string[],
     purchaseOrderIds: normalizedPurchaseOrderIds,
+    warehouseOrderIds: [] as string[],
   };
 }
 
@@ -172,12 +204,14 @@ export async function POST(request: Request) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
-      const { manufacturingOrderIds, purchaseOrderIds } = await validateShippingWrite(tx, {
+      const { manufacturingOrderIds, purchaseOrderIds, warehouseOrderIds } =
+        await validateShippingWrite(tx, {
         storeId,
         type: parsed.data.type,
         logisticsPartnerId: parsed.data.logisticsPartnerId,
         manufacturingOrderIds: parsed.data.manufacturingOrderIds,
         purchaseOrderIds: parsed.data.purchaseOrderIds,
+        warehouseOrderIds: parsed.data.warehouseOrderIds,
       });
 
       const shipping = await tx.shipping.create({
@@ -208,10 +242,21 @@ export async function POST(request: Request) {
         });
       }
 
+      if (warehouseOrderIds.length > 0) {
+        await tx.warehouseOrderShipping.createMany({
+          data: warehouseOrderIds.map((warehouseOrderId) => ({
+            warehouseOrderId,
+            shippingId: shipping.id,
+            storeId,
+          })),
+        });
+      }
+
       await reconcileLinkedOrderStatusesForShipping(tx, {
         storeId,
         manufacturingOrderIds,
         purchaseOrderIds,
+        warehouseOrderIds,
       });
 
       return shipping.id;

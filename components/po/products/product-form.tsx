@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRef, useState } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { Controller, useForm, useFormState, useWatch, type Resolver } from "react-hook-form";
 import {
   CustomFieldsRenderer,
@@ -32,7 +32,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DialogFooter } from "@/components/ui/dialog";
-import type { Manufacturer, ProductCategory, ProductType } from "@/lib/types/api";
+import type {
+  Manufacturer,
+  ProductCategory,
+  ProductCollection,
+  ProductType,
+} from "@/lib/types/api";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -62,6 +67,7 @@ const schema = z.object({
   defaultManufacturerId: z.string().uuid(),
   categoryId: z.preprocess(noneToNull, z.string().uuid().nullable().optional()),
   typeId: z.preprocess(noneToNull, z.string().uuid().nullable().optional()),
+  collectionId: z.preprocess(noneToNull, z.string().uuid().nullable().optional()),
   verified: z.boolean(),
   imageKey: z.string().nullable().optional(),
   barcodeKey: z.string().nullable().optional(),
@@ -74,6 +80,7 @@ type Props = {
   manufacturers: Manufacturer[];
   categories: ProductCategory[];
   productTypes: ProductType[];
+  productCollections: ProductCollection[];
   defaultValues: ProductFormValues;
   editingId?: string | null;
   onSubmit: (
@@ -91,6 +98,7 @@ export function ProductForm({
   manufacturers,
   categories,
   productTypes,
+  productCollections,
   defaultValues,
   editingId,
   onSubmit,
@@ -174,6 +182,9 @@ export function ProductForm({
     if (payloadValues.typeId === "none") {
       payloadValues.typeId = null;
     }
+    if (payloadValues.collectionId === "none") {
+      payloadValues.collectionId = null;
+    }
 
     const entityId = await onSubmit(
       {
@@ -193,8 +204,12 @@ export function ProductForm({
     }
   }
 
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    void form.handleSubmit(handleSubmit)(event);
+  }
+
   return (
-    <form onSubmit={form.handleSubmit(handleSubmit)}>
+    <form onSubmit={handleFormSubmit}>
       <FieldSet className="gap-4">
         <FieldGroup className="gap-4">
           <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">
@@ -332,6 +347,41 @@ export function ProductForm({
                 )}
               />
               <FieldError errors={[form.formState.errors.typeId]} />
+            </FieldContent>
+          </Field>
+          <Field data-invalid={!!form.formState.errors.collectionId} className="gap-1.5">
+            <FieldLabel>Collection</FieldLabel>
+            <FieldContent>
+              <Controller
+                control={form.control}
+                name="collectionId"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? undefined}
+                    onValueChange={field.onChange}
+                    items={[
+                      { value: "none", label: "No collection" },
+                      ...productCollections.map((collection) => ({
+                        value: collection.id,
+                        label: collection.name,
+                      })),
+                    ]}
+                  >
+                    <SelectTrigger className="w-full min-w-0">
+                      <SelectValue placeholder="Collection (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No collection</SelectItem>
+                      {productCollections.map((collection) => (
+                        <SelectItem key={collection.id} value={collection.id}>
+                          {collection.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <FieldError errors={[form.formState.errors.collectionId]} />
             </FieldContent>
           </Field>
           <Field orientation="horizontal" className="gap-2">

@@ -133,6 +133,10 @@ export function buildAssistantPageContext(
     return { pathname, search, entityType: "mo", entityId: maybeId };
   }
 
+  if (segments[0] === "warehouse-orders" && looksLikeUuid(maybeId)) {
+    return { pathname, search, entityType: "wo", entityId: maybeId };
+  }
+
   if (pathname === "/shipping") {
     const shippingId = searchParams.get("id");
     if (looksLikeUuid(shippingId)) {
@@ -159,6 +163,8 @@ export function describeAssistantPageContext(pageContext: AssistantPageContext |
       return "Current stock order";
     case "mo":
       return "Current manufacturing order";
+    case "wo":
+      return "Current warehouse order";
     case "shipping":
       return "Current shipment";
     default:

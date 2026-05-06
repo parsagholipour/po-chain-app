@@ -28,16 +28,25 @@ type CreateOrderStatusLogInput = {
   | {
       purchaseOrderId: string;
       manufacturingOrderId?: never;
+      warehouseOrderId?: never;
       shippingId?: never;
     }
   | {
       purchaseOrderId?: never;
       manufacturingOrderId: string;
+      warehouseOrderId?: never;
       shippingId?: never;
     }
   | {
       purchaseOrderId?: never;
       manufacturingOrderId?: never;
+      warehouseOrderId: string;
+      shippingId?: never;
+    }
+  | {
+      purchaseOrderId?: never;
+      manufacturingOrderId?: never;
+      warehouseOrderId?: never;
       shippingId: string;
     }
 );
@@ -73,6 +82,7 @@ export function orderStatusLogFromPrisma(log: OrderStatusLogWithRelations) {
     note: log.note ?? null,
     purchaseOrderId: log.purchaseOrderId,
     manufacturingOrderId: log.manufacturingOrderId,
+    warehouseOrderId: log.warehouseOrderId,
     shippingId: log.shippingId,
     storeId: log.storeId,
     createdAt: log.createdAt.toISOString(),

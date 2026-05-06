@@ -6,6 +6,7 @@ export type AssistantSourceKind =
   | "purchase_order"
   | "stock_order"
   | "manufacturing_order"
+  | "warehouse_order"
   | "shipping"
   | "product"
   | "manufacturer"
@@ -23,6 +24,7 @@ export type AssistantPageContextEntityType =
   | "po"
   | "so"
   | "mo"
+  | "wo"
   | "shipping"
   | "dashboard"
   | "analytics";

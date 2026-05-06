@@ -2,6 +2,7 @@ export const shippingTypeLabels = {
   manufacturing_order: "Manufacturing Order",
   purchase_order: "Purchase Order",
   stock_order: "Stock Order",
+  warehouse_order: "Warehouse Order",
 } as const;
 
 export type ShippingType = keyof typeof shippingTypeLabels;
@@ -34,5 +35,7 @@ export function shippingOrderHref(order: {
       return `/purchase-orders/${order.id}`;
     case "stock_order":
       return `/stock-orders/${order.id}`;
+    case "warehouse_order":
+      return `/warehouse-orders/${order.id}`;
   }
 }

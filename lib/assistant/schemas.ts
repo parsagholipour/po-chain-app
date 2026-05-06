@@ -6,7 +6,7 @@ export const assistantPageContextSchema = z.object({
   pathname: z.string().trim().min(1).max(200),
   search: z.string().max(500).default(""),
   entityType: z
-    .enum(["po", "so", "mo", "shipping", "dashboard", "analytics"])
+    .enum(["po", "so", "mo", "wo", "shipping", "dashboard", "analytics"])
     .optional(),
   entityId: z.uuid().optional(),
 });

@@ -192,6 +192,7 @@ export function StockOrderDetailView({ stockOrderId }: { stockOrderId: string })
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: soKey });
+      qc.invalidateQueries({ queryKey: ["analytics"] });
       toast.success("Line updated");
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),

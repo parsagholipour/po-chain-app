@@ -12,6 +12,8 @@ export async function invalidateShippingRelatedQueries(queryClient: QueryClient)
     queryClient.invalidateQueries({ queryKey: ["purchase-order"] }),
     queryClient.invalidateQueries({ queryKey: ["stock-orders"] }),
     queryClient.invalidateQueries({ queryKey: ["stock-order"] }),
+    queryClient.invalidateQueries({ queryKey: ["warehouse-orders"] }),
+    queryClient.invalidateQueries({ queryKey: ["warehouse-order"] }),
     invalidateNavCounts(queryClient),
   ]);
 }

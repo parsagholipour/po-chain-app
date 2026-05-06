@@ -98,6 +98,19 @@ export async function GET(request: Request) {
           },
         },
       },
+      warehouseOrderPurchaseOrders: {
+        select: {
+          warehouseOrder: {
+            select: {
+              id: true,
+              number: true,
+              name: true,
+              status: true,
+              warehouse: { select: { name: true } },
+            },
+          },
+        },
+      },
       purchaseOrderShippings: {
         select: {
           shipping: {
@@ -136,6 +149,13 @@ export async function GET(request: Request) {
         number: mo.manufacturingOrder.number,
         name: mo.manufacturingOrder.name,
         status: mo.manufacturingOrder.status,
+      })),
+      warehouseOrders: r.warehouseOrderPurchaseOrders.map((wo) => ({
+        id: wo.warehouseOrder.id,
+        number: wo.warehouseOrder.number,
+        name: wo.warehouseOrder.name,
+        status: wo.warehouseOrder.status,
+        warehouseName: wo.warehouseOrder.warehouse.name,
       })),
       shippingBadges: r.purchaseOrderShippings.map((s) => ({
         id: s.shipping.id,

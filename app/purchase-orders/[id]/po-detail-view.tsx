@@ -23,6 +23,7 @@ import { AddPoLineDialog } from "@/components/po/purchase-order/add-po-line-dial
 import { PoDetailHeader } from "@/components/po/purchase-order/po-detail-header";
 import { PoLinesSection } from "@/components/po/purchase-order/po-lines-section";
 import { PoLinkedMosSection } from "@/components/po/purchase-order/po-linked-mos-section";
+import { PoLinkedWarehouseOrdersSection } from "@/components/po/purchase-order/po-linked-warehouse-orders-section";
 import { PoShipmentsSection } from "@/components/po/purchase-order/po-shipments-section";
 import { PoOrderInvoiceSection } from "@/components/po/purchase-order/po-order-invoice-section";
 import { InvoiceUpsertDialog } from "@/components/po/purchase-order/invoice-upsert-dialog";
@@ -198,6 +199,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: poKey });
+      qc.invalidateQueries({ queryKey: ["analytics"] });
       toast.success("Line updated");
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
@@ -314,6 +316,9 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
 
   const linkedMos = po?.manufacturingOrderPurchaseOrders.map(
     (r) => r.manufacturingOrder,
+  ) ?? [];
+  const linkedWarehouseOrders = po?.warehouseOrderPurchaseOrders.map(
+    (r) => r.warehouseOrder,
   ) ?? [];
 
   const invoiceDialogDefaults = useMemo((): InvoiceFormValues => {
@@ -479,6 +484,8 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
       />
 
       <PoLinkedMosSection manufacturingOrders={linkedMos} />
+
+      <PoLinkedWarehouseOrdersSection warehouseOrders={linkedWarehouseOrders} />
 
       <PoShipmentsSection
         shippings={po.shippings}

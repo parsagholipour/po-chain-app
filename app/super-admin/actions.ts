@@ -1,10 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { STORE_CACHE_TAG } from "@/lib/store";
 import { requireSuperAdmin } from "@/lib/super-admin";
+import { normalizeStoreTheme, type StoreTheme } from "@/lib/store-theme";
 import { superAdminStoreUpdateSchema } from "@/lib/validations/store";
 
 const storeIdSchema = z.uuid();
@@ -15,6 +17,7 @@ export type SuperAdminStoreUpdate = {
   slug: string;
   email: string | null;
   website: string | null;
+  theme: StoreTheme;
 };
 
 export type UpdateSuperAdminStoreResult =
@@ -46,6 +49,7 @@ export async function updateSuperAdminStore(
         slug: parsed.data.slug,
         email: parsed.data.email ?? null,
         website: parsed.data.website ?? null,
+        theme: parsed.data.theme,
       },
       select: {
         id: true,
@@ -53,12 +57,14 @@ export async function updateSuperAdminStore(
         slug: true,
         email: true,
         website: true,
+        theme: true,
       },
     });
 
+    updateTag(STORE_CACHE_TAG);
     revalidatePath("/super-admin");
 
-    return { ok: true, store: row };
+    return { ok: true, store: { ...row, theme: normalizeStoreTheme(row.theme) } };
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {

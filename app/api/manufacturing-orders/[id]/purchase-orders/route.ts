@@ -9,6 +9,7 @@ import {
 } from "@/lib/mo-product-assets";
 import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 import { requireStoreContext } from "@/lib/store-context";
+import { getFulfillmentAvailability } from "@/lib/fulfillment-quantity";
 
 export const runtime = "nodejs";
 
@@ -55,6 +56,7 @@ export async function POST(
         where: { purchaseOrderId: parsed.data.purchaseOrderId, storeId },
         select: {
           id: true,
+          quantity: true,
           product: {
             select: {
               defaultManufacturerId: true,
@@ -75,7 +77,21 @@ export async function POST(
         },
       });
 
-      const missingProductAssets = findLinesMissingProductAssets(poLines);
+      const poLinesWithRemaining = [];
+      for (const line of poLines) {
+        const availability = await getFulfillmentAvailability(tx, {
+          storeId,
+          purchaseOrderLineId: line.id,
+        });
+        if (availability && availability.availableQuantity > 0) {
+          poLinesWithRemaining.push({
+            ...line,
+            allocationQuantity: availability.availableQuantity,
+          });
+        }
+      }
+
+      const missingProductAssets = findLinesMissingProductAssets(poLinesWithRemaining);
       if (missingProductAssets.length > 0) {
         throw new Error(
           formatMissingProductAssetsError(
@@ -93,7 +109,7 @@ export async function POST(
         },
       });
 
-      if (poLines.length === 0) return;
+      if (poLinesWithRemaining.length === 0) return;
 
       const existingManufacturers = await tx.manufacturingOrderManufacturer.findMany({
         where: { manufacturingOrderId: pid.data.id, storeId },
@@ -101,7 +117,7 @@ export async function POST(
       });
       const manufacturerOnMo = new Set(existingManufacturers.map((m) => m.manufacturerId));
 
-      for (const line of poLines) {
+      for (const line of poLinesWithRemaining) {
         const manufacturerId = line.product.defaultManufacturerId;
         if (!manufacturerOnMo.has(manufacturerId)) {
           await tx.manufacturingOrderManufacturer.create({
@@ -118,10 +134,11 @@ export async function POST(
       }
 
       await tx.manufacturingOrderPurchaseOrderLine.createMany({
-        data: poLines.map((line) => ({
+        data: poLinesWithRemaining.map((line) => ({
           manufacturingOrderId: pid.data.id,
           purchaseOrderLineId: line.id,
           manufacturerId: line.product.defaultManufacturerId,
+          quantity: line.allocationQuantity,
           verified: false,
           storeId,
           createdById: userId,

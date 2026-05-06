@@ -3,7 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
-import type { OrderStatusLog, ShippingRow } from "@/lib/types/api";
+import type {
+  OrderStatusLog,
+  ShippingRow,
+  WarehouseOrderSummary,
+} from "@/lib/types/api";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +37,7 @@ interface ShippingUpsertDialogProps {
   defaultType?: ShippingType;
   requiredManufacturingOrderIds?: string[];
   requiredPurchaseOrderIds?: string[];
+  requiredWarehouseOrderIds?: string[];
   onSuccess: () => void;
 }
 
@@ -43,6 +48,7 @@ export function ShippingUpsertDialog({
   defaultType = "manufacturing_order",
   requiredManufacturingOrderIds = [],
   requiredPurchaseOrderIds = [],
+  requiredWarehouseOrderIds = [],
   onSuccess,
 }: ShippingUpsertDialogProps) {
   const qc = useQueryClient();
@@ -84,6 +90,19 @@ export function ShippingUpsertDialog({
       return data;
     },
     enabled: open && currentType === "stock_order",
+  });
+
+  const { data: warehouseOrders, isPending: isWarehouseOrdersPending } = useQuery({
+    queryKey: ["warehouse-orders", "shipping-form"],
+    queryFn: async () => {
+      const { data } = await api.get<WarehouseOrderSummary[]>("/api/warehouse-orders");
+      return data.map((row) => ({
+        id: row.id,
+        number: row.number,
+        name: row.name,
+      }));
+    },
+    enabled: open && currentType === "warehouse_order",
   });
 
   const {
@@ -182,6 +201,8 @@ export function ShippingUpsertDialog({
   const isOrderOptionsPending =
     currentType === "manufacturing_order"
       ? isManufacturingOrdersPending
+      : currentType === "warehouse_order"
+        ? isWarehouseOrdersPending
       : currentType === "stock_order"
         ? isStockOrdersPending
         : isPurchaseOrdersPending;
@@ -208,7 +229,10 @@ export function ShippingUpsertDialog({
           .filter((o) => o.orderType === "manufacturing_order")
           .map((o) => o.id),
         purchaseOrderIds: shipping.orders
-          .filter((o) => o.orderType !== "manufacturing_order")
+          .filter((o) => o.orderType === "purchase_order" || o.orderType === "stock_order")
+          .map((o) => o.id),
+        warehouseOrderIds: shipping.orders
+          .filter((o) => o.orderType === "warehouse_order")
           .map((o) => o.id),
       }
     : {
@@ -217,6 +241,7 @@ export function ShippingUpsertDialog({
         deliveryDutiesPaid: false,
         manufacturingOrderIds: requiredManufacturingOrderIds,
         purchaseOrderIds: requiredPurchaseOrderIds,
+        warehouseOrderIds: requiredWarehouseOrderIds,
       };
 
   return (
@@ -247,9 +272,11 @@ export function ShippingUpsertDialog({
             isSubmitting={isSubmitting}
             availableManufacturingOrders={manufacturingOrders ?? []}
             availablePurchaseOrders={availablePurchaseOrders}
+            availableWarehouseOrders={warehouseOrders ?? []}
             availableLogisticsPartners={logisticsPartners}
             requiredManufacturingOrderIds={requiredManufacturingOrderIds}
             requiredPurchaseOrderIds={requiredPurchaseOrderIds}
+            requiredWarehouseOrderIds={requiredWarehouseOrderIds}
             statusLogs={shipping?.statusLogs ?? []}
           />
         )}

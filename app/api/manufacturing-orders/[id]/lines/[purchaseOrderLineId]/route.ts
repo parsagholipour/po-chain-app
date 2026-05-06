@@ -7,6 +7,7 @@ import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-inclu
 import { manufacturerOnManufacturingOrder } from "@/lib/mo-line-guard";
 import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 import { requireStoreContext } from "@/lib/store-context";
+import { assertFulfillmentQuantityAvailable } from "@/lib/fulfillment-quantity";
 
 export const runtime = "nodejs";
 
@@ -39,6 +40,7 @@ export async function PATCH(
   if (Object.keys(parsed.data).length === 0) {
     return jsonError("No fields to update", 400);
   }
+  const allocationPatch = parsed.data;
 
   const existing = await prisma.manufacturingOrderPurchaseOrderLine.findFirst({
     where: {
@@ -49,14 +51,34 @@ export async function PATCH(
   });
   if (!existing) return jsonError("Line allocation not found", 404);
 
-  if (parsed.data.manufacturerId !== undefined) {
+  if (allocationPatch.manufacturerId !== undefined) {
     const onMo = await manufacturerOnManufacturingOrder(
       storeId,
       pid.data.id,
-      parsed.data.manufacturerId,
+      allocationPatch.manufacturerId,
     );
     if (!onMo) {
       return jsonError("Manufacturer is not linked to this manufacturing order", 400);
+    }
+  }
+
+  if (allocationPatch.quantity !== undefined) {
+    try {
+      await assertFulfillmentQuantityAvailable(prisma, {
+        storeId,
+        purchaseOrderLineId: pid.data.purchaseOrderLineId,
+        quantity: allocationPatch.quantity,
+        excludeManufacturingOrderId: pid.data.id,
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message.startsWith("FULFILLMENT_QUANTITY_EXCEEDED:")) {
+        const available = e.message.slice("FULFILLMENT_QUANTITY_EXCEEDED:".length);
+        return jsonError(
+          `Requested quantity exceeds available fulfillment quantity (${available})`,
+          409,
+        );
+      }
+      throw e;
     }
   }
 
@@ -68,7 +90,7 @@ export async function PATCH(
           purchaseOrderLineId: pid.data.purchaseOrderLineId,
         },
       },
-      data: parsed.data,
+      data: allocationPatch,
     });
 
     const full = await prisma.manufacturingOrder.findFirst({

@@ -51,6 +51,8 @@ export function PoShipmentsSection({
     orderType === "manufacturing_order" ? [orderId] : [];
   const requiredPurchaseOrderIds =
     orderType === "purchase_order" || orderType === "stock_order" ? [orderId] : [];
+  const requiredWarehouseOrderIds =
+    orderType === "warehouse_order" ? [orderId] : [];
 
   return (
     <section
@@ -189,6 +191,7 @@ export function PoShipmentsSection({
         defaultType={orderType}
         requiredManufacturingOrderIds={requiredManufacturingOrderIds}
         requiredPurchaseOrderIds={requiredPurchaseOrderIds}
+        requiredWarehouseOrderIds={requiredWarehouseOrderIds}
         onSuccess={() => {
           setUpsertOpen(false);
           setEditingId(null);

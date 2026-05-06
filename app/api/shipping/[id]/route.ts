@@ -81,6 +81,9 @@ export async function PATCH(
           purchaseOrderShippings: {
             select: { purchaseOrderId: true },
           },
+          warehouseOrderShippings: {
+            select: { warehouseOrderId: true },
+          },
         },
       });
       if (!existing) {
@@ -92,6 +95,9 @@ export async function PATCH(
       );
       const existingPurchaseOrderIds = existing.purchaseOrderShippings.map(
         (row) => row.purchaseOrderId,
+      );
+      const existingWarehouseOrderIds = existing.warehouseOrderShippings.map(
+        (row) => row.warehouseOrderId,
       );
 
       if (parsed.data.logisticsPartnerId) {
@@ -109,9 +115,10 @@ export async function PATCH(
 
       const manufacturingOrderIds = uniqueIds(parsed.data.manufacturingOrderIds);
       const purchaseOrderIds = uniqueIds(parsed.data.purchaseOrderIds);
+      const warehouseOrderIds = uniqueIds(parsed.data.warehouseOrderIds);
 
       if (existing.type === "manufacturing_order") {
-        if (purchaseOrderIds.length > 0) {
+        if (purchaseOrderIds.length > 0 || warehouseOrderIds.length > 0) {
           throw new Error("ORDER_LINK_TYPE_MISMATCH");
         }
         if (manufacturingOrderIds.length > 0) {
@@ -122,8 +129,23 @@ export async function PATCH(
             throw new Error("ORDER_NOT_FOUND");
           }
         }
+      } else if (existing.type === "warehouse_order") {
+        if (manufacturingOrderIds.length > 0 || purchaseOrderIds.length > 0) {
+          throw new Error("ORDER_LINK_TYPE_MISMATCH");
+        }
+        if (warehouseOrderIds.length > 0) {
+          const count = await tx.warehouseOrder.count({
+            where: { id: { in: warehouseOrderIds }, storeId },
+          });
+          if (count !== warehouseOrderIds.length) {
+            throw new Error("ORDER_NOT_FOUND");
+          }
+        }
       } else {
         if (manufacturingOrderIds.length > 0) {
+          throw new Error("ORDER_LINK_TYPE_MISMATCH");
+        }
+        if (warehouseOrderIds.length > 0) {
           throw new Error("ORDER_LINK_TYPE_MISMATCH");
         }
         if (purchaseOrderIds.length > 0) {
@@ -146,6 +168,7 @@ export async function PATCH(
       const shippingData = { ...parsed.data };
       delete shippingData.manufacturingOrderIds;
       delete shippingData.purchaseOrderIds;
+      delete shippingData.warehouseOrderIds;
 
       const shipping = await tx.shipping.update({
         where: { id: pid.data.id },
@@ -193,12 +216,31 @@ export async function PATCH(
         }
       }
 
+      if (parsed.data.warehouseOrderIds !== undefined) {
+        await tx.warehouseOrderShipping.deleteMany({
+          where: { shippingId: pid.data.id, storeId },
+        });
+        if (warehouseOrderIds.length > 0) {
+          await tx.warehouseOrderShipping.createMany({
+            data: warehouseOrderIds.map((warehouseOrderId) => ({
+              warehouseOrderId,
+              shippingId: shipping.id,
+              storeId,
+            })),
+          });
+        }
+      }
+
       const nextManufacturingOrderIds =
         parsed.data.manufacturingOrderIds !== undefined
           ? manufacturingOrderIds
           : existingManufacturingOrderIds;
       const nextPurchaseOrderIds =
         parsed.data.purchaseOrderIds !== undefined ? purchaseOrderIds : existingPurchaseOrderIds;
+      const nextWarehouseOrderIds =
+        parsed.data.warehouseOrderIds !== undefined
+          ? warehouseOrderIds
+          : existingWarehouseOrderIds;
 
       await reconcileLinkedOrderStatusesForShipping(tx, {
         storeId,
@@ -207,6 +249,7 @@ export async function PATCH(
           ...nextManufacturingOrderIds,
         ]),
         purchaseOrderIds: uniqueIds([...existingPurchaseOrderIds, ...nextPurchaseOrderIds]),
+        warehouseOrderIds: uniqueIds([...existingWarehouseOrderIds, ...nextWarehouseOrderIds]),
       });
 
       return shipping.id;
@@ -264,6 +307,9 @@ export async function DELETE(
           purchaseOrderShippings: {
             select: { purchaseOrderId: true },
           },
+          warehouseOrderShippings: {
+            select: { warehouseOrderId: true },
+          },
         },
       });
       if (!existing) {
@@ -280,6 +326,9 @@ export async function DELETE(
           (row) => row.manufacturingOrderId,
         ),
         purchaseOrderIds: existing.purchaseOrderShippings.map((row) => row.purchaseOrderId),
+        warehouseOrderIds: existing.warehouseOrderShippings.map(
+          (row) => row.warehouseOrderId,
+        ),
       });
     });
 

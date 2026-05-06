@@ -1,9 +1,20 @@
 "use client";
 
-import { useMemo } from "react";
+import { type FormEvent, useMemo, useState } from "react";
 import { useConfirm } from "@/components/confirm-provider";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { PriceField } from "@/components/ui/price-field";
+import { PriceView } from "@/components/ui/price-view";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -24,7 +35,7 @@ import { MoLinkedOrderLabel } from "@/components/po/mo-linked-order-label";
 import { TablePagination } from "@/components/ui/table-pagination";
 import type { MoLineAllocationRow, MoManufacturerPivot, Product } from "@/lib/types/api";
 import { usePagination } from "@/hooks/use-pagination";
-import { Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 
 type Props = {
   allocations: MoLineAllocationRow[];
@@ -32,7 +43,12 @@ type Props = {
   onAdd: () => void;
   onPatch: (
     purchaseOrderLineId: string,
-    body: { manufacturerId?: string; verified?: boolean },
+    body: {
+      manufacturerId?: string;
+      quantity?: number;
+      verified?: boolean;
+      cost?: number | null;
+    },
   ) => void;
   onDelete: (purchaseOrderLineId: string) => void;
   onEditProduct?: (product: Product) => void;
@@ -40,6 +56,12 @@ type Props = {
   /** Hide title row and Add button when the parent supplies them (e.g. collapsible header). */
   hideToolbar?: boolean;
 };
+
+function moneyInputValue(value: string | number | null | undefined) {
+  if (value == null || value === "") return "";
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? String(n) : "";
+}
 
 export function MoAllocationsSection({
   allocations,
@@ -52,6 +74,9 @@ export function MoAllocationsSection({
   hideToolbar = false,
 }: Props) {
   const confirm = useConfirm();
+  const [costEditor, setCostEditor] = useState<MoLineAllocationRow | null>(null);
+  const [costValue, setCostValue] = useState("");
+  const [costError, setCostError] = useState<string | null>(null);
   const manufacturerSelectItems = useMemo(
     () =>
       manufacturerOptions.map((m) => ({
@@ -62,9 +87,34 @@ export function MoAllocationsSection({
   );
   const pagination = usePagination({ totalItems: allocations.length });
   const pagedAllocations = pagination.sliceItems(allocations);
+  const editingProduct = costEditor?.purchaseOrderLine.product;
+
+  function openCostEditor(row: MoLineAllocationRow) {
+    setCostEditor(row);
+    setCostValue(moneyInputValue(row.cost));
+    setCostError(null);
+  }
+
+  function submitCostEdit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!costEditor) return;
+
+    const trimmed = costValue.trim();
+    const cost = trimmed === "" ? null : Number(trimmed);
+    if (cost !== null && (!Number.isFinite(cost) || cost < 0)) {
+      setCostError("Enter a valid non-negative cost.");
+      return;
+    }
+
+    onPatch(costEditor.purchaseOrderLineId, {
+      cost: cost === null ? null : Number(cost.toFixed(2)),
+    });
+    setCostEditor(null);
+  }
 
   return (
-    <section
+    <>
+      <section
       className="space-y-4"
       aria-labelledby={hideToolbar ? undefined : "mo-alloc-heading"}
       aria-label={hideToolbar ? "Line allocations" : undefined}
@@ -91,6 +141,7 @@ export function MoAllocationsSection({
               <TableRow>
                 <TableHead>Order / Product</TableHead>
                 <TableHead className="w-24">Qty</TableHead>
+                <TableHead className="w-36 text-end">Cost</TableHead>
                 <TableHead className="min-w-[10rem]">Manufacturer</TableHead>
                 <TableHead className="w-28">Verified</TableHead>
                 <TableHead className="w-12" />
@@ -157,7 +208,40 @@ export function MoAllocationsSection({
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>{row.purchaseOrderLine.quantity}</TableCell>
+                  <TableCell>
+                    <Input
+                      key={`${row.purchaseOrderLineId}-${row.quantity}`}
+                      type="number"
+                      min={1}
+                      defaultValue={row.quantity}
+                      disabled={busy}
+                      onBlur={(event) => {
+                        const quantity = Math.max(1, Number(event.target.value) || 1);
+                        if (quantity !== row.quantity) {
+                          onPatch(row.purchaseOrderLineId, { quantity });
+                        }
+                      }}
+                    />
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      Source {row.purchaseOrderLine.quantity}
+                    </p>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <PriceView value={row.cost} />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        disabled={busy}
+                        onClick={() => openCostEditor(row)}
+                        aria-label={`Edit cost for ${product.name}`}
+                        title="Edit cost"
+                      >
+                        <Pencil className="size-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <Select
                       value={row.manufacturerId}
@@ -240,6 +324,59 @@ export function MoAllocationsSection({
           </div>
         </div>
       )}
-    </section>
+      </section>
+
+      <Dialog
+        open={!!costEditor}
+        onOpenChange={(open) => {
+          if (!open) setCostEditor(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit cost</DialogTitle>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={submitCostEdit}>
+            {editingProduct ? (
+              <div className="min-w-0 space-y-1">
+                <div className="truncate text-sm font-medium">{editingProduct.name}</div>
+                <div className="font-mono text-xs text-muted-foreground">
+                  {editingProduct.sku}
+                </div>
+              </div>
+            ) : null}
+            <div className="space-y-2">
+              <Label htmlFor="mo-allocation-cost">Cost</Label>
+              <PriceField
+                id="mo-allocation-cost"
+                value={costValue}
+                disabled={busy}
+                placeholder="0.00"
+                onChange={(event) => {
+                  setCostValue(event.target.value);
+                  setCostError(null);
+                }}
+              />
+              {costError ? (
+                <p className="text-xs text-destructive">{costError}</p>
+              ) : null}
+            </div>
+            <DialogFooter className="border-0 bg-transparent">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy}
+                onClick={() => setCostEditor(null)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={busy}>
+                {busy ? <Loader2 className="size-4 animate-spin" /> : "Save"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

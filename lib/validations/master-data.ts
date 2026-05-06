@@ -43,6 +43,16 @@ export const manufacturerCreateSchema = z.object({
 
 export const manufacturerUpdateSchema = manufacturerCreateSchema.partial();
 
+export const warehouseCreateSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  address: nullableOptionalString,
+  phoneNumber: nullableOptionalString,
+  email: nullableOptionalEmail,
+  saleChannelId: z.preprocess(blankToNull, z.string().uuid().nullable().optional()),
+});
+
+export const warehouseUpdateSchema = warehouseCreateSchema.partial();
+
 export const saleChannelCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   logoKey: nullableOptionalString,
@@ -83,6 +93,12 @@ export const productTypeCreateSchema = z.object({
 
 export const productTypeUpdateSchema = productTypeCreateSchema.partial();
 
+export const productCollectionCreateSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+});
+
+export const productCollectionUpdateSchema = productCollectionCreateSchema.partial();
+
 export const productCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   sku: z.string().min(1, "SKU is required"),
@@ -94,6 +110,7 @@ export const productCreateSchema = z.object({
   defaultManufacturerId: z.uuid(),
   categoryId: z.preprocess(blankToNull, z.string().uuid().nullable().optional()),
   typeId: z.preprocess(blankToNull, z.string().uuid().nullable().optional()),
+  collectionId: z.preprocess(blankToNull, z.string().uuid().nullable().optional()),
   verified: z.boolean().optional(),
 });
 

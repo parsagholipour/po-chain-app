@@ -47,6 +47,14 @@ export const moStatuses = [
   "closed",
 ] as const;
 
+export const warehouseOrderStatusLabels: Record<string, string> = {
+  open: "Open",
+  shipped: "Shipped",
+  closed: "Closed",
+};
+
+export const warehouseOrderStatuses = ["open", "shipped", "closed"] as const;
+
 export const moManufacturerStatuses = [
   "initial",
   "deposit_paid",

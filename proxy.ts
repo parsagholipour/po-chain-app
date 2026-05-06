@@ -5,8 +5,16 @@ import { isSuperAdminEmail } from "./lib/super-admin-constants";
 
 const { auth } = NextAuth(authConfig);
 
+const publicRoutes = new Set(["/", "/auth/error"]);
+
 export default auth((req) => {
   const pathname = req.nextUrl.pathname;
+
+  if (!req.auth?.user && !publicRoutes.has(pathname)) {
+    const signInUrl = new URL("/api/auth/signin", req.url);
+    signInUrl.searchParams.set("callbackUrl", req.nextUrl.href);
+    return NextResponse.redirect(signInUrl);
+  }
 
   if (pathname.startsWith("/super-admin") && req.auth?.user?.email) {
     if (!isSuperAdminEmail(req.auth.user.email)) {

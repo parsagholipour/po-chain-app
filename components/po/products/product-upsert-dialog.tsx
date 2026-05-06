@@ -8,7 +8,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { Manufacturer, Product, ProductCategory, ProductType } from "@/lib/types/api";
+import type {
+  Manufacturer,
+  Product,
+  ProductCategory,
+  ProductCollection,
+  ProductType,
+} from "@/lib/types/api";
 import { ProductForm, type ProductFormValues } from "./product-form";
 
 function moneyFieldDefault(v: string | number | null | undefined): number | null {
@@ -57,6 +63,15 @@ export function ProductUpsertDialog({
     enabled: open,
   });
 
+  const { data: productCollections = [] } = useQuery({
+    queryKey: ["product-collections"],
+    queryFn: async () => {
+      const { data } = await api.get<ProductCollection[]>("/api/product-collections");
+      return data;
+    },
+    enabled: open,
+  });
+
   const resetKey = editing?.id ?? "new";
   const firstMf = manufacturers[0]?.id ?? "";
   const defaultValues: ProductFormValues = editing
@@ -69,6 +84,7 @@ export function ProductUpsertDialog({
         verified: editing.verified,
         categoryId: editing.categoryId ?? "none",
         typeId: editing.typeId ?? "none",
+        collectionId: editing.collectionId ?? "none",
         imageKey: editing.imageKey,
         barcodeKey: editing.barcodeKey,
         packagingKey: editing.packagingKey,
@@ -81,6 +97,7 @@ export function ProductUpsertDialog({
         defaultManufacturerId: firstMf,
         categoryId: "none",
         typeId: "none",
+        collectionId: "none",
         verified: false,
         imageKey: null,
         barcodeKey: null,
@@ -98,6 +115,7 @@ export function ProductUpsertDialog({
           manufacturers={manufacturers}
           categories={categories}
           productTypes={productTypes}
+          productCollections={productCollections}
           defaultValues={defaultValues}
           editingId={editing?.id}
           onCancel={() => onOpenChange(false)}

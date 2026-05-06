@@ -13,6 +13,7 @@ export type CustomFieldEntityType =
   | "product"
   | "product_category"
   | "product_type"
+  | "product_collection"
   | "manufacturer"
   | "sale_channel"
   | "logistics_partner"
@@ -80,8 +81,15 @@ export function useCustomFields(
         fileKey: existing?.fileKey ?? null,
       };
     }
-    setValues(state);
-    initializedRef.current = true;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setValues(state);
+      initializedRef.current = true;
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [definitions, definitionsLoading, entityId, existingValues, valuesLoading]);
 
   const setValue = useCallback(

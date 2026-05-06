@@ -22,11 +22,19 @@ import {
   moStatuses,
   shippingStatusLabels,
   shippingStatuses,
+  warehouseOrderStatusLabels,
+  warehouseOrderStatuses,
 } from "@/lib/po/status-labels";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR, PURCHASE_ORDER_TYPE_STOCK } from "@/lib/purchase-order-type";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
-import { shippingRowFromPrisma, purchaseOrderDetailFromPrisma, manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
+import {
+  shippingRowFromPrisma,
+  purchaseOrderDetailFromPrisma,
+  manufacturingOrderDetailFromPrisma,
+  warehouseOrderDetailFromPrisma,
+} from "@/lib/shipping-api";
 import { shippingDetailInclude } from "@/lib/shipping-include";
+import { warehouseOrderDetailInclude } from "@/lib/warehouse-order-include";
 import { shippingTypeLabels } from "@/lib/shipping";
 import type { AssistantPageContext, AssistantSource } from "@/lib/types/assistant";
 import type { AnalyticsRange } from "@/lib/types/analytics";
@@ -40,6 +48,7 @@ type AssistantToolName =
   | "get_purchase_order"
   | "get_stock_order"
   | "get_manufacturing_order"
+  | "get_warehouse_order"
   | "get_shipping"
   | "search_master_data"
   | "get_current_page_record";
@@ -78,7 +87,7 @@ const dashboardArgsSchema = z.object({
 });
 
 const searchOrdersArgsSchema = z.object({
-  kind: z.enum(["po", "so", "mo", "shipping", "any"]),
+  kind: z.enum(["po", "so", "mo", "wo", "shipping", "any"]),
   query: z.string(),
   status: z.string(),
 });
@@ -118,7 +127,7 @@ export const assistantToolDefinitions: AssistantToolDefinition[] = [
     type: "function",
     function: {
       name: "get_recent_open_items",
-      description: "Get the most recently updated open purchase, stock, and manufacturing orders.",
+      description: "Get the most recently updated open purchase, stock, manufacturing, and warehouse orders.",
       strict: true,
       parameters: emptyObjectJsonSchema,
     },
@@ -128,14 +137,14 @@ export const assistantToolDefinitions: AssistantToolDefinition[] = [
     function: {
       name: "search_orders",
       description:
-        "Search purchase orders, stock orders, manufacturing orders, or shipments. Leave query empty when filtering only by status.",
+        "Search purchase orders, stock orders, manufacturing orders, warehouse orders, or shipments. Leave query empty when filtering only by status.",
       strict: true,
       parameters: {
         type: "object",
         properties: {
           kind: {
             type: "string",
-            enum: ["po", "so", "mo", "shipping", "any"],
+            enum: ["po", "so", "mo", "wo", "shipping", "any"],
             description: "Which order family to search.",
           },
           query: { type: "string", description: "Search text, order number text, tracking number, or empty string." },
@@ -204,6 +213,22 @@ export const assistantToolDefinitions: AssistantToolDefinition[] = [
         type: "object",
         properties: {
           id: { type: "string", description: "Shipment UUID." },
+        },
+        required: ["id"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_warehouse_order",
+      description: "Get a warehouse order by UUID.",
+      strict: true,
+      parameters: {
+        type: "object",
+        properties: {
+          id: { type: "string", description: "Warehouse order UUID." },
         },
         required: ["id"],
         additionalProperties: false,
@@ -434,6 +459,7 @@ async function getDashboardOverviewTool(
         openPurchaseOrders: openCounts.openPo,
         openStockOrders: openCounts.openSo,
         openManufacturingOrders: openCounts.openMo,
+        openWarehouseOrders: openCounts.openWo,
         manufacturingSpend,
         shippingSpend,
       },
@@ -464,7 +490,7 @@ async function getRecentOpenItemsTool(context: AssistantToolContext): Promise<To
   const takeEach = 8;
   const notClosed = { not: "closed" as const };
 
-  const [distributorOrders, stockOrders, manufacturingOrders] = await Promise.all([
+  const [distributorOrders, stockOrders, manufacturingOrders, warehouseOrders] = await Promise.all([
     prisma.purchaseOrder.findMany({
       where: {
         storeId: context.storeId,
@@ -482,6 +508,12 @@ async function getRecentOpenItemsTool(context: AssistantToolContext): Promise<To
       select: { id: true, name: true, number: true, status: true, updatedAt: true },
     }),
     prisma.manufacturingOrder.findMany({
+      where: { storeId: context.storeId, status: notClosed },
+      orderBy: { updatedAt: "desc" },
+      take: takeEach,
+      select: { id: true, name: true, number: true, status: true, updatedAt: true },
+    }),
+    prisma.warehouseOrder.findMany({
       where: { storeId: context.storeId, status: notClosed },
       orderBy: { updatedAt: "desc" },
       take: takeEach,
@@ -519,6 +551,16 @@ async function getRecentOpenItemsTool(context: AssistantToolContext): Promise<To
       updatedAt: row.updatedAt,
       href: `/manufacturing-orders/${row.id}`,
       label: `MO #${row.number} - ${row.name}`,
+    })),
+    ...warehouseOrders.map((row) => ({
+      kind: "warehouse_order" as const,
+      id: row.id,
+      number: row.number,
+      name: row.name,
+      status: row.status,
+      updatedAt: row.updatedAt,
+      href: `/warehouse-orders/${row.id}`,
+      label: `WO #${row.number} - ${row.name}`,
     })),
   ]
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
@@ -560,6 +602,11 @@ async function searchOrdersTool(
   const moStatusFilter = moStatuses.includes(status as (typeof moStatuses)[number])
     ? (status as (typeof moStatuses)[number])
     : null;
+  const woStatusFilter = warehouseOrderStatuses.includes(
+    status as (typeof warehouseOrderStatuses)[number],
+  )
+    ? (status as (typeof warehouseOrderStatuses)[number])
+    : null;
   const shippingStatusFilter = shippingStatuses.includes(
     status as (typeof shippingStatuses)[number],
   )
@@ -577,6 +624,16 @@ async function searchOrdersTool(
       : {};
 
   const manufacturingWhere: Prisma.ManufacturingOrderWhereInput =
+    query.length > 0
+      ? {
+          OR: [
+            { name: { contains: query, mode: "insensitive" } },
+            ...(Number.isFinite(queryNumber) ? [{ number: queryNumber }] : []),
+          ],
+        }
+      : {};
+
+  const warehouseWhere: Prisma.WarehouseOrderWhereInput =
     query.length > 0
       ? {
           OR: [
@@ -642,6 +699,20 @@ async function searchOrdersTool(
         })
       : Promise.resolve([]);
 
+  const woPromise: Promise<Array<{ id: string; number: number; name: string; status: string }>> =
+    shouldSearch(args.kind, "wo")
+      ? prisma.warehouseOrder.findMany({
+          where: {
+            storeId: context.storeId,
+            ...(woStatusFilter ? { status: woStatusFilter } : {}),
+            ...warehouseWhere,
+          },
+          orderBy: { updatedAt: "desc" },
+          take: limit,
+          select: { id: true, number: true, name: true, status: true },
+        })
+      : Promise.resolve([]);
+
   const shippingPromise: Promise<
     Array<{
       id: string;
@@ -669,10 +740,11 @@ async function searchOrdersTool(
       })
     : Promise.resolve([]);
 
-  const [poRows, soRows, moRows, shippingRows] = await Promise.all([
+  const [poRows, soRows, moRows, woRows, shippingRows] = await Promise.all([
     poPromise,
     soPromise,
     moPromise,
+    woPromise,
     shippingPromise,
   ]);
 
@@ -697,6 +769,13 @@ async function searchOrdersTool(
       label: `MO #${order.number} - ${order.name}`,
       subtitle: moStatusLabels[order.status] ?? order.status,
       href: `/manufacturing-orders/${order.id}`,
+    })),
+    ...woRows.map((order) => ({
+      kind: "warehouse_order" as const,
+      id: order.id,
+      label: `WO #${order.number} - ${order.name}`,
+      subtitle: warehouseOrderStatusLabels[order.status] ?? order.status,
+      href: `/warehouse-orders/${order.id}`,
     })),
     ...shippingRows.map((shipping) => ({
       kind: "shipping" as const,
@@ -765,6 +844,15 @@ function summarizePurchaseOrder(
         name: link.manufacturingOrder.name,
         status: link.manufacturingOrder.status,
         statusLabel: moStatusLabels[link.manufacturingOrder.status] ?? link.manufacturingOrder.status,
+      })),
+      linkedWarehouseOrders: row.warehouseOrderPurchaseOrders.map((link) => ({
+        id: link.warehouseOrder.id,
+        number: link.warehouseOrder.number,
+        name: link.warehouseOrder.name,
+        status: link.warehouseOrder.status,
+        statusLabel:
+          warehouseOrderStatusLabels[link.warehouseOrder.status] ?? link.warehouseOrder.status,
+        warehouseName: link.warehouseOrder.warehouse.name,
       })),
       shippings: row.shippings.map((shipping) => ({
         id: shipping.id,
@@ -905,6 +993,66 @@ async function getManufacturingOrderTool(
         data.id,
         `MO #${data.number} - ${data.name}`,
         `/manufacturing-orders/${data.id}`,
+      ),
+    ],
+  };
+}
+
+async function getWarehouseOrderTool(
+  args: z.infer<typeof idArgsSchema>,
+  context: AssistantToolContext,
+): Promise<ToolExecutionResult> {
+  const row = await prisma.warehouseOrder.findFirst({
+    where: { id: args.id, storeId: context.storeId },
+    include: warehouseOrderDetailInclude,
+  });
+
+  if (!row) {
+    return { result: { found: false, message: "Warehouse order not found." }, sources: [] };
+  }
+
+  const data = warehouseOrderDetailFromPrisma(row);
+
+  return {
+    result: {
+      found: true,
+      order: {
+        id: data.id,
+        number: data.number,
+        name: data.name,
+        status: data.status,
+        statusLabel: warehouseOrderStatusLabels[data.status] ?? data.status,
+        warehouseName: data.warehouse.name,
+        documentAttached: Boolean(data.documentKey),
+        linkedPurchaseOrders: data.purchaseOrders.map((link) => ({
+          id: link.purchaseOrder.id,
+          number: link.purchaseOrder.number,
+          name: link.purchaseOrder.name,
+          status: link.purchaseOrder.status,
+          saleChannelName: link.purchaseOrder.saleChannel?.name ?? null,
+        })),
+        lineAllocations: data.lineAllocations.slice(0, 12).map((line) => ({
+          purchaseOrderLineId: line.purchaseOrderLineId,
+          productName: line.purchaseOrderLine.product.name,
+          sku: line.purchaseOrderLine.product.sku,
+          quantity: line.quantity,
+          orderNumber: line.purchaseOrderLine.purchaseOrder.number,
+        })),
+        shippings: data.shippings.map((shipping) => ({
+          id: shipping.id,
+          trackingNumber: shipping.trackingNumber,
+          status: shipping.status,
+          statusLabel: shippingStatusLabels[shipping.status] ?? shipping.status,
+        })),
+        lastStatusChange: data.statusLogs[0]?.createdAt ?? null,
+      },
+    },
+    sources: [
+      buildSource(
+        "warehouse_order",
+        data.id,
+        `WO #${data.number} - ${data.name}`,
+        `/warehouse-orders/${data.id}`,
       ),
     ],
   };
@@ -1128,6 +1276,9 @@ async function getCurrentPageRecordTool(context: AssistantToolContext): Promise<
   if (pageContext.entityType === "mo" && pageContext.entityId) {
     return getManufacturingOrderTool({ id: pageContext.entityId }, context);
   }
+  if (pageContext.entityType === "wo" && pageContext.entityId) {
+    return getWarehouseOrderTool({ id: pageContext.entityId }, context);
+  }
   if (pageContext.entityType === "shipping" && pageContext.entityId) {
     return getShippingTool({ id: pageContext.entityId }, context);
   }
@@ -1272,6 +1423,13 @@ export async function executeAssistantToolCall({
         return { result: { ok: false, error: "Invalid manufacturing order id." }, sources: [] };
       }
       return getManufacturingOrderTool(parsed.data, context);
+    }
+    case "get_warehouse_order": {
+      const parsed = parseToolArguments(idArgsSchema, rawArguments);
+      if (!parsed.success) {
+        return { result: { ok: false, error: "Invalid warehouse order id." }, sources: [] };
+      }
+      return getWarehouseOrderTool(parsed.data, context);
     }
     case "get_shipping": {
       const parsed = parseToolArguments(idArgsSchema, rawArguments);

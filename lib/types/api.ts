@@ -61,6 +61,13 @@ export type ProductType = {
   updatedAt: string;
 };
 
+export type ProductCollection = {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Manufacturer = {
   id: string;
   name: string;
@@ -71,6 +78,18 @@ export type Manufacturer = {
   email: string | null;
   link: string | null;
   notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Warehouse = {
+  id: string;
+  name: string;
+  address: string | null;
+  phoneNumber: string | null;
+  email: string | null;
+  saleChannelId: string | null;
+  saleChannel: { id: string; name: string; type: string; logoKey: string | null } | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -115,10 +134,12 @@ export type Product = {
   defaultManufacturerId: string;
   categoryId: string | null;
   typeId: string | null;
+  collectionId: string | null;
   verified: boolean;
   defaultManufacturer: Manufacturer;
   category: ProductCategory | null;
   type: ProductType | null;
+  collection: ProductCollection | null;
 };
 
 export type PurchaseOrderSummaryManufacturer = {
@@ -130,7 +151,7 @@ export type PurchaseOrderSummaryManufacturer = {
 export type ShippingStatusBadge = {
   id: string;
   status: string;
-  type: "manufacturing_order" | "purchase_order" | "stock_order";
+  type: "manufacturing_order" | "purchase_order" | "stock_order" | "warehouse_order";
   trackingNumber: string;
 };
 
@@ -139,6 +160,14 @@ export type PurchaseOrderSummaryManufacturingOrder = {
   number: number;
   name: string;
   status: string;
+};
+
+export type PurchaseOrderSummaryWarehouseOrder = {
+  id: string;
+  number: number;
+  name: string;
+  status: string;
+  warehouseName: string;
 };
 
 export type PurchaseOrderSummary = {
@@ -150,6 +179,7 @@ export type PurchaseOrderSummary = {
   saleChannel: { id: string; name: string; type: string; logoKey: string | null } | null;
   manufacturers: PurchaseOrderSummaryManufacturer[];
   manufacturingOrders: PurchaseOrderSummaryManufacturingOrder[];
+  warehouseOrders: PurchaseOrderSummaryWarehouseOrder[];
   shippingBadges: ShippingStatusBadge[];
 };
 
@@ -176,11 +206,26 @@ export type LinkedManufacturingOrderRef = {
   status: string;
 };
 
+export type LinkedWarehouseOrderRef = {
+  id: string;
+  number: number;
+  name: string;
+  status: string;
+  warehouse: { id: string; name: string };
+};
+
 export type PoLineAllocation = {
   manufacturingOrderId: string;
   manufacturerId: string;
+  quantity: number;
   manufacturingOrder: { id: string; number: number; name: string };
   manufacturer: { id: string; name: string };
+};
+
+export type PoLineWarehouseAllocation = {
+  warehouseOrderId: string;
+  quantity: number;
+  warehouseOrder: { id: string; number: number; name: string };
 };
 
 export type PoLineRow = {
@@ -193,6 +238,7 @@ export type PoLineRow = {
   unitPrice: string | number | null;
   product: Product;
   allocations: PoLineAllocation[];
+  warehouseAllocations: PoLineWarehouseAllocation[];
 };
 
 export type PoOsdType = "overage" | "shortage" | "damage";
@@ -239,12 +285,12 @@ export type ShippingOrderRef = {
   number: number;
   name: string;
   status: string;
-  orderType: "manufacturing_order" | "purchase_order" | "stock_order";
+  orderType: "manufacturing_order" | "purchase_order" | "stock_order" | "warehouse_order";
 };
 
 export type ShippingRow = {
   id: string;
-  type: "manufacturing_order" | "purchase_order" | "stock_order";
+  type: "manufacturing_order" | "purchase_order" | "stock_order" | "warehouse_order";
   status: string;
   cost: string | number | null;
   deliveryDutiesPaid: boolean;
@@ -276,6 +322,7 @@ export type OrderStatusLog = {
   note: string | null;
   purchaseOrderId: string | null;
   manufacturingOrderId: string | null;
+  warehouseOrderId: string | null;
   shippingId: string | null;
   storeId: string;
   createdAt: string;
@@ -300,6 +347,9 @@ type PurchaseOrderDetailBase = {
   statusLogs: OrderStatusLog[];
   manufacturingOrderPurchaseOrders: {
     manufacturingOrder: LinkedManufacturingOrderRef;
+  }[];
+  warehouseOrderPurchaseOrders: {
+    warehouseOrder: LinkedWarehouseOrderRef;
   }[];
   shippings: ShippingRow[];
 };
@@ -385,6 +435,8 @@ export type MoLineAllocationRow = {
   purchaseOrderLineId: string;
   verified: boolean;
   manufacturerId: string;
+  quantity: number;
+  cost: string | number | null;
   manufacturer: { id: string; name: string; region: string };
   purchaseOrderLine: {
     id: string;
@@ -428,9 +480,74 @@ export type ManufacturingOrderDetail = {
   shippings: ShippingRow[];
 };
 
+export type WarehouseOrderSummaryLinkedOrder = {
+  id: string;
+  name: string;
+  type: "distributor";
+  saleChannelName: string | null;
+};
+
+export type WarehouseOrderSummary = {
+  id: string;
+  number: number;
+  name: string;
+  status: "open" | "shipped" | "closed";
+  createdAt: string;
+  warehouse: { id: string; name: string };
+  linkedOrders: WarehouseOrderSummaryLinkedOrder[];
+  shippingBadges: ShippingStatusBadge[];
+};
+
+export type WoLineAllocationRow = {
+  warehouseOrderId: string;
+  purchaseOrderLineId: string;
+  quantity: number;
+  purchaseOrderLine: {
+    id: string;
+    quantity: number;
+    orderedQuantity: number;
+    unitCost: string | number | null;
+    unitPrice: string | number | null;
+    product: Product;
+    purchaseOrder: {
+      id: string;
+      number: number;
+      name: string;
+      type: "distributor";
+      saleChannel: { name: string } | null;
+    };
+  };
+};
+
+export type WarehouseOrderDetail = {
+  id: string;
+  number: number;
+  name: string;
+  status: "open" | "shipped" | "closed";
+  documentKey: string | null;
+  warehouseId: string;
+  warehouse: Warehouse;
+  createdAt: string;
+  updatedAt: string;
+  statusLogs: OrderStatusLog[];
+  purchaseOrders: {
+    purchaseOrderId: string;
+    purchaseOrder: {
+      id: string;
+      number: number;
+      name: string;
+      status: string;
+      type: "distributor";
+      saleChannel: { id: string; name: string; type: string; logoKey: string | null } | null;
+    };
+  }[];
+  lineAllocations: WoLineAllocationRow[];
+  shippings: ShippingRow[];
+};
+
 /** Last-updated non-closed PO / SO / MO for global search “Recommended”. */
 export type RecommendedOpenItem = {
-  kind: "po" | "mo" | "so";
+  kind: "po" | "mo" | "so" | "wo";
   id: string;
   name: string;
   number: number;

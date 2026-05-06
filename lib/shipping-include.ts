@@ -27,6 +27,18 @@ export const shippingDetailInclude = {
       },
     },
   },
+  warehouseOrderShippings: {
+    include: {
+      warehouseOrder: {
+        select: {
+          id: true,
+          number: true,
+          name: true,
+          status: true,
+        },
+      },
+    },
+  },
   statusLogs: {
     orderBy: { createdAt: "desc" as const },
     include: orderStatusLogInclude,

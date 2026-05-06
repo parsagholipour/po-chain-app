@@ -1,6 +1,6 @@
 # PO App
 
-Next.js (App Router) starter with PostgreSQL via Prisma, shadcn/ui on Tailwind CSS v4, TanStack Query and Table, React Hook Form + Zod validation, Axios, and Lucide icons. The UI uses a **teal** primary palette (CSS variables in `app/globals.css`) with light/dark mode via `next-themes`.
+Next.js (App Router) starter with PostgreSQL via Prisma, shadcn/ui on Tailwind CSS v4, TanStack Query and Table, React Hook Form + Zod validation, Axios, and Lucide icons. The UI uses a **purple** primary palette (CSS variables in `app/globals.css`) with light/dark mode via `next-themes`.
 
 ## Prerequisites
 
@@ -207,7 +207,7 @@ Avoid storing long-lived public MinIO URLs in the database unless you have a sta
 
 ### Theming
 
-- Design tokens are CSS variables in [`app/globals.css`](app/globals.css) (`:root` and `.dark`). Adjust `--primary`, `--ring`, and sidebar tokens to rebrand.
+- Design tokens are CSS variables in [`app/globals.css`](app/globals.css) (`:root` and `.dark`). Active stores override the primary theme from the `Store.theme` JSON field, cached for 24 hours and invalidated when a store is edited.
 - [`components/theme-provider.tsx`](components/theme-provider.tsx) configures `next-themes`; [`components/mode-toggle.tsx`](components/mode-toggle.tsx) switches appearance.
 
 ### shadcn/ui

@@ -72,6 +72,8 @@ export const purchaseOrderLinePatchSchema = z.object({
   productId: z.uuid().optional(),
   /** When set, updates ordered quantity; effective quantity is recomputed from OS&D. */
   quantity: z.number().int().positive().optional(),
+  unitCost: z.number().nonnegative().nullable().optional(),
+  unitPrice: z.number().nonnegative().nullable().optional(),
 });
 
 export const purchaseOrderOsdTypeSchema = z.enum(["overage", "shortage", "damage"]);

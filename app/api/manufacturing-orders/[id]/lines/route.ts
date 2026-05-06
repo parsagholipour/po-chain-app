@@ -10,6 +10,10 @@ import {
 } from "@/lib/mo-line-guard";
 import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 import { requireStoreContext } from "@/lib/store-context";
+import {
+  assertFulfillmentQuantityAvailable,
+  getFulfillmentAvailability,
+} from "@/lib/fulfillment-quantity";
 
 export const runtime = "nodejs";
 
@@ -62,15 +66,37 @@ export async function POST(
 
   const existingLine = await prisma.purchaseOrderLine.findFirst({
     where: { id: parsed.data.purchaseOrderLineId, storeId },
+    include: {
+      product: { select: { cost: true } },
+    },
   });
   if (!existingLine) return jsonError("Purchase order line not found", 404);
 
   try {
+    const requestedQuantity =
+      parsed.data.quantity ??
+      (
+        await getFulfillmentAvailability(prisma, {
+          storeId,
+          purchaseOrderLineId: parsed.data.purchaseOrderLineId,
+        })
+      )?.availableQuantity;
+    if (!requestedQuantity || requestedQuantity <= 0) {
+      return jsonError("No remaining quantity is available for fulfillment", 409);
+    }
+    await assertFulfillmentQuantityAvailable(prisma, {
+      storeId,
+      purchaseOrderLineId: parsed.data.purchaseOrderLineId,
+      quantity: requestedQuantity,
+    });
+
     await prisma.manufacturingOrderPurchaseOrderLine.create({
       data: {
         manufacturingOrderId: pid.data.id,
         purchaseOrderLineId: parsed.data.purchaseOrderLineId,
         manufacturerId: parsed.data.manufacturerId,
+        quantity: requestedQuantity,
+        cost: parsed.data.cost ?? existingLine.unitCost ?? existingLine.product.cost ?? null,
         verified: parsed.data.verified ?? false,
         storeId,
         createdById: userId,
@@ -85,6 +111,10 @@ export async function POST(
       status: 201,
     });
   } catch (e) {
+    if (e instanceof Error && e.message.startsWith("FULFILLMENT_QUANTITY_EXCEEDED:")) {
+      const available = e.message.slice("FULFILLMENT_QUANTITY_EXCEEDED:".length);
+      return jsonError(`Requested quantity exceeds available fulfillment quantity (${available})`, 409);
+    }
     const j = jsonFromPrisma(e);
     if (j) return j;
     throw e;

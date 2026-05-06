@@ -17,6 +17,7 @@ export async function GET(request: Request) {
   const q = searchParams.get("q")?.trim() ?? "";
   const categoryIdRaw = searchParams.get("categoryId");
   const typeIdRaw = searchParams.get("typeId");
+  const collectionIdRaw = searchParams.get("collectionId");
 
   const where: Prisma.ProductWhereInput = { storeId };
   if (q.length > 0) {
@@ -26,6 +27,7 @@ export async function GET(request: Request) {
       { defaultManufacturer: { name: { contains: q, mode: "insensitive" } } },
       { category: { name: { contains: q, mode: "insensitive" } } },
       { type: { name: { contains: q, mode: "insensitive" } } },
+      { collection: { name: { contains: q, mode: "insensitive" } } },
     ];
   }
   if (categoryIdRaw === "none") {
@@ -44,6 +46,14 @@ export async function GET(request: Request) {
       where.typeId = typeId.data;
     }
   }
+  if (collectionIdRaw === "none") {
+    where.collectionId = null;
+  } else {
+    const collectionId = collectionIdRaw ? z.uuid().safeParse(collectionIdRaw) : null;
+    if (collectionId?.success) {
+      where.collectionId = collectionId.data;
+    }
+  }
 
   const rows = await prisma.product.findMany({
     where,
@@ -52,6 +62,7 @@ export async function GET(request: Request) {
       defaultManufacturer: true,
       category: true,
       type: true,
+      collection: true,
     },
   });
   return NextResponse.json(rows);
@@ -110,6 +121,19 @@ export async function POST(request: Request) {
       }
     }
 
+    if (parsed.data.collectionId) {
+      const collection = await prisma.productCollection.findFirst({
+        where: {
+          id: parsed.data.collectionId,
+          storeId,
+        },
+        select: { id: true },
+      });
+      if (!collection) {
+        return jsonError("Product collection was not found", 400);
+      }
+    }
+
     const row = await prisma.product.create({
       data: {
         name: parsed.data.name,
@@ -123,10 +147,11 @@ export async function POST(request: Request) {
         defaultManufacturerId: parsed.data.defaultManufacturerId,
         categoryId: parsed.data.categoryId ?? null,
         typeId: parsed.data.typeId ?? null,
+        collectionId: parsed.data.collectionId ?? null,
         verified: parsed.data.verified ?? false,
         createdById: userId,
       },
-      include: { defaultManufacturer: true, category: true, type: true },
+      include: { defaultManufacturer: true, category: true, type: true, collection: true },
     });
     return NextResponse.json(row, { status: 201 });
   } catch (e) {

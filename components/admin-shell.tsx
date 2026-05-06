@@ -101,6 +101,8 @@ const nav: readonly NavItem[] = [
     icon: Warehouse,
   },
   { kind: "link", href: "/manufacturing-orders", label: "Manufacturing orders", icon: FileText },
+  { kind: "link", href: "/warehouse-orders", label: "Warehouse orders", icon: Package },
+  { kind: "link", href: "/warehouses", label: "Warehouses", icon: Building2 },
   { kind: "link", href: "/manufacturers", label: "Manufacturers", icon: Factory },
   {
     kind: "group",
@@ -110,6 +112,7 @@ const nav: readonly NavItem[] = [
     children: [
       { href: "/product-categories", label: "Product Categories" },
       { href: "/product-types", label: "Product Types" },
+      { href: "/product-collections", label: "Product Collections" },
     ],
   },
   { kind: "link", href: "/sale-channels", label: "Sale channels", icon: Radio },
@@ -185,6 +188,7 @@ function NavList({
     "/purchase-orders-overview": navCounts?.purchaseOrders,
     "/stock-orders": navCounts?.stockOrders,
     "/manufacturing-orders": navCounts?.manufacturingOrders,
+    "/warehouse-orders": navCounts?.warehouseOrders,
   };
 
   return (

@@ -67,9 +67,11 @@ interface ShippingFormProps {
   isSubmitting?: boolean;
   availableManufacturingOrders?: OrderOption[];
   availablePurchaseOrders?: OrderOption[];
+  availableWarehouseOrders?: OrderOption[];
   availableLogisticsPartners?: LogisticsPartnerOption[];
   requiredManufacturingOrderIds?: string[];
   requiredPurchaseOrderIds?: string[];
+  requiredWarehouseOrderIds?: string[];
   statusLogs?: ShippingRow["statusLogs"];
 }
 
@@ -115,9 +117,11 @@ export function ShippingForm({
   isSubmitting = false,
   availableManufacturingOrders = [],
   availablePurchaseOrders = [],
+  availableWarehouseOrders = [],
   availableLogisticsPartners = [],
   requiredManufacturingOrderIds = [],
   requiredPurchaseOrderIds = [],
+  requiredWarehouseOrderIds = [],
   statusLogs = [],
 }: ShippingFormProps) {
   const customFieldsRef = useRef<CustomFieldsHandle>(null);
@@ -147,6 +151,10 @@ export function ShippingForm({
         ...(defaultValues?.purchaseOrderIds ?? []),
         ...requiredPurchaseOrderIds,
       ]),
+      warehouseOrderIds: uniqueIds([
+        ...(defaultValues?.warehouseOrderIds ?? []),
+        ...requiredWarehouseOrderIds,
+      ]),
     },
   });
 
@@ -168,6 +176,8 @@ export function ShippingForm({
     useWatch({ control: form.control, name: "manufacturingOrderIds" }) ?? [];
   const selectedPurchaseOrderIds =
     useWatch({ control: form.control, name: "purchaseOrderIds" }) ?? [];
+  const selectedWarehouseOrderIds =
+    useWatch({ control: form.control, name: "warehouseOrderIds" }) ?? [];
 
   const storedInvoiceDocumentKey =
     removeStoredInvoiceDocument || invoiceDocumentFile
@@ -225,6 +235,10 @@ export function ShippingForm({
       purchaseOrderIds: uniqueIds([
         ...(values.purchaseOrderIds ?? []),
         ...requiredPurchaseOrderIds,
+      ]),
+      warehouseOrderIds: uniqueIds([
+        ...(values.warehouseOrderIds ?? []),
+        ...requiredWarehouseOrderIds,
       ]),
     });
     if (customFieldsRef.current?.hasFields) {
@@ -539,6 +553,51 @@ export function ShippingForm({
               </div>
             </FieldContent>
             <FieldError>{form.formState.errors.manufacturingOrderIds?.message}</FieldError>
+          </Field>
+        ) : type === "warehouse_order" ? (
+          <Field>
+            <FieldLabel>Warehouse Orders</FieldLabel>
+            <FieldContent>
+              <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
+                {availableWarehouseOrders.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No orders available</p>
+                ) : (
+                  availableWarehouseOrders.map((order) => {
+                    const isRequired = requiredWarehouseOrderIds.includes(order.id);
+                    const checked = selectedWarehouseOrderIds.includes(order.id) || isRequired;
+
+                    return (
+                      <div key={order.id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`wo-${order.id}`}
+                          checked={checked}
+                          disabled={isRequired}
+                          label={
+                            <span className="text-sm">
+                              #{order.number} - {order.name}
+                              {isRequired ? " (Current order)" : ""}
+                            </span>
+                          }
+                          onCheckedChange={(checkedValue) => {
+                            form.setValue(
+                              "warehouseOrderIds",
+                              toggleIds(
+                                selectedWarehouseOrderIds,
+                                order.id,
+                                checkedValue === true,
+                                requiredWarehouseOrderIds,
+                              ),
+                              { shouldDirty: true, shouldValidate: true },
+                            );
+                          }}
+                        />
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </FieldContent>
+            <FieldError>{form.formState.errors.warehouseOrderIds?.message}</FieldError>
           </Field>
         ) : (
           <Field>

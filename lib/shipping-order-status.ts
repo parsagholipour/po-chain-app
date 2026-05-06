@@ -1,6 +1,9 @@
 import type { PrismaClient } from "@/app/generated/prisma/client";
 
-type ShippingStatusSyncDb = Pick<PrismaClient, "manufacturingOrder" | "purchaseOrder">;
+type ShippingStatusSyncDb = Pick<
+  PrismaClient,
+  "manufacturingOrder" | "purchaseOrder" | "warehouseOrder"
+>;
 
 const ACTIVE_SHIPPING_STATUSES: Array<"in_transit" | "delivered"> = [
   "in_transit",
@@ -17,14 +20,17 @@ export async function reconcileLinkedOrderStatusesForShipping(
     storeId,
     manufacturingOrderIds,
     purchaseOrderIds,
+    warehouseOrderIds,
   }: {
     storeId: string;
     manufacturingOrderIds?: string[];
     purchaseOrderIds?: string[];
+    warehouseOrderIds?: string[];
   },
 ) {
   const normalizedManufacturingOrderIds = uniqueIds(manufacturingOrderIds);
   const normalizedPurchaseOrderIds = uniqueIds(purchaseOrderIds);
+  const normalizedWarehouseOrderIds = uniqueIds(warehouseOrderIds);
 
   if (normalizedManufacturingOrderIds.length > 0) {
     const manufacturingOrders = await db.manufacturingOrder.findMany({
@@ -133,6 +139,62 @@ export async function reconcileLinkedOrderStatusesForShipping(
           id: { in: openIds },
           storeId,
           status: "in_transit",
+        },
+        data: { status: "open" },
+      });
+    }
+  }
+
+  if (normalizedWarehouseOrderIds.length > 0) {
+    const warehouseOrders = await db.warehouseOrder.findMany({
+      where: {
+        id: { in: normalizedWarehouseOrderIds },
+        storeId,
+      },
+      select: {
+        id: true,
+        status: true,
+        warehouseOrderShippings: {
+          where: {
+            storeId,
+            shipping: { status: { in: ACTIVE_SHIPPING_STATUSES } },
+          },
+          select: { shippingId: true },
+          take: 1,
+        },
+      },
+    });
+
+    const shippedIds: string[] = [];
+    const openIds: string[] = [];
+
+    for (const order of warehouseOrders) {
+      const hasActiveShipping = order.warehouseOrderShippings.length > 0;
+      if (hasActiveShipping && order.status === "open") {
+        shippedIds.push(order.id);
+      }
+      if (!hasActiveShipping && order.status === "shipped") {
+        openIds.push(order.id);
+      }
+    }
+
+    if (shippedIds.length > 0) {
+      await db.warehouseOrder.updateMany({
+        where: {
+          id: { in: shippedIds },
+          storeId,
+          status: "open",
+        },
+        data: { status: "shipped" },
+      });
+    }
+
+    if (openIds.length > 0) {
+      await db.warehouseOrder.updateMany({
+        where: {
+          id: { in: openIds },
+          storeId,
+          status: "shipped",
         },
         data: { status: "open" },
       });

@@ -23,7 +23,7 @@ export async function GET(
 
   const row = await prisma.product.findFirst({
     where: { id: pid.data.id, storeId },
-    include: { defaultManufacturer: true, category: true, type: true },
+    include: { defaultManufacturer: true, category: true, type: true, collection: true },
   });
   if (!row) return jsonError("Not found", 404);
   return NextResponse.json(row);
@@ -100,10 +100,23 @@ export async function PATCH(
       }
     }
 
+    if (parsed.data.collectionId) {
+      const collection = await prisma.productCollection.findFirst({
+        where: {
+          id: parsed.data.collectionId,
+          storeId,
+        },
+        select: { id: true },
+      });
+      if (!collection) {
+        return jsonError("Product collection was not found", 400);
+      }
+    }
+
     const row = await prisma.product.update({
       where: { id: pid.data.id },
       data: parsed.data,
-      include: { defaultManufacturer: true, category: true, type: true },
+      include: { defaultManufacturer: true, category: true, type: true, collection: true },
     });
     return NextResponse.json(row);
   } catch (e) {

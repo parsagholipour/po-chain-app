@@ -84,12 +84,16 @@ export const manufacturingOrderPatchSchema = z.object({
 export const moLineAllocationCreateSchema = z.object({
   purchaseOrderLineId: z.uuid(),
   manufacturerId: z.uuid(),
+  quantity: z.number().int().positive().optional(),
+  cost: z.number().nonnegative().nullable().optional(),
   verified: z.boolean().optional(),
 });
 
 export const moLineAllocationPatchSchema = z.object({
   manufacturerId: z.uuid().optional(),
+  quantity: z.number().int().positive().optional(),
   verified: z.boolean().optional(),
+  cost: z.number().nonnegative().nullable().optional(),
 });
 
 export const moShippingCreateSchema = shippingCreateSchema;

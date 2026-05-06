@@ -12,6 +12,7 @@ import {
   PointElement,
   Tooltip,
 } from "chart.js";
+import { DEFAULT_THEME_PRIMARY_COLOR } from "@/lib/store-theme";
 
 let registered = false;
 
@@ -52,7 +53,7 @@ export function registerChartJs() {
 }
 
 export const CHART_COLORS = {
-  primary: "#14b8a6",
+  primary: DEFAULT_THEME_PRIMARY_COLOR,
   secondary: "#0ea5e9",
   success: "#10b981",
   warning: "#f59e0b",
@@ -77,11 +78,46 @@ export const CHART_PALETTE = [
   CHART_COLORS.gray,
 ];
 
-export function withAlpha(hex: string, alpha: number): string {
+export function withAlpha(color: string, alpha: number): string {
   const clamped = Math.max(0, Math.min(1, alpha));
-  const bigint = parseInt(hex.replace("#", ""), 16);
-  const r = (bigint >> 16) & 255;
-  const g = (bigint >> 8) & 255;
-  const b = bigint & 255;
+  const [r, g, b] = parseChartColor(color) ?? [110, 46, 143];
   return `rgba(${r}, ${g}, ${b}, ${clamped})`;
+}
+
+function parseChartColor(color: string): [number, number, number] | null {
+  const trimmed = color.trim();
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(trimmed);
+  if (hex) {
+    const raw = hex[1];
+    const expanded =
+      raw.length === 3
+        ? raw
+            .split("")
+            .map((char) => `${char}${char}`)
+            .join("")
+        : raw;
+    return [
+      parseInt(expanded.slice(0, 2), 16),
+      parseInt(expanded.slice(2, 4), 16),
+      parseInt(expanded.slice(4, 6), 16),
+    ];
+  }
+
+  const rgb = /^rgb\((.*)\)$/i.exec(trimmed);
+  if (!rgb) return null;
+
+  const parts = rgb[1].includes(",")
+    ? rgb[1].split(",").map((part) => part.trim())
+    : rgb[1].trim().split(/\s+/);
+  if (parts.length !== 3) return null;
+
+  const channels = parts.map((part) => {
+    if (!/^\d+$/.test(part)) return null;
+    const parsed = Number(part);
+    return parsed >= 0 && parsed <= 255 ? parsed : null;
+  });
+
+  if (channels.some((channel) => channel == null)) return null;
+
+  return channels as [number, number, number];
 }

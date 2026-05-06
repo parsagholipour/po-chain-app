@@ -8,6 +8,7 @@ import {
   purchaseOrderOsdListInclude,
 } from "@/lib/purchase-order-include";
 import { shippingDetailInclude } from "@/lib/shipping-include";
+import { warehouseOrderDetailInclude } from "@/lib/warehouse-order-include";
 
 export type ShippingWithRelations = Prisma.ShippingGetPayload<{
   include: typeof shippingDetailInclude;
@@ -29,9 +30,13 @@ export type ManufacturingOrderDetailWithRelations = Prisma.ManufacturingOrderGet
   include: typeof manufacturingOrderDetailInclude;
 }>;
 
+export type WarehouseOrderDetailWithRelations = Prisma.WarehouseOrderGetPayload<{
+  include: typeof warehouseOrderDetailInclude;
+}>;
+
 type ShippingLike = {
   id: string;
-  type: "manufacturing_order" | "purchase_order" | "stock_order";
+  type: "manufacturing_order" | "purchase_order" | "stock_order" | "warehouse_order";
   status: string;
   cost: { toNumber(): number } | number | string | null;
   deliveryDutiesPaid: boolean;
@@ -48,6 +53,7 @@ type ShippingLike = {
     note: string | null;
     purchaseOrderId: string | null;
     manufacturingOrderId: string | null;
+    warehouseOrderId: string | null;
     shippingId: string | null;
     storeId: string;
     createdAt: Date;
@@ -87,6 +93,14 @@ type ShippingLike = {
       type: "distributor" | "stock";
     };
   }>;
+  warehouseOrderShippings?: Array<{
+    warehouseOrder: {
+      id: string;
+      number: number;
+      name: string;
+      status: string;
+    };
+  }>;
 };
 
 export function shippingRowFromPrisma(row: ShippingLike) {
@@ -104,6 +118,14 @@ export function shippingRowFromPrisma(row: ShippingLike) {
     name: item.purchaseOrder.name,
     status: item.purchaseOrder.status,
     orderType: shippingOrderTypeFromPurchaseOrderType(item.purchaseOrder.type),
+  }));
+
+  const warehouseOrders = (row.warehouseOrderShippings ?? []).map((item) => ({
+    id: item.warehouseOrder.id,
+    number: item.warehouseOrder.number,
+    name: item.warehouseOrder.name,
+    status: item.warehouseOrder.status,
+    orderType: "warehouse_order" as const,
   }));
 
   const costJson =
@@ -138,19 +160,27 @@ export function shippingRowFromPrisma(row: ShippingLike) {
           updatedAt: row.logisticsPartner.updatedAt.toISOString(),
         }
       : null,
-    orders: [...manufacturingOrders, ...purchaseOrders].sort((a, b) => a.number - b.number),
+    orders: [...manufacturingOrders, ...purchaseOrders, ...warehouseOrders].sort(
+      (a, b) => a.number - b.number,
+    ),
   };
 }
 
 export function purchaseOrderLineFromPrisma(line: PurchaseOrderLineApiPayload) {
-  const { manufacturingOrderLines, ...lineRest } = line;
+  const { manufacturingOrderLines, warehouseOrderLines, ...lineRest } = line;
   return {
     ...lineRest,
     allocations: manufacturingOrderLines.map((mol) => ({
       manufacturingOrderId: mol.manufacturingOrderId,
       manufacturerId: mol.manufacturerId,
+      quantity: mol.quantity,
       manufacturingOrder: mol.manufacturingOrder,
       manufacturer: mol.manufacturer,
+    })),
+    warehouseAllocations: warehouseOrderLines.map((wol) => ({
+      warehouseOrderId: wol.warehouseOrderId,
+      quantity: wol.quantity,
+      warehouseOrder: wol.warehouseOrder,
     })),
   };
 }
@@ -186,7 +216,15 @@ export function purchaseOrderOsdFromPrisma(osd: PurchaseOrderOsdDetailPayload) {
 }
 
 export function purchaseOrderDetailFromPrisma(row: PurchaseOrderDetailWithRelations) {
-  const { purchaseOrderShippings, lines, osds, invoice, statusLogs, ...rest } = row;
+  const {
+    purchaseOrderShippings,
+    lines,
+    osds,
+    invoice,
+    statusLogs,
+    warehouseOrderPurchaseOrders,
+    ...rest
+  } = row;
 
   return {
     ...rest,
@@ -200,6 +238,7 @@ export function purchaseOrderDetailFromPrisma(row: PurchaseOrderDetailWithRelati
     lines: lines.map((line) => purchaseOrderLineFromPrisma(line)),
     osds: osds.map(mapPurchaseOrderOsd),
     statusLogs: statusLogs.map(orderStatusLogFromPrisma),
+    warehouseOrderPurchaseOrders,
     shippings: purchaseOrderShippings.map((item) => shippingRowFromPrisma(item.shipping)),
   };
 }
@@ -213,5 +252,15 @@ export function manufacturingOrderDetailFromPrisma(
     ...rest,
     statusLogs: statusLogs.map(orderStatusLogFromPrisma),
     shippings: manufacturingOrderShippings.map((item) => shippingRowFromPrisma(item.shipping)),
+  };
+}
+
+export function warehouseOrderDetailFromPrisma(row: WarehouseOrderDetailWithRelations) {
+  const { warehouseOrderShippings, statusLogs, ...rest } = row;
+
+  return {
+    ...rest,
+    statusLogs: statusLogs.map(orderStatusLogFromPrisma),
+    shippings: warehouseOrderShippings.map((item) => shippingRowFromPrisma(item.shipping)),
   };
 }

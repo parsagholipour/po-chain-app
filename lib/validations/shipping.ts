@@ -4,6 +4,7 @@ export const shippingTypeSchema = z.enum([
   "manufacturing_order",
   "purchase_order",
   "stock_order",
+  "warehouse_order",
 ]);
 
 export const shippingStatusSchema = z.enum([
@@ -71,6 +72,7 @@ export const shippingCreateSchema = z.object({
   logisticsPartnerId: z.uuid().nullable().optional(),
   manufacturingOrderIds: z.array(z.uuid()).optional(),
   purchaseOrderIds: z.array(z.uuid()).optional(),
+  warehouseOrderIds: z.array(z.uuid()).optional(),
 });
 
 export const shippingPatchSchema = shippingCreateSchema
@@ -79,6 +81,7 @@ export const shippingPatchSchema = shippingCreateSchema
   .extend({
     manufacturingOrderIds: z.array(z.uuid()).optional(),
     purchaseOrderIds: z.array(z.uuid()).optional(),
+    warehouseOrderIds: z.array(z.uuid()).optional(),
   });
 
 function toPrismaDate(v: string | null): Date | null {

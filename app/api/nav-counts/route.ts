@@ -10,7 +10,7 @@ export async function GET() {
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
 
-  const [purchaseOrders, stockOrders, manufacturingOrders] = await Promise.all([
+  const [purchaseOrders, stockOrders, manufacturingOrders, warehouseOrders] = await Promise.all([
     prisma.purchaseOrder.count({
       where: {
         storeId,
@@ -31,7 +31,13 @@ export async function GET() {
         status: { not: "closed" },
       },
     }),
+    prisma.warehouseOrder.count({
+      where: {
+        storeId,
+        status: { not: "closed" },
+      },
+    }),
   ]);
 
-  return NextResponse.json({ purchaseOrders, stockOrders, manufacturingOrders });
+  return NextResponse.json({ purchaseOrders, stockOrders, manufacturingOrders, warehouseOrders });
 }

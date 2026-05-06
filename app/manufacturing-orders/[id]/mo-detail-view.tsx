@@ -265,6 +265,8 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
     mutationFn: async (body: {
       purchaseOrderLineId: string;
       manufacturerId: string;
+      quantity?: number;
+      cost?: number | null;
       verified?: boolean;
     }) => {
       const { data } = await api.post<ManufacturingOrderDetail>(

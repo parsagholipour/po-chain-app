@@ -16,7 +16,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider basePath="/api/auth">
       <NextTopLoader
-        color="oklch(0.52 0.12 180)"
+        color="var(--primary)"
         height={3}
         showSpinner={false}
         zIndex={9999}

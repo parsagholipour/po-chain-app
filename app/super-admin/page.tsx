@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SuperAdminStoresTable } from "./stores-table";
+import { normalizeStoreTheme } from "@/lib/store-theme";
 
 export const metadata: Metadata = {
   title: "Super admin",
@@ -38,6 +39,7 @@ export default async function SuperAdminPage() {
         slug: true,
         email: true,
         website: true,
+        theme: true,
         createdAt: true,
         _count: { select: { userStores: true } },
       },
@@ -77,6 +79,7 @@ export default async function SuperAdminPage() {
               slug: store.slug,
               email: store.email,
               website: store.website,
+              theme: normalizeStoreTheme(store.theme),
               userCount: store._count.userStores,
               createdAtLabel: formatDate(store.createdAt),
             }))}

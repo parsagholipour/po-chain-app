@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/axios";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -29,9 +30,16 @@ type Props = {
   onSubmit: (v: {
     purchaseOrderLineId: string;
     manufacturerId: string;
+    quantity?: number;
     verified?: boolean;
   }) => Promise<void>;
 };
+
+function lineRemaining(line: PoLineRow) {
+  const moQuantity = line.allocations.reduce((sum, row) => sum + row.quantity, 0);
+  const woQuantity = line.warehouseAllocations.reduce((sum, row) => sum + row.quantity, 0);
+  return Math.max(0, line.quantity - moQuantity - woQuantity);
+}
 
 export function AddMoLineAllocationDialog({
   open,
@@ -42,6 +50,7 @@ export function AddMoLineAllocationDialog({
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
   const [lineId, setLineId] = useState("");
   const [manufacturerId, setManufacturerId] = useState("");
+  const [quantity, setQuantity] = useState(1);
   const [submitting, setSubmitting] = useState(false);
 
   const poItems = useMemo(
@@ -85,12 +94,18 @@ export function AddMoLineAllocationDialog({
 
   const lineOptions = useMemo(() => {
     return lines
-      .filter((l) => !allocatedLineIds.has(l.id))
-      .map((l) => ({
-        value: l.id,
-        label: `${l.product.name} × ${l.quantity}`,
+      .filter((line) => !allocatedLineIds.has(line.id))
+      .map((line) => ({ line, remaining: lineRemaining(line) }))
+      .filter((row) => row.remaining > 0)
+      .map((row) => ({
+        value: row.line.id,
+        label: `${row.line.product.name} x ${row.remaining}`,
+        remaining: row.remaining,
       }));
   }, [lines, allocatedLineIds]);
+
+  const selectedLine = lineOptions.find((line) => line.value === lineId);
+  const maxQuantity = selectedLine?.remaining ?? 1;
 
   const mfrItems = useMemo(
     () =>
@@ -106,12 +121,18 @@ export function AddMoLineAllocationDialog({
       setPurchaseOrderId("");
       setLineId("");
       setManufacturerId("");
+      setQuantity(1);
     }
   }, [open]);
 
   useEffect(() => {
     setLineId("");
+    setQuantity(1);
   }, [purchaseOrderId]);
+
+  useEffect(() => {
+    setQuantity((current) => Math.max(1, Math.min(maxQuantity, current)));
+  }, [maxQuantity]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -129,6 +150,7 @@ export function AddMoLineAllocationDialog({
               await onSubmit({
                 purchaseOrderLineId: lineId,
                 manufacturerId,
+                quantity,
                 verified: false,
               });
               onOpenChange(false);
@@ -213,6 +235,22 @@ export function AddMoLineAllocationDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="mo-line-quantity" required>
+              Quantity
+            </Label>
+            <Input
+              id="mo-line-quantity"
+              type="number"
+              min={1}
+              max={maxQuantity}
+              value={quantity}
+              disabled={submitting || !lineId}
+              onChange={(event) => {
+                setQuantity(Math.max(1, Math.min(maxQuantity, Number(event.target.value) || 1)));
+              }}
+            />
           </div>
           <DialogFooter className="border-0 bg-transparent">
             <Button

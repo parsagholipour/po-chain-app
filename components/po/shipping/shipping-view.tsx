@@ -59,6 +59,7 @@ export function ShippingView() {
           manufacturing_order: 0,
           purchase_order: 0,
           stock_order: 0,
+          warehouse_order: 0,
         } as Record<ShippingType, number>,
       );
     },

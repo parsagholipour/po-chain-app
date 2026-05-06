@@ -18,6 +18,7 @@ const ENTITY_TYPES = [
   { value: "product", label: "Products" },
   { value: "product_category", label: "Product Categories" },
   { value: "product_type", label: "Product Types" },
+  { value: "product_collection", label: "Product Collections" },
   { value: "manufacturer", label: "Manufacturers" },
   { value: "sale_channel", label: "Sale Channels" },
   { value: "logistics_partner", label: "Logistics Partners" },

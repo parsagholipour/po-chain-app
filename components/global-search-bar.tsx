@@ -17,6 +17,7 @@ import type {
   RecommendedOpenItem,
   SaleChannel,
   ShippingRow,
+  WarehouseOrderSummary,
 } from "@/lib/types/api";
 import { distributorPoStatusLabels, moStatusLabels } from "@/lib/po/status-labels";
 import { GLOBAL_SEARCH_SCOPES, type GlobalSearchScope, scopeLabel } from "@/lib/global-search-scopes";
@@ -39,6 +40,7 @@ type Hit =
   | { kind: "po"; id: string; title: string; subtitle: string }
   | { kind: "mo"; id: string; title: string; subtitle: string }
   | { kind: "so"; id: string; title: string; subtitle: string }
+  | { kind: "wo"; id: string; title: string; subtitle: string }
   | { kind: "manufacturer"; id: string; title: string; subtitle: string }
   | { kind: "product"; id: string; title: string; subtitle: string }
   | { kind: "shipping"; id: string; title: string; subtitle: string }
@@ -65,6 +67,8 @@ function hitHref(hit: Hit): string {
       return `/manufacturing-orders/${hit.id}`;
     case "so":
       return `/stock-orders/${hit.id}`;
+    case "wo":
+      return `/warehouse-orders/${hit.id}`;
     case "manufacturer":
       return `/manufacturers?id=${hit.id}`;
     case "product":
@@ -90,6 +94,8 @@ function recommendedItemHref(item: RecommendedOpenItem): string {
       return `/manufacturing-orders/${item.id}`;
     case "so":
       return `/stock-orders/${item.id}`;
+    case "wo":
+      return `/warehouse-orders/${item.id}`;
   }
 }
 
@@ -98,7 +104,14 @@ function recommendedSubtitle(item: RecommendedOpenItem): string {
     item.kind === "mo"
       ? (moStatusLabels[item.status] ?? item.status)
       : (distributorPoStatusLabels[item.status] ?? item.status);
-  const kindLabel = item.kind === "po" ? "PO" : item.kind === "so" ? "Stock order" : "MO";
+  const kindLabel =
+    item.kind === "po"
+      ? "PO"
+      : item.kind === "so"
+        ? "Stock order"
+        : item.kind === "wo"
+          ? "WO"
+          : "MO";
   return `${kindLabel} · ${statusLabel} · #${item.number}`;
 }
 
@@ -142,6 +155,7 @@ export function GlobalSearchBar() {
   const scopePo = !activeScope || activeScope === "po";
   const scopeMo = !activeScope || activeScope === "mo";
   const scopeSo = !activeScope || activeScope === "so";
+  const scopeWo = !activeScope || activeScope === "wo";
   const scopeManufacturer = !activeScope || activeScope === "manufacturer";
   const scopeProduct = !activeScope || activeScope === "product";
   const scopeShipping = !activeScope || activeScope === "shipping";
@@ -222,18 +236,31 @@ export function GlobalSearchBar() {
         enabled: searchActive && scopeSo,
         staleTime: 30_000,
       },
+      {
+        queryKey: ["global-search", "wo", q] as const,
+        queryFn: async () => {
+          const { data } = await api.get<WarehouseOrderSummary[]>("/api/warehouse-orders", {
+            params: { q },
+          });
+          return data;
+        },
+        enabled: searchActive && scopeWo,
+        staleTime: 30_000,
+      },
     ],
   });
 
   const poRows = orderQueries[0].data as PurchaseOrderSummary[] | undefined;
   const moRows = orderQueries[1].data as ManufacturingOrderSummary[] | undefined;
   const soRows = orderQueries[2].data as PurchaseOrderSummary[] | undefined;
+  const woRows = orderQueries[3].data as WarehouseOrderSummary[] | undefined;
   /** Only count queries that are enabled for the current scope (disabled queries can stay `isPending`). */
   const ordersLoading =
     searchActive &&
     ((scopePo && (orderQueries[0].isFetching || orderQueries[0].isPending)) ||
       (scopeMo && (orderQueries[1].isFetching || orderQueries[1].isPending)) ||
-      (scopeSo && (orderQueries[2].isFetching || orderQueries[2].isPending)));
+      (scopeSo && (orderQueries[2].isFetching || orderQueries[2].isPending)) ||
+      (scopeWo && (orderQueries[3].isFetching || orderQueries[3].isPending)));
 
   const masterDataQueries = useQueries({
     queries: [
@@ -339,6 +366,16 @@ export function GlobalSearchBar() {
         });
       }
     }
+    if (scopeWo && woRows) {
+      for (const row of woRows.slice(0, MAX_SECTION)) {
+        out.push({
+          kind: "wo",
+          id: row.id,
+          title: row.name,
+          subtitle: `Warehouse order Â· ${row.warehouse.name}`,
+        });
+      }
+    }
 
     if (scopeManufacturer && manufacturersList) {
       for (const row of manufacturersList) {
@@ -419,6 +456,7 @@ export function GlobalSearchBar() {
     scopePo,
     scopeMo,
     scopeSo,
+    scopeWo,
     scopeManufacturer,
     scopeProduct,
     scopeShipping,
@@ -426,6 +464,7 @@ export function GlobalSearchBar() {
     poRows,
     moRows,
     soRows,
+    woRows,
     manufacturersList,
     productsList,
     saleChannelsList,

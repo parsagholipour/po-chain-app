@@ -261,7 +261,7 @@ function PoListFiltersAndTable({
               <ExpandableOrderSummaryTableHead />
               <TableHead>Name</TableHead>
               <TableHead>Sale Channel</TableHead>
-              <TableHead className="min-w-[12rem]">Manufacturing Status</TableHead>
+              <TableHead className="min-w-[12rem]">Fulfillment</TableHead>
               <TableHead className="min-w-[12rem]">Status</TableHead>
               <TableHead className="w-40">Created</TableHead>
               <TableHead className="w-12">

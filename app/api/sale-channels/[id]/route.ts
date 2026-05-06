@@ -85,6 +85,13 @@ export async function DELETE(
   if (!pid.success) return jsonFromZod(pid.error);
 
   try {
+    const warehousesInUse = await prisma.warehouse.count({
+      where: { saleChannelId: pid.data.id, storeId },
+    });
+    if (warehousesInUse > 0) {
+      return jsonError("Sale channel is used by warehouses", 409);
+    }
+
     const deleted = await prisma.saleChannel.deleteMany({
       where: { id: pid.data.id, storeId },
     });

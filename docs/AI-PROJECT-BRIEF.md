@@ -12,9 +12,10 @@ Internal **operations app** for a business that:
 
 1. **Records distributor orders** as **Purchase Orders (PO)** — one primary sale channel per PO, line items = product + quantity only (no manufacturer on the line).
 2. **Records internal replenishment** as **Stock orders** — same underlying table and line model as POs, distinguished by a **`type`** column (`distributor` vs `stock`); no sale channel; **separate** HTTP routes and App Router pages from POs.
-3. **Runs manufacturing** as **Manufacturing Orders (MO)** — links one-or-more **distributor POs and/or stock orders** (same M2M and line-allocation mechanics), tracks manufacturers (pivot: status + optional invoice), allocates order lines to manufacturers with `verified` on the pivot, and attaches **manufacturing shipments** (M2M: MO ↔ `ManufacturingShipping`).
+3. **Runs manufacturing** as **Manufacturing Orders (MO)** — links one-or-more **distributor POs and/or stock orders** (same M2M and line-allocation mechanics), tracks manufacturers (pivot: status + optional invoice), allocates order lines to manufacturers with quantities + `verified` on the pivot, and attaches shared **shipping** records.
+4. **Runs warehouse fulfillment** as **Warehouse Orders (WO)** — links one-or-more **distributor POs only**, allocates PO-line quantities to a warehouse shipment flow, and attaches shared **shipping** records. WO is not the same thing as Stock orders.
 
-**Rule of thumb:** PO = “what we bought from the channel / logistics state”. Stock order = “internal stock pipeline / same logistics statuses, no channel”. MO = “what we asked factories to do / production + shipment state”.
+**Rule of thumb:** PO = “what distributors ordered / sales-side logistics state”. Stock order = “internal replenishment / same logistics statuses, no distributor channel”. MO = “what we asked factories to make”. WO = “what we send from warehouse inventory to fulfill distributor PO lines”.
 
 ---
 
@@ -50,12 +51,20 @@ Shared table for **distributor PO** and **stock order**:
 - **`ManufacturingOrder`**: `number` (auto), `name`, `status` (**`ManufacturingOrderStatus`**: full workflow e.g. `open` … `closed`), `documentKey?`.
 - **`ManufacturingOrderManufacturer`**: composite PK `(manufacturingOrderId, manufacturerId)`, pivot status (`ManufacturingOrderManufacturerStatus`), optional **`invoiceId`** (1:1 with `Invoice`).
 - **`ManufacturingOrderPurchaseOrder`**: M2M MO ↔ `PurchaseOrder` (**distributor** or **stock** rows).
-- **`ManufacturingOrderPurchaseOrderLine`**: MO ↔ `PurchaseOrderLine` with **`verified`**, **`manufacturerId`** (allocation must use a manufacturer on that MO; line’s PO must be linked to the MO).
-- **`ManufacturingShipping`** + **`ManufacturingOrderManufacturingShipping`**: shipment records, M2M with MO.
+- **`ManufacturingOrderPurchaseOrderLine`**: MO ↔ `PurchaseOrderLine` with **`quantity`**, **`verified`**, **`manufacturerId`** (allocation must use a manufacturer on that MO; line’s PO must be linked to the MO). MO quantity plus WO quantity may not exceed the source PO line `quantity`.
+- **`Shipping`** + **`ManufacturingOrderShipping`**: shared shipment records, M2M with MO.
+
+### Warehouse Order
+
+- **`Warehouse`**: master data (`name`, `address?`, `phoneNumber?`, `email?`).
+- **`WarehouseOrder`**: `number` (auto), `name`, `status` (**`WarehouseOrderStatus`**: `open` \| `shipped` \| `closed`), `documentKey?`, exactly one `warehouseId`.
+- **`WarehouseOrderPurchaseOrder`**: M2M WO ↔ distributor `PurchaseOrder` only.
+- **`WarehouseOrderPurchaseOrderLine`**: WO ↔ `PurchaseOrderLine` with **`quantity`**. Lines must belong to distributor POs linked to the WO.
+- **`WarehouseOrderShipping`**: shared shipment records, M2M with WO. Active shipping (`in_transit` / `delivered`) reconciles WO `open` -> `shipped`; removing/cancelling the last active shipping returns `shipped` -> `open` unless closed.
 
 ### Shared master data
 
-- **`Manufacturer`**, **`SaleChannel`** (`SaleChannelType`: distributor \| amazon \| cjdropshipping), **`Product`** (has `defaultManufacturerId`, `verified`).
+- **`Manufacturer`**, **`Warehouse`**, **`SaleChannel`** (`SaleChannelType`: distributor \| amazon \| cjdropshipping), **`Product`** (has `defaultManufacturerId`, `verified`).
 - **`Invoice`**: attached to **`ManufacturingOrderManufacturer`** only (not PO).
 
 ### Users
@@ -95,17 +104,33 @@ Base: `app/api/`. All business routes expect an authenticated user unless noted.
 | GET/POST | `/api/manufacturing-orders` | List / create (`purchaseOrderIds`, `manufacturers[]`, …) |
 | GET/PATCH/DELETE | `/api/manufacturing-orders/[id]` | Detail include: `lib/manufacturing-order-include.ts` / delete |
 | PATCH | `/api/manufacturing-orders/[id]/manufacturers/[manufacturerId]` | Pivot status + create/update invoice |
-| POST | `/api/manufacturing-orders/[id]/lines` | Add **allocation** (`purchaseOrderLineId`, `manufacturerId`, `verified?`) |
+| POST | `/api/manufacturing-orders/[id]/lines` | Add **allocation** (`purchaseOrderLineId`, `manufacturerId`, `quantity?`, `verified?`) |
 | PATCH/DELETE | `/api/manufacturing-orders/[id]/lines/[purchaseOrderLineId]` | Allocation |
-| POST | `/api/manufacturing-orders/[id]/shippings` | Create shipping + link to MO |
-| PATCH/DELETE | `/api/manufacturing-orders/[id]/shippings/[shippingId]` | Shipping row (scoped to MO via join) |
 | POST | `/api/manufacturing-orders/[id]/purchase-orders` | Body `{ purchaseOrderId }` (distributor PO or stock order) |
 | DELETE | `/api/manufacturing-orders/[id]/purchase-orders/[purchaseOrderId]` | Unlink + remove allocations for that PO’s lines |
 | GET | `/api/manufacturing-orders/open-counts` | `{ byManufacturer }` for MO list badges |
 
+**Warehouse orders**
+
+| Method | Path | Role |
+|--------|------|------|
+| GET/POST | `/api/warehouse-orders` | List (filters: `status`, `q`, `warehouseId`) / create (`warehouseId`, distributor `purchaseOrderIds`, line quantities) |
+| GET/PATCH/DELETE | `/api/warehouse-orders/[id]` | Detail include: `lib/warehouse-order-include.ts` / patch scalar fields/status / delete |
+| POST | `/api/warehouse-orders/[id]/purchase-orders` | Body `{ purchaseOrderId }` (distributor PO only) |
+| DELETE | `/api/warehouse-orders/[id]/purchase-orders/[purchaseOrderId]` | Unlink + remove WO allocations for that PO’s lines |
+| POST | `/api/warehouse-orders/[id]/lines` | Add line allocation (`purchaseOrderLineId`, `quantity`) while WO is `open` |
+| PATCH/DELETE | `/api/warehouse-orders/[id]/lines/[purchaseOrderLineId]` | Update quantity / delete allocation while WO is `open` |
+
+**Shared shipping**
+
+| Method | Path | Role |
+|--------|------|------|
+| GET/POST | `/api/shipping` | List/create shared shipments. `type` can be `manufacturing_order`, `purchase_order`, `stock_order`, or `warehouse_order`. |
+| GET/PATCH/DELETE | `/api/shipping/[id]` | Detail/update/delete shipment and reconcile linked order statuses |
+
 **Other**
 
-- `/api/manufacturers`, `/api/sale-channels`, `/api/products` — CRUD-style resources.
+- `/api/manufacturers`, `/api/warehouses`, `/api/sale-channels`, `/api/products` — CRUD-style resources.
 - `/api/invoices/[id]` — PATCH invoice; GET includes `manufacturingOrderManufacturer` + `manufacturingOrder`.
 - `/api/storage/*` — uploads / presign (see README).
 
@@ -131,14 +156,19 @@ Base: `app/api/`. All business routes expect an authenticated user unless noted.
 | `/stock-orders` | `app/stock-orders/page.tsx`, `stock-orders-list-view.tsx` | Stock order list |
 | `/stock-orders/new` | `app/stock-orders/new/` | Stock order wizard |
 | `/stock-orders/[id]` | `app/stock-orders/[id]/` + `stock-order-detail-view.tsx` | Stock order detail |
+| `/warehouse-orders` | `app/warehouse-orders/page.tsx`, `warehouse-orders-list-view.tsx` | Warehouse order list |
+| `/warehouse-orders/new` | `app/warehouse-orders/new/` | Warehouse order create flow |
+| `/warehouse-orders/[id]` | `app/warehouse-orders/[id]/` + `warehouse-order-detail-view.tsx` | Warehouse order detail |
+| `/warehouses` | `app/warehouses/page.tsx`, `warehouses-view.tsx` | Warehouse master data |
 | `/manufacturers`, `/sale-channels`, `/products`, `/account` | respective `app/*/page.tsx` | Master data / account |
 
 **Shell navigation:** `components/admin-shell.tsx` — sidebar labels and hrefs.
 
-**Shared PO / stock / MO UI**
+**Shared PO / stock / MO / WO UI**
 
 - `components/po/purchase-order/` — headers, lines, shipments, manufacturers section (used on **MO** detail for manufacturer pivots), dialogs. `PoDetailHeader` branches on `po.type` (`distributor` vs `stock`).
 - `components/po/manufacturing-order/` — MO-specific sections (links, allocations, MO header).
+- `components/po/warehouses/` — warehouse master-data forms/tables.
 - `components/po/purchase-order-wizard/` — wizard steps (PO wizard uses sale-channel + lines; stock wizard uses lines only).
 
 **Types mirroring JSON:** `lib/types/api.ts`  
@@ -151,7 +181,7 @@ Base: `app/api/`. All business routes expect an authenticated user unless noted.
 | You want to… | Start here |
 |--------------|------------|
 | Add/rename DB fields or relations | `prisma/schema.prisma` → `npm run db:migrate` (or `db:push` in dev) → `npm run db:generate` |
-| Change API shape or rules | `app/api/.../route.ts` + matching Zod in `lib/validations/purchase-order.ts` or `lib/validations/manufacturing-order.ts` |
+| Change API shape or rules | `app/api/.../route.ts` + matching Zod in `lib/validations/purchase-order.ts`, `lib/validations/manufacturing-order.ts`, `lib/validations/warehouse-order.ts`, or `lib/validations/shipping.ts` |
 | Change list/detail UI | `*-list-view.tsx`, `*-detail-view.tsx`, or `components/po/...` |
 | New enum value for status | Prisma enum + Zod schema + `lib/po/status-labels.ts` + any `<Select>` options |
 
@@ -161,7 +191,7 @@ Base: `app/api/`. All business routes expect an authenticated user unless noted.
 
 - **Prisma** only in server code / Route Handlers (`@/lib/prisma`).
 - **Client HTTP** uses `api` from `@/lib/axios` with TanStack Query `queryKey`s kept stable (`purchase-orders` vs `stock-orders` are separate trees).
-- **Include objects** for heavy reads: `lib/purchase-order-include.ts`, `lib/manufacturing-order-include.ts`.
+- **Include objects** for heavy reads: `lib/purchase-order-include.ts`, `lib/manufacturing-order-include.ts`, `lib/warehouse-order-include.ts`, `lib/shipping-include.ts`.
 - Prefer **small, focused diffs**; match existing patterns in adjacent files.
 - Do **not** edit `app/generated/prisma` by hand.
 

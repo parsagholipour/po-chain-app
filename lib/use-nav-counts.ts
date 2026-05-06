@@ -7,6 +7,7 @@ type NavCounts = {
   purchaseOrders: number;
   stockOrders: number;
   manufacturingOrders: number;
+  warehouseOrders: number;
 };
 
 export function useNavCounts() {

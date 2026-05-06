@@ -24,6 +24,7 @@ import {
   moStatusLabels,
   shippingStatusLabels,
   statusBadgeClassName,
+  warehouseOrderStatusLabels,
 } from "@/lib/po/status-labels";
 import { ChevronDown, ChevronRight, Loader2, Trash2 } from "lucide-react";
 
@@ -111,18 +112,31 @@ export function ExpandableOrderSummaryRow({
               {row.saleChannel?.name ?? "—"}
             </TableCell>
             <TableCell>
-              {row.manufacturingOrders.length > 0 ? (
-                <div className="flex flex-col gap-1.5">
+              {row.manufacturingOrders.length > 0 || row.warehouseOrders.length > 0 ? (
+                <div className="flex flex-col gap-2">
                   {row.manufacturingOrders.map((mo) => (
                     <div key={mo.id} className="flex items-center gap-1.5">
                       <Link href={`/manufacturing-orders/${mo.id}`} className="text-xs hover:underline">
-                        {mo.name}
+                        MO: {mo.name}
                       </Link>
                       <Badge
                         variant="outline"
                         className={`${statusBadgeClassName(mo.status)} text-[10px] font-medium`}
                       >
                         {moStatusLabels[mo.status] ?? mo.status}
+                      </Badge>
+                    </div>
+                  ))}
+                  {row.warehouseOrders.map((wo) => (
+                    <div key={wo.id} className="flex items-center gap-1.5">
+                      <Link href={`/warehouse-orders/${wo.id}`} className="text-xs hover:underline">
+                        WO: {wo.name}
+                      </Link>
+                      <Badge
+                        variant="outline"
+                        className={`${statusBadgeClassName(wo.status)} text-[10px] font-medium`}
+                      >
+                        {warehouseOrderStatusLabels[wo.status] ?? wo.status}
                       </Badge>
                     </div>
                   ))}

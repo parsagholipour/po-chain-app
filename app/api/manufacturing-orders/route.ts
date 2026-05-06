@@ -14,6 +14,7 @@ import {
   formatMissingProductAssetsError,
 } from "@/lib/mo-product-assets";
 import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
+import { getFulfillmentAvailability } from "@/lib/fulfillment-quantity";
 
 export const runtime = "nodejs";
 
@@ -194,6 +195,8 @@ export async function POST(request: Request) {
 
       let poLines: {
         id: string;
+        quantity: number;
+        allocationQuantity?: number;
         product: {
           defaultManufacturerId: string;
           name: string;
@@ -209,6 +212,7 @@ export async function POST(request: Request) {
           where: { purchaseOrderId: { in: purchaseOrderIds }, storeId },
           select: {
             id: true,
+            quantity: true,
             product: {
               select: {
                 defaultManufacturerId: true,
@@ -228,6 +232,21 @@ export async function POST(request: Request) {
             },
           },
         });
+        const poLinesWithRemaining = [];
+        for (const line of poLines) {
+          const availability = await getFulfillmentAvailability(tx, {
+            storeId,
+            purchaseOrderLineId: line.id,
+          });
+          if (availability && availability.availableQuantity > 0) {
+            poLinesWithRemaining.push({
+              ...line,
+              allocationQuantity: availability.availableQuantity,
+            });
+          }
+        }
+        poLines = poLinesWithRemaining;
+
         const missingProductAssets = findLinesMissingProductAssets(poLines);
         if (missingProductAssets.length > 0) {
           throw new Error(
@@ -290,6 +309,7 @@ export async function POST(request: Request) {
             manufacturingOrderId: mo.id,
             purchaseOrderLineId: line.id,
             manufacturerId: line.product.defaultManufacturerId,
+            quantity: line.allocationQuantity ?? line.quantity,
             verified: false,
             storeId,
             createdById: userId,

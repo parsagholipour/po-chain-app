@@ -48,6 +48,7 @@ export function ProductsTable({
           <TableHead>Default Mfr.</TableHead>
           <TableHead>Category</TableHead>
           <TableHead>Type</TableHead>
+          <TableHead>Collection</TableHead>
           <TableHead>Verified</TableHead>
           <TableHead className="w-[120px] text-end">Actions</TableHead>
         </TableRow>
@@ -55,13 +56,13 @@ export function ProductsTable({
       <TableBody>
         {isPending ? (
           <TableRow>
-            <TableCell colSpan={12} className="h-24 text-center text-muted-foreground">
+            <TableCell colSpan={13} className="h-24 text-center text-muted-foreground">
               Loading...
             </TableCell>
           </TableRow>
         ) : rows.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={12} className="h-24 text-center text-muted-foreground">
+            <TableCell colSpan={13} className="h-24 text-center text-muted-foreground">
               {emptyMessage}
             </TableCell>
           </TableRow>
@@ -96,6 +97,7 @@ export function ProductsTable({
               <TableCell>{row.defaultManufacturer.name}</TableCell>
               <TableCell>{row.category?.name ?? <span className="text-muted-foreground">None</span>}</TableCell>
               <TableCell>{row.type?.name ?? <span className="text-muted-foreground">None</span>}</TableCell>
+              <TableCell>{row.collection?.name ?? <span className="text-muted-foreground">None</span>}</TableCell>
               <TableCell>
                 {row.verified ? (
                   <Badge variant="default">Yes</Badge>

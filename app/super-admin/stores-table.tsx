@@ -2,7 +2,13 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, Pencil } from "lucide-react";
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { useForm, useFormState, type Resolver } from "react-hook-form";
 import { toast } from "sonner";
 import { updateSuperAdminStore, type SuperAdminStoreUpdate } from "./actions";
@@ -10,6 +16,7 @@ import {
   superAdminStoreUpdateSchema,
   type SuperAdminStoreFormValues,
 } from "@/lib/validations/store";
+import { DEFAULT_STORE_THEME } from "@/lib/store-theme";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -68,12 +75,15 @@ function StoreEditDialog({
       slug: store?.slug ?? "",
       email: store?.email ?? "",
       website: store?.website ?? "",
+      theme: store?.theme ?? DEFAULT_STORE_THEME,
     }),
     [store],
   );
 
   const form = useForm<SuperAdminStoreFormValues>({
-    resolver: zodResolver(superAdminStoreUpdateSchema) as Resolver<SuperAdminStoreFormValues>,
+    resolver: zodResolver(
+      superAdminStoreUpdateSchema,
+    ) as Resolver<SuperAdminStoreFormValues>,
     defaultValues,
   });
   const { isSubmitting } = useFormState({ control: form.control });
@@ -156,6 +166,48 @@ function StoreEditDialog({
                   <FieldError errors={[form.formState.errors.website]} />
                 </FieldContent>
               </Field>
+
+              <Field
+                data-invalid={!!form.formState.errors.theme?.primaryColor}
+                className="gap-1.5"
+              >
+                <FieldLabel htmlFor="store-theme-primary" required>
+                  Primary color
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="store-theme-primary"
+                    placeholder="rgb(110 46 143)"
+                    {...form.register("theme.primaryColor")}
+                  />
+                  <FieldError
+                    errors={[form.formState.errors.theme?.primaryColor]}
+                  />
+                </FieldContent>
+              </Field>
+
+              <Field
+                data-invalid={
+                  !!form.formState.errors.theme?.primaryForegroundColor
+                }
+                className="gap-1.5"
+              >
+                <FieldLabel htmlFor="store-theme-foreground" required>
+                  Primary foreground
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="store-theme-foreground"
+                    placeholder="rgb(255 255 255)"
+                    {...form.register("theme.primaryForegroundColor")}
+                  />
+                  <FieldError
+                    errors={[
+                      form.formState.errors.theme?.primaryForegroundColor,
+                    ]}
+                  />
+                </FieldContent>
+              </Field>
             </FieldGroup>
           </FieldSet>
 
@@ -173,9 +225,12 @@ function StoreEditDialog({
   );
 }
 
-export function SuperAdminStoresTable({ stores: initialStores }: StoresTableProps) {
+export function SuperAdminStoresTable({
+  stores: initialStores,
+}: StoresTableProps) {
   const [stores, setStores] = useState(() => sortStores(initialStores));
-  const [editingStore, setEditingStore] = useState<SuperAdminStoreRow | null>(null);
+  const [editingStore, setEditingStore] =
+    useState<SuperAdminStoreRow | null>(null);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -195,6 +250,7 @@ export function SuperAdminStoresTable({ stores: initialStores }: StoresTableProp
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Slug</TableHead>
+              <TableHead>Theme</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Website</TableHead>
               <TableHead className="text-right">Users</TableHead>
@@ -207,6 +263,23 @@ export function SuperAdminStoresTable({ stores: initialStores }: StoresTableProp
               <TableRow key={store.id}>
                 <TableCell className="font-medium">{store.name}</TableCell>
                 <TableCell className="font-mono text-xs">{store.slug}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="grid size-5 place-items-center rounded-md border border-border"
+                      style={{
+                        backgroundColor: store.theme.primaryColor,
+                        color: store.theme.primaryForegroundColor,
+                      }}
+                      aria-hidden
+                    >
+                      <span className="size-2 rounded-full bg-current" />
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {store.theme.primaryColor}
+                    </span>
+                  </div>
+                </TableCell>
                 <TableCell className="font-mono text-xs text-muted-foreground">
                   {store.email ?? "-"}
                 </TableCell>

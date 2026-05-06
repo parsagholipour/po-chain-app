@@ -2,6 +2,8 @@ import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
 import { AdminShell } from "@/components/admin-shell";
 import { SuperAdminShell } from "@/components/super-admin-shell";
+import { StoreThemeVariables } from "@/components/store-theme-variables";
+import { getStoreThemeStyle } from "@/lib/store-theme";
 import { getStoreContextForUserId } from "@/lib/store-context";
 
 export async function AppChrome({ children }: { children: React.ReactNode }) {
@@ -19,14 +21,19 @@ export async function AppChrome({ children }: { children: React.ReactNode }) {
   const storeContext = session?.user?.id
     ? await getStoreContextForUserId(session.user.id)
     : null;
+  const activeStore = storeContext?.activeStore ?? null;
 
   return (
-    <div className="flex min-h-[100dvh] flex-1 flex-col">
+    <div
+      className="flex min-h-[100dvh] flex-1 flex-col"
+      style={activeStore ? getStoreThemeStyle(activeStore.theme) : undefined}
+    >
+      <StoreThemeVariables theme={activeStore?.theme ?? null} />
       <AdminShell
         authenticated={Boolean(session?.user)}
         stores={storeContext?.stores ?? []}
-        activeStoreId={storeContext?.activeStore.id ?? null}
-        activeStoreName={storeContext?.activeStore.name ?? null}
+        activeStoreId={activeStore?.id ?? null}
+        activeStoreName={activeStore?.name ?? null}
       >
         {children}
       </AdminShell>
