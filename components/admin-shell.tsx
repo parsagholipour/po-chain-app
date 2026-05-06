@@ -26,6 +26,7 @@ import {
 import { AuthControls } from "@/components/auth-controls";
 import { AssistantSheet } from "@/components/assistant/assistant-sheet";
 import { APP_NAME } from "@/lib/app-name";
+import { logoHueRotateFilterStyle } from "@/lib/store-theme";
 import { ModeToggle } from "@/components/mode-toggle";
 import { StoreSwitcher } from "@/components/store-switcher";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -136,10 +137,21 @@ function navGroupActive(pathname: string, item: NavGroup) {
   return navActive(pathname, item.href) || item.children.some((child) => navActive(pathname, child.href));
 }
 
-function SidebarBrand({ activeStoreName, isCollapsed }: { activeStoreName: string | null; isCollapsed?: boolean }) {
+function SidebarBrand({
+  activeStoreName,
+  isCollapsed,
+  logoHueRotateDeg,
+}: {
+  activeStoreName: string | null;
+  isCollapsed?: boolean;
+  logoHueRotateDeg: number;
+}) {
   return (
     <div className={cn("flex h-16 items-center border-b border-sidebar-border", isCollapsed ? "justify-center px-0" : "gap-2 px-5")}>
-      <div className="relative size-10 shrink-0 overflow-hidden">
+      <div
+        className="relative size-10 shrink-0 overflow-hidden"
+        style={logoHueRotateFilterStyle(logoHueRotateDeg)}
+      >
         <Image
           src="/logo.png"
           alt={isCollapsed ? APP_NAME : ""}
@@ -377,12 +389,14 @@ export function AdminShell({
   stores,
   activeStoreId,
   activeStoreName,
+  logoHueRotateDeg,
   children,
 }: {
   authenticated: boolean;
   stores: StoreOption[];
   activeStoreId: string | null;
   activeStoreName: string | null;
+  logoHueRotateDeg: number;
   children: React.ReactNode;
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -440,7 +454,11 @@ export function AdminShell({
         </button>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className={cn("flex min-h-0 flex-1 flex-col", isCollapsed ? "w-[68px]" : "w-[272px]")}>
-            <SidebarBrand activeStoreName={activeStoreName} isCollapsed={isCollapsed} />
+            <SidebarBrand
+              activeStoreName={activeStoreName}
+              isCollapsed={isCollapsed}
+              logoHueRotateDeg={logoHueRotateDeg}
+            />
             <ScrollArea className="min-h-0 flex-1">
               <NavList isCollapsed={isCollapsed} />
             </ScrollArea>

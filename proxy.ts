@@ -22,12 +22,7 @@ export default auth((req) => {
     }
   }
 
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-pathname", pathname);
-
-  return NextResponse.next({
-    request: { headers: requestHeaders },
-  });
+  return NextResponse.next();
 });
 
 export const config = {

@@ -121,7 +121,7 @@ model Store {
   name      String
   email     String?
   website   String?
-  theme     Json     @default("{\"primaryColor\":\"rgb(110 46 143)\",\"primaryForegroundColor\":\"rgb(255 255 255)\"}")
+  theme     Json     @default("{\"primaryColor\":\"rgb(110 46 143)\",\"primaryForegroundColor\":\"rgb(255 255 255)\",\"logoHueRotateDeg\":120}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

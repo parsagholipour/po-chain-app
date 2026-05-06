@@ -208,6 +208,31 @@ function StoreEditDialog({
                   />
                 </FieldContent>
               </Field>
+
+              <Field
+                data-invalid={!!form.formState.errors.theme?.logoHueRotateDeg}
+                className="gap-1.5"
+              >
+                <FieldLabel htmlFor="store-theme-logo-hue" required>
+                  Logo hue rotate (deg)
+                </FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="store-theme-logo-hue"
+                    type="number"
+                    min={0}
+                    max={360}
+                    step={1}
+                    placeholder="120"
+                    {...form.register("theme.logoHueRotateDeg", {
+                      valueAsNumber: true,
+                    })}
+                  />
+                  <FieldError
+                    errors={[form.formState.errors.theme?.logoHueRotateDeg]}
+                  />
+                </FieldContent>
+              </Field>
             </FieldGroup>
           </FieldSet>
 

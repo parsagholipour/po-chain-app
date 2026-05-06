@@ -49,7 +49,6 @@ export async function PATCH(
   const existing = await prisma.purchaseOrderLine.findFirst({
     where: {
       id: pid.data.lineId,
-      storeId,
       purchaseOrderId: pid.data.id,
       purchaseOrder: {
         storeId,
@@ -85,6 +84,7 @@ export async function PATCH(
       await tx.purchaseOrderLine.update({
         where: { id: pid.data.lineId },
         data: {
+          storeId,
           ...restPatch,
           ...(pricingSnapshot ?? {}),
           ...(quantity !== undefined ? { orderedQuantity: quantity } : {}),
@@ -129,7 +129,6 @@ export async function DELETE(
   const existing = await prisma.purchaseOrderLine.findFirst({
     where: {
       id: pid.data.lineId,
-      storeId,
       purchaseOrderId: pid.data.id,
       purchaseOrder: {
         storeId,
@@ -141,7 +140,7 @@ export async function DELETE(
 
   try {
     await prisma.purchaseOrderLine.deleteMany({
-      where: { id: pid.data.lineId, storeId },
+      where: { id: pid.data.lineId, purchaseOrderId: pid.data.id },
     });
     return new NextResponse(null, { status: 204 });
   } catch (e) {

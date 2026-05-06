@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "nextjs-toploader/app";
-import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Building2 } from "lucide-react";
 import { toast } from "sonner";
@@ -30,36 +30,35 @@ export function StoreSwitcher({
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
-  function onValueChange(nextStoreId: string | null) {
+  async function onValueChange(nextStoreId: string | null) {
     if (!nextStoreId || nextStoreId === activeStoreId) return;
 
-    startTransition(() => {
-      void (async () => {
-        try {
-          const response = await fetch("/api/stores/active", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ storeId: nextStoreId }),
-          });
+    setIsPending(true);
+    try {
+      const response = await fetch("/api/stores/active", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storeId: nextStoreId }),
+      });
 
-          if (!response.ok) {
-            const payload = (await response.json().catch(() => null)) as
-              | { error?: string }
-              | null;
-            throw new Error(payload?.error ?? "Could not switch store");
-          }
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as
+          | { error?: string }
+          | null;
+        throw new Error(payload?.error ?? "Could not switch store");
+      }
 
-          queryClient.clear();
-          router.refresh();
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : "Could not switch store";
-          toast.error(message);
-        }
-      })();
-    });
+      queryClient.clear();
+      router.refresh();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Could not switch store";
+      toast.error(message);
+    } finally {
+      setIsPending(false);
+    }
   }
 
   return (

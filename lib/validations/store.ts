@@ -72,6 +72,15 @@ const themeColor = z
     return normalized;
   });
 
+const logoHueRotateDeg = z.coerce
+  .number()
+  .refine((n) => Number.isFinite(n), {
+    message: "Logo hue must be a number between 0 and 360",
+  })
+  .refine((n) => n >= 0 && n <= 360, {
+    message: "Logo hue rotation must be between 0 and 360 degrees",
+  });
+
 export const superAdminStoreUpdateSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   slug: z.string().trim().min(1, "Slug is required"),
@@ -80,6 +89,7 @@ export const superAdminStoreUpdateSchema = z.object({
   theme: z.object({
     primaryColor: themeColor,
     primaryForegroundColor: themeColor,
+    logoHueRotateDeg,
   }),
 });
 

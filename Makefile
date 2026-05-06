@@ -3,6 +3,9 @@
 db-reset:
 	npx prisma migrate reset
 
+db-migrate:
+	npx prisma migrate dev
+
 up:
 	npm run dev
 

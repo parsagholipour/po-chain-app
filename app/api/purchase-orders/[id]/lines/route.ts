@@ -40,7 +40,13 @@ export async function GET(
   if (!po) return jsonError("Purchase order not found", 404);
 
   const lines = await prisma.purchaseOrderLine.findMany({
-    where: { purchaseOrderId: pid.data.id, storeId },
+    where: {
+      purchaseOrderId: pid.data.id,
+      purchaseOrder: {
+        storeId,
+        type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+      },
+    },
     include: purchaseOrderLineApiInclude,
     orderBy: { createdAt: "asc" },
   });

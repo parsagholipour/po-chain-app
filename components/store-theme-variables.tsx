@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import {
+  DEFAULT_STORE_THEME,
   getStoreThemeCssVariables,
   STORE_THEME_VARIABLES,
   type StoreTheme,
@@ -12,6 +13,21 @@ export function StoreThemeVariables({
 }: {
   theme: StoreTheme | null;
 }) {
+  const primaryColor = theme?.primaryColor ?? DEFAULT_STORE_THEME.primaryColor;
+  const primaryForegroundColor =
+    theme?.primaryForegroundColor ?? DEFAULT_STORE_THEME.primaryForegroundColor;
+  const logoHueRotateDeg =
+    theme?.logoHueRotateDeg ?? DEFAULT_STORE_THEME.logoHueRotateDeg;
+  const variables = useMemo(
+    () =>
+      getStoreThemeCssVariables({
+        primaryColor,
+        primaryForegroundColor,
+        logoHueRotateDeg,
+      }),
+    [logoHueRotateDeg, primaryColor, primaryForegroundColor],
+  );
+
   useEffect(() => {
     const root = document.documentElement;
     const previous = new Map(
@@ -20,7 +36,6 @@ export function StoreThemeVariables({
         root.style.getPropertyValue(name),
       ]),
     );
-    const variables = getStoreThemeCssVariables(theme);
 
     for (const [name, value] of Object.entries(variables)) {
       root.style.setProperty(name, value);
@@ -36,7 +51,7 @@ export function StoreThemeVariables({
         }
       }
     };
-  }, [theme]);
+  }, [variables]);
 
   return null;
 }
