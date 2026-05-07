@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { productUpdateSchema } from "@/lib/validations/master-data";
+import {
+  productUpdateSchema,
+  productUpdateToPrisma,
+} from "@/lib/validations/master-data";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { requireStoreContext } from "@/lib/store-context";
 import { z } from "zod";
@@ -115,7 +118,7 @@ export async function PATCH(
 
     const row = await prisma.product.update({
       where: { id: pid.data.id },
-      data: parsed.data,
+      data: productUpdateToPrisma(parsed.data),
       include: { defaultManufacturer: true, category: true, type: true, collection: true },
     });
     return NextResponse.json(row);

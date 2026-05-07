@@ -5,19 +5,31 @@ import { cn } from "@/lib/utils";
 export type PriceFieldProps = React.ComponentProps<typeof Input>;
 
 /**
- * Decimal money input for forms (non-negative by default).
+ * Decimal USD input for forms (non-negative by default).
  */
 export const PriceField = React.forwardRef<HTMLInputElement, PriceFieldProps>(
-  function PriceField({ className, min = 0, step = "0.01", type = "number", ...props }, ref) {
+  function PriceField(
+    { className, inputMode = "decimal", min = 0, step = "0.01", type = "number", ...props },
+    ref,
+  ) {
     return (
-      <Input
-        ref={ref}
-        type={type}
-        min={min}
-        step={step}
-        className={cn("tabular-nums", className)}
-        {...props}
-      />
+      <div className="relative w-full min-w-0">
+        <Input
+          ref={ref}
+          type={type}
+          inputMode={inputMode}
+          min={min}
+          step={step}
+          className={cn("peer pl-7 tabular-nums", className)}
+          {...props}
+        />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-sm text-muted-foreground peer-disabled:opacity-50 peer-aria-invalid:text-destructive"
+        >
+          $
+        </span>
+      </div>
     );
   },
 );

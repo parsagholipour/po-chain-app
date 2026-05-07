@@ -38,6 +38,7 @@ import {
 } from "@/lib/po/status-labels";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
+import { productFormValuesToApiBody } from "@/components/po/products/product-payload";
 import {
   ExpandableOrderSummaryRow,
   ExpandableOrderSummaryTableHead,
@@ -455,21 +456,11 @@ export function PurchaseOrdersListView() {
     patchPackagingKey: boolean;
   }): Promise<string> {
     if (!payload.id) return "";
-    const body: Record<string, unknown> = {
-      name: payload.values.name,
-      sku: payload.values.sku,
-      defaultManufacturerId: payload.values.defaultManufacturerId,
-      verified: payload.values.verified,
-    };
-    if (payload.patchImageKey) {
-      body.imageKey = payload.values.imageKey;
-    }
-    if (payload.patchBarcodeKey) {
-      body.barcodeKey = payload.values.barcodeKey;
-    }
-    if (payload.patchPackagingKey) {
-      body.packagingKey = payload.values.packagingKey;
-    }
+    const body = productFormValuesToApiBody(payload.values, {
+      includeImageKey: payload.patchImageKey,
+      includeBarcodeKey: payload.patchBarcodeKey,
+      includePackagingKey: payload.patchPackagingKey,
+    });
     await updateProduct.mutateAsync({ id: payload.id, body });
     return payload.id;
   }

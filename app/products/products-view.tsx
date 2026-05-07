@@ -15,6 +15,7 @@ import type {
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import { ProductsTable } from "@/components/po/products/products-table";
 import type { ProductFormValues } from "@/components/po/products/product-form";
+import { productFormValuesToApiBody } from "@/components/po/products/product-payload";
 import { Button } from "@/components/ui/button";
 import { ListFilters } from "@/components/ui/list-filters";
 import { TableContainer } from "@/components/ui/table-container";
@@ -183,20 +184,10 @@ export function ProductsView() {
 
   const createMut = useMutation({
     mutationFn: async (values: ProductFormValues) => {
-      const { data: row } = await api.post<Product>("/api/products", {
-        name: values.name,
-        sku: values.sku,
-        cost: values.cost ?? null,
-        price: values.price ?? null,
-        defaultManufacturerId: values.defaultManufacturerId,
-        categoryId: values.categoryId,
-        typeId: values.typeId,
-        collectionId: values.collectionId,
-        verified: values.verified,
-        imageKey: values.imageKey,
-        barcodeKey: values.barcodeKey,
-        packagingKey: values.packagingKey,
-      });
+      const { data: row } = await api.post<Product>(
+        "/api/products",
+        productFormValuesToApiBody(values),
+      );
       return row;
     },
     onSuccess: () => {
@@ -237,26 +228,11 @@ export function ProductsView() {
     patchPackagingKey: boolean;
   }): Promise<string> {
     if (payload.id) {
-      const body: Record<string, unknown> = {
-        name: payload.values.name,
-        sku: payload.values.sku,
-        cost: payload.values.cost ?? null,
-        price: payload.values.price ?? null,
-        defaultManufacturerId: payload.values.defaultManufacturerId,
-        categoryId: payload.values.categoryId,
-        typeId: payload.values.typeId,
-        collectionId: payload.values.collectionId,
-        verified: payload.values.verified,
-      };
-      if (payload.patchImageKey) {
-        body.imageKey = payload.values.imageKey;
-      }
-      if (payload.patchBarcodeKey) {
-        body.barcodeKey = payload.values.barcodeKey;
-      }
-      if (payload.patchPackagingKey) {
-        body.packagingKey = payload.values.packagingKey;
-      }
+      const body = productFormValuesToApiBody(payload.values, {
+        includeImageKey: payload.patchImageKey,
+        includeBarcodeKey: payload.patchBarcodeKey,
+        includePackagingKey: payload.patchPackagingKey,
+      });
       await updateMut.mutateAsync({ id: payload.id, body });
       return payload.id;
     } else {

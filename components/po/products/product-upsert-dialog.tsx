@@ -24,6 +24,13 @@ function moneyFieldDefault(v: string | number | null | undefined): number | null
   return Number.isFinite(n) ? n : null;
 }
 
+function formatDateInputValue(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+}
+
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -78,8 +85,17 @@ export function ProductUpsertDialog({
     ? {
         name: editing.name,
         sku: editing.sku,
+        upcGtin: editing.upcGtin ?? "",
         cost: moneyFieldDefault(editing.cost),
         price: moneyFieldDefault(editing.price),
+        mop: editing.mop,
+        map: moneyFieldDefault(editing.map),
+        msrp: moneyFieldDefault(editing.msrp),
+        quantityPerCarton: editing.quantityPerCarton,
+        orderByDate: formatDateInputValue(editing.orderByDate),
+        editingStatus: editing.editingStatus,
+        description: editing.description ?? "",
+        imageLink: editing.imageLink,
         defaultManufacturerId: editing.defaultManufacturerId,
         verified: editing.verified,
         categoryId: editing.categoryId ?? "none",
@@ -92,8 +108,17 @@ export function ProductUpsertDialog({
     : {
         name: "",
         sku: "",
+        upcGtin: "",
         cost: null,
         price: null,
+        mop: null,
+        map: null,
+        msrp: null,
+        quantityPerCarton: null,
+        orderByDate: "",
+        editingStatus: null,
+        description: "",
+        imageLink: "",
         defaultManufacturerId: firstMf,
         categoryId: "none",
         typeId: "none",
@@ -117,6 +142,7 @@ export function ProductUpsertDialog({
           productTypes={productTypes}
           productCollections={productCollections}
           defaultValues={defaultValues}
+          stockCount={editing?.stockCount ?? null}
           editingId={editing?.id}
           onCancel={() => onOpenChange(false)}
           onSubmit={async (values, meta) => {

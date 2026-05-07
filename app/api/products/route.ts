@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { productCreateSchema } from "@/lib/validations/master-data";
+import {
+  productCreateSchema,
+  productCreateToPrisma,
+} from "@/lib/validations/master-data";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { requireStoreContext } from "@/lib/store-context";
 import type { Prisma } from "@/app/generated/prisma/client";
@@ -24,6 +27,8 @@ export async function GET(request: Request) {
     where.OR = [
       { name: { contains: q, mode: "insensitive" } },
       { sku: { contains: q, mode: "insensitive" } },
+      { upcGtin: { contains: q, mode: "insensitive" } },
+      { description: { contains: q, mode: "insensitive" } },
       { defaultManufacturer: { name: { contains: q, mode: "insensitive" } } },
       { category: { name: { contains: q, mode: "insensitive" } } },
       { type: { name: { contains: q, mode: "insensitive" } } },
@@ -136,19 +141,8 @@ export async function POST(request: Request) {
 
     const row = await prisma.product.create({
       data: {
-        name: parsed.data.name,
-        sku: parsed.data.sku,
-        cost: parsed.data.cost ?? null,
-        price: parsed.data.price ?? null,
-        imageKey: parsed.data.imageKey ?? null,
-        barcodeKey: parsed.data.barcodeKey ?? null,
-        packagingKey: parsed.data.packagingKey ?? null,
+        ...productCreateToPrisma(parsed.data),
         storeId,
-        defaultManufacturerId: parsed.data.defaultManufacturerId,
-        categoryId: parsed.data.categoryId ?? null,
-        typeId: parsed.data.typeId ?? null,
-        collectionId: parsed.data.collectionId ?? null,
-        verified: parsed.data.verified ?? false,
         createdById: userId,
       },
       include: { defaultManufacturer: true, category: true, type: true, collection: true },

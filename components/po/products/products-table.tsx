@@ -14,8 +14,9 @@ import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import type { Product } from "@/lib/types/api";
 import { useConfirm } from "@/components/confirm-provider";
-import { Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, Trash2 } from "lucide-react";
 import { PriceView } from "@/components/ui/price-view";
+import { productEditingStatusLabels } from "@/lib/product-editing-status";
 
 type Props = {
   rows: Product[];
@@ -24,6 +25,25 @@ type Props = {
   onEdit: (row: Product) => void;
   onDelete: (row: Product) => void;
 };
+
+function emptyValue(value: string | number | null | undefined) {
+  return value == null || value === "" ? (
+    <span className="text-muted-foreground">None</span>
+  ) : (
+    value
+  );
+}
+
+function formatDate(value: string | null) {
+  if (!value) return <span className="text-muted-foreground">None</span>;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return <span className="text-muted-foreground">None</span>;
+  return date.toLocaleDateString();
+}
+
+function canOpenLink(value: string) {
+  return /^https?:\/\//i.test(value);
+}
 
 export function ProductsTable({
   rows,
@@ -41,8 +61,18 @@ export function ProductsTable({
           <TableHead className="w-14">Image</TableHead>
           <TableHead>Name</TableHead>
           <TableHead>SKU</TableHead>
+          <TableHead>UPC/GTIN</TableHead>
           <TableHead className="text-end">Cost</TableHead>
           <TableHead className="text-end">Price</TableHead>
+          <TableHead className="text-end">MAP</TableHead>
+          <TableHead className="text-end">MSRP</TableHead>
+          <TableHead className="text-end">MOP</TableHead>
+          <TableHead className="text-end">Carton Qty</TableHead>
+          <TableHead>Order By</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="text-end">Stock</TableHead>
+          <TableHead>Image Link</TableHead>
+          <TableHead>Description</TableHead>
           <TableHead className="w-14">Barcode</TableHead>
           <TableHead>Packaging</TableHead>
           <TableHead>Default Mfr.</TableHead>
@@ -56,13 +86,13 @@ export function ProductsTable({
       <TableBody>
         {isPending ? (
           <TableRow>
-            <TableCell colSpan={13} className="h-24 text-center text-muted-foreground">
+            <TableCell colSpan={23} className="h-24 text-center text-muted-foreground">
               Loading...
             </TableCell>
           </TableRow>
         ) : rows.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={13} className="h-24 text-center text-muted-foreground">
+            <TableCell colSpan={23} className="h-24 text-center text-muted-foreground">
               {emptyMessage}
             </TableCell>
           </TableRow>
@@ -78,11 +108,46 @@ export function ProductsTable({
               </TableCell>
               <TableCell className="font-medium">{row.name}</TableCell>
               <TableCell className="font-mono text-xs">{row.sku}</TableCell>
+              <TableCell className="font-mono text-xs">{emptyValue(row.upcGtin)}</TableCell>
               <TableCell className="text-end text-muted-foreground">
                 <PriceView value={row.cost} />
               </TableCell>
               <TableCell className="text-end text-muted-foreground">
                 <PriceView value={row.price} />
+              </TableCell>
+              <TableCell className="text-end text-muted-foreground">
+                <PriceView value={row.map} />
+              </TableCell>
+              <TableCell className="text-end text-muted-foreground">
+                <PriceView value={row.msrp} />
+              </TableCell>
+              <TableCell className="text-end">{emptyValue(row.mop)}</TableCell>
+              <TableCell className="text-end">{emptyValue(row.quantityPerCarton)}</TableCell>
+              <TableCell>{formatDate(row.orderByDate)}</TableCell>
+              <TableCell>{productEditingStatusLabels[row.editingStatus]}</TableCell>
+              <TableCell className="text-end">{emptyValue(row.stockCount)}</TableCell>
+              <TableCell className="max-w-44 truncate">
+                {row.imageLink ? (
+                  canOpenLink(row.imageLink) ? (
+                    <a
+                      href={row.imageLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex max-w-full items-center gap-1 truncate text-primary underline-offset-4 hover:underline"
+                      title={row.imageLink}
+                    >
+                      <span className="truncate">{row.imageLink}</span>
+                      <ExternalLink className="size-3 shrink-0" />
+                    </a>
+                  ) : (
+                    <span title={row.imageLink}>{row.imageLink}</span>
+                  )
+                ) : (
+                  <span className="text-muted-foreground">None</span>
+                )}
+              </TableCell>
+              <TableCell className="max-w-56 truncate" title={row.description ?? undefined}>
+                {emptyValue(row.description)}
               </TableCell>
               <TableCell>
                 <StorageObjectImage

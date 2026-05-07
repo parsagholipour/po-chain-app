@@ -126,8 +126,18 @@ export type Product = {
   id: string;
   name: string;
   sku: string;
+  upcGtin: string | null;
   cost: string | number | null;
   price: string | number | null;
+  mop: number | null;
+  map: string | number | null;
+  msrp: string | number | null;
+  quantityPerCarton: number | null;
+  orderByDate: string | null;
+  editingStatus: "standard" | "final_stock" | "one_print_only";
+  description: string | null;
+  imageLink: string;
+  stockCount: number | null;
   imageKey: string | null;
   barcodeKey: string | null;
   packagingKey: string | null;

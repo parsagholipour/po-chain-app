@@ -18,12 +18,14 @@ import {
   FieldError,
   FieldGroup,
   FieldLabel,
+  FieldLegend,
   FieldSet,
 } from "@/components/ui/field";
 import { ImageFileInput } from "@/components/ui/image-file-input";
 import { Input } from "@/components/ui/input";
 import { PriceField } from "@/components/ui/price-field";
 import { StorageObjectLink } from "@/components/ui/storage-object-link";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -38,6 +40,10 @@ import type {
   ProductCollection,
   ProductType,
 } from "@/lib/types/api";
+import {
+  productEditingStatusLabels,
+  productEditingStatusValues,
+} from "@/lib/product-editing-status";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -53,9 +59,25 @@ function noneToNull(value: unknown): unknown {
   return value;
 }
 
+function emptyToNull(value: unknown): unknown {
+  if (typeof value === "string" && value.trim() === "") return null;
+  return value;
+}
+
+function emptyToNumber(value: unknown): unknown {
+  if (value === "" || value === undefined) return null;
+  if (typeof value === "number" && Number.isNaN(value)) return null;
+  return value;
+}
+
+function optionalNumberLabel(value: number | null | undefined) {
+  return value == null ? "" : String(value);
+}
+
 const schema = z.object({
   name: z.string().min(1, "Required"),
   sku: z.string().min(1, "Required"),
+  upcGtin: z.preprocess(emptyToNull, z.string().nullable().optional()),
   cost: z.preprocess(
     emptyToMoney,
     z.number().nonnegative("Must be zero or greater").nullable().optional(),
@@ -64,6 +86,26 @@ const schema = z.object({
     emptyToMoney,
     z.number().nonnegative("Must be zero or greater").nullable().optional(),
   ),
+  mop: z.preprocess(
+    emptyToNumber,
+    z.number().int("Must be a whole number").positive("Must be greater than zero").nullable().optional(),
+  ),
+  map: z.preprocess(
+    emptyToMoney,
+    z.number().nonnegative("Must be zero or greater").nullable().optional(),
+  ),
+  msrp: z.preprocess(
+    emptyToMoney,
+    z.number().nonnegative("Must be zero or greater").nullable().optional(),
+  ),
+  quantityPerCarton: z.preprocess(
+    emptyToNumber,
+    z.number().int("Must be a whole number").positive("Must be greater than zero").nullable().optional(),
+  ),
+  orderByDate: z.preprocess(emptyToNull, z.string().nullable().optional()),
+  editingStatus: z.enum(productEditingStatusValues).nullable().optional(),
+  description: z.preprocess(emptyToNull, z.string().nullable().optional()),
+  imageLink: z.string(),
   defaultManufacturerId: z.string().uuid(),
   categoryId: z.preprocess(noneToNull, z.string().uuid().nullable().optional()),
   typeId: z.preprocess(noneToNull, z.string().uuid().nullable().optional()),
@@ -82,6 +124,7 @@ type Props = {
   productTypes: ProductType[];
   productCollections: ProductCollection[];
   defaultValues: ProductFormValues;
+  stockCount?: number | null;
   editingId?: string | null;
   onSubmit: (
     values: ProductFormValues,
@@ -100,6 +143,7 @@ export function ProductForm({
   productTypes,
   productCollections,
   defaultValues,
+  stockCount,
   editingId,
   onSubmit,
   onCancel,
@@ -113,13 +157,18 @@ export function ProductForm({
   const [removeStoredBarcode, setRemoveStoredBarcode] = useState(false);
   const [packagingFile, setPackagingFile] = useState<File | null>(null);
   const [removeStoredPackaging, setRemoveStoredPackaging] = useState(false);
+  const normalizedDefaultValues: ProductFormValues = {
+    ...defaultValues,
+    editingStatus: defaultValues.editingStatus ?? null,
+  };
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(schema) as Resolver<ProductFormValues>,
-    defaultValues,
+    defaultValues: normalizedDefaultValues,
   });
   const { isSubmitting } = useFormState({ control: form.control });
   const watchedValues = useWatch({ control: form.control });
+  const nativeValues = { ...(watchedValues as Record<string, unknown>), stockCount };
 
   const storedImageKey =
     removeStoredImage || imageFile ? null : (defaultValues.imageKey ?? null);
@@ -349,54 +398,6 @@ export function ProductForm({
               <FieldError errors={[form.formState.errors.typeId]} />
             </FieldContent>
           </Field>
-          <Field data-invalid={!!form.formState.errors.collectionId} className="gap-1.5">
-            <FieldLabel>Collection</FieldLabel>
-            <FieldContent>
-              <Controller
-                control={form.control}
-                name="collectionId"
-                render={({ field }) => (
-                  <Select
-                    value={field.value ?? undefined}
-                    onValueChange={field.onChange}
-                    items={[
-                      { value: "none", label: "No collection" },
-                      ...productCollections.map((collection) => ({
-                        value: collection.id,
-                        label: collection.name,
-                      })),
-                    ]}
-                  >
-                    <SelectTrigger className="w-full min-w-0">
-                      <SelectValue placeholder="Collection (optional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No collection</SelectItem>
-                      {productCollections.map((collection) => (
-                        <SelectItem key={collection.id} value={collection.id}>
-                          {collection.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              <FieldError errors={[form.formState.errors.collectionId]} />
-            </FieldContent>
-          </Field>
-          <Field orientation="horizontal" className="gap-2 md:self-end md:pb-1">
-            <Controller
-              control={form.control}
-              name="verified"
-              render={({ field }) => (
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={(v) => field.onChange(v === true)}
-                  label={<span className="font-normal">Verified</span>}
-                />
-              )}
-            />
-          </Field>
           <Field className="gap-1.5">
             <ImageFileInput
               id="pf-image"
@@ -520,12 +521,203 @@ export function ProductForm({
               </div>
             </FieldContent>
           </Field>
+          <Field orientation="horizontal" className="gap-2 md:self-end md:pb-1">
+            <Controller
+              control={form.control}
+              name="verified"
+              render={({ field }) => (
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={(v) => field.onChange(v === true)}
+                  label={<span className="font-normal">Verified</span>}
+                />
+              )}
+            />
+          </Field>
+          <FieldSet className="gap-4 border-t pt-4 md:col-span-2">
+            <FieldLegend>Distribution Info</FieldLegend>
+            <FieldGroup className="grid gap-4 md:grid-cols-2">
+              <Field data-invalid={!!form.formState.errors.upcGtin} className="gap-1.5">
+                <FieldLabel htmlFor="pf-upc-gtin">UPC/GTIN</FieldLabel>
+                <FieldContent>
+                  <Input id="pf-upc-gtin" placeholder="Optional" {...form.register("upcGtin")} />
+                  <FieldError errors={[form.formState.errors.upcGtin]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.map} className="gap-1.5">
+                <FieldLabel htmlFor="pf-map">MAP</FieldLabel>
+                <FieldContent>
+                  <PriceField
+                    id="pf-map"
+                    placeholder="Optional"
+                    {...form.register("map", { valueAsNumber: true })}
+                  />
+                  <FieldError errors={[form.formState.errors.map]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.msrp} className="gap-1.5">
+                <FieldLabel htmlFor="pf-msrp">MSRP</FieldLabel>
+                <FieldContent>
+                  <PriceField
+                    id="pf-msrp"
+                    placeholder="Optional"
+                    {...form.register("msrp", { valueAsNumber: true })}
+                  />
+                  <FieldError errors={[form.formState.errors.msrp]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.mop} className="gap-1.5">
+                <FieldLabel htmlFor="pf-mop">MOP</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="pf-mop"
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    placeholder="Optional"
+                    {...form.register("mop", { valueAsNumber: true })}
+                  />
+                  <FieldError errors={[form.formState.errors.mop]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.quantityPerCarton} className="gap-1.5">
+                <FieldLabel htmlFor="pf-quantity-per-carton">Quantity per carton</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="pf-quantity-per-carton"
+                    type="number"
+                    min={1}
+                    step={1}
+                    inputMode="numeric"
+                    placeholder="Optional"
+                    {...form.register("quantityPerCarton", { valueAsNumber: true })}
+                  />
+                  <FieldError errors={[form.formState.errors.quantityPerCarton]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.orderByDate} className="gap-1.5">
+                <FieldLabel htmlFor="pf-order-by-date">Order By Date</FieldLabel>
+                <FieldContent>
+                  <Input id="pf-order-by-date" type="date" {...form.register("orderByDate")} />
+                  <FieldError errors={[form.formState.errors.orderByDate]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.editingStatus} className="gap-1.5">
+                <FieldLabel>Editing Status</FieldLabel>
+                <FieldContent>
+                  <Controller
+                    control={form.control}
+                    name="editingStatus"
+                    render={({ field }) => (
+                      <Select
+                        value={field.value ?? "none"}
+                        onValueChange={(value) => field.onChange(value === "none" ? null : value)}
+                        items={
+                          [
+                            { value: "none", label: "Not set" },
+                            ...productEditingStatusValues.map((value) => ({
+                              value,
+                              label: productEditingStatusLabels[value],
+                            })),
+                          ] as Array<{ value: string; label: string }>
+                        }
+                      >
+                        <SelectTrigger className="w-full min-w-0">
+                          <SelectValue placeholder="Status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Not set</SelectItem>
+                          {productEditingStatusValues.map((value) => (
+                            <SelectItem key={value} value={value}>
+                              {productEditingStatusLabels[value]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <FieldError errors={[form.formState.errors.editingStatus]} />
+                </FieldContent>
+              </Field>
+              <Field className="gap-1.5">
+                <FieldLabel htmlFor="pf-stock-count">Stock count</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="pf-stock-count"
+                    value={optionalNumberLabel(stockCount)}
+                    placeholder="Not set"
+                    disabled
+                    readOnly
+                  />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.imageLink} className="gap-1.5 md:col-span-2">
+                <FieldLabel htmlFor="pf-image-link">Image Link</FieldLabel>
+                <FieldContent>
+                  <Input
+                    id="pf-image-link"
+                    placeholder="https://..."
+                    {...form.register("imageLink")}
+                  />
+                  <FieldError errors={[form.formState.errors.imageLink]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.description} className="gap-1.5 md:col-span-2">
+                <FieldLabel htmlFor="pf-description">Description</FieldLabel>
+                <FieldContent>
+                  <Textarea
+                    id="pf-description"
+                    placeholder="Optional"
+                    rows={4}
+                    {...form.register("description")}
+                  />
+                  <FieldError errors={[form.formState.errors.description]} />
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+          </FieldSet>
+          <Field data-invalid={!!form.formState.errors.collectionId} className="gap-1.5">
+            <FieldLabel>Collection</FieldLabel>
+            <FieldContent>
+              <Controller
+                control={form.control}
+                name="collectionId"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? undefined}
+                    onValueChange={field.onChange}
+                    items={[
+                      { value: "none", label: "No collection" },
+                      ...productCollections.map((collection) => ({
+                        value: collection.id,
+                        label: collection.name,
+                      })),
+                    ]}
+                  >
+                    <SelectTrigger className="w-full min-w-0">
+                      <SelectValue placeholder="Collection (optional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No collection</SelectItem>
+                      {productCollections.map((collection) => (
+                        <SelectItem key={collection.id} value={collection.id}>
+                          {collection.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <FieldError errors={[form.formState.errors.collectionId]} />
+            </FieldContent>
+          </Field>
           <CustomFieldsRenderer
             ref={customFieldsRef}
             entityType="product"
             entityId={editingId}
             disabled={isSubmitting}
-            nativeValues={watchedValues as Record<string, unknown>}
+            nativeValues={nativeValues}
           />
         </FieldGroup>
       </FieldSet>

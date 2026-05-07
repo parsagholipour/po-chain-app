@@ -17,6 +17,7 @@ import type {
 } from "@/lib/types/api";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
+import { productFormValuesToApiBody } from "@/components/po/products/product-payload";
 import { AddPoLineDialog } from "@/components/po/purchase-order/add-po-line-dialog";
 import { PoDetailHeader } from "@/components/po/purchase-order/po-detail-header";
 import { PoLinesSection } from "@/components/po/purchase-order/po-lines-section";
@@ -236,21 +237,11 @@ export function StockOrderDetailView({ stockOrderId }: { stockOrderId: string })
     patchPackagingKey: boolean;
   }): Promise<string> {
     if (!payload.id) return "";
-    const body: Record<string, unknown> = {
-      name: payload.values.name,
-      sku: payload.values.sku,
-      defaultManufacturerId: payload.values.defaultManufacturerId,
-      verified: payload.values.verified,
-    };
-    if (payload.patchImageKey) {
-      body.imageKey = payload.values.imageKey;
-    }
-    if (payload.patchBarcodeKey) {
-      body.barcodeKey = payload.values.barcodeKey;
-    }
-    if (payload.patchPackagingKey) {
-      body.packagingKey = payload.values.packagingKey;
-    }
+    const body = productFormValuesToApiBody(payload.values, {
+      includeImageKey: payload.patchImageKey,
+      includeBarcodeKey: payload.patchBarcodeKey,
+      includePackagingKey: payload.patchPackagingKey,
+    });
     await updateProduct.mutateAsync({ id: payload.id, body });
     return payload.id;
   }

@@ -115,6 +115,12 @@ enum PurchaseOrderOsdResolution {
   sent
 }
 
+enum ProductEditingStatus {
+  standard
+  final_stock
+  one_print_only
+}
+
 model Store {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
@@ -274,29 +280,39 @@ model SaleChannel {
 }
 
 model Product {
-  id                    String             @id @default(uuid()) @db.Uuid
+  id                    String               @id @default(uuid()) @db.Uuid
   name                  String
   sku                   String
-  cost                  Decimal?           @db.Decimal(12, 2)
-  price                 Decimal?           @db.Decimal(12, 2)
+  upcGtin               String?
+  cost                  Decimal?             @db.Decimal(12, 2)
+  price                 Decimal?             @db.Decimal(12, 2)
+  mop                   Int?
+  map                   Decimal?             @db.Decimal(12, 2)
+  msrp                  Decimal?             @db.Decimal(12, 2)
+  quantityPerCarton     Int?
+  orderByDate           DateTime?
+  editingStatus         ProductEditingStatus @default(standard)
+  description           String?
+  imageLink             String               @default("")
+  stockCount            Int?
   imageKey              String?
   barcodeKey            String?
   packagingKey          String?
-  defaultManufacturerId String             @db.Uuid
-  defaultManufacturer   Manufacturer       @relation("ProductDefaultManufacturer", fields: [defaultManufacturerId], references: [id], onDelete: Restrict)
-  categoryId            String?            @db.Uuid
-  category              ProductCategory?   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  typeId                String?            @db.Uuid
-  type                  ProductType?       @relation(fields: [typeId], references: [id], onDelete: Restrict)
-  collectionId          String?            @db.Uuid
-  collection            ProductCollection? @relation(fields: [collectionId], references: [id], onDelete: Restrict)
-  verified              Boolean            @default(false)
-  storeId               String             @db.Uuid
-  store                 Store              @relation(fields: [storeId], references: [id], onDelete: Restrict)
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
-  createdById           String             @db.Uuid
-  createdBy             User               @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  defaultManufacturerId String               @db.Uuid
+  defaultManufacturer   Manufacturer         @relation("ProductDefaultManufacturer", fields: [defaultManufacturerId], references: [id], onDelete: Restrict)
+  categoryId            String?              @db.Uuid
+  category              ProductCategory?     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  typeId                String?              @db.Uuid
+  type                  ProductType?         @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  collectionId          String?              @db.Uuid
+  collection            ProductCollection?   @relation(fields: [collectionId], references: [id], onDelete: Restrict)
+  verified              Boolean              @default(false)
+  storeId               String               @db.Uuid
+  store                 Store                @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  createdById           String               @db.Uuid
+  createdBy             User                 @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   purchaseOrderLines PurchaseOrderLine[]
 
@@ -306,6 +322,9 @@ model Product {
   @@index([storeId, categoryId])
   @@index([storeId, typeId])
   @@index([storeId, collectionId])
+  @@index([storeId, upcGtin])
+  @@index([storeId, editingStatus])
+  @@index([storeId, orderByDate])
   @@index([storeId, createdAt])
   @@index([storeId, verified])
   @@index([storeId], where: raw("\"cost\" IS NULL OR \"price\" IS NULL"), name: "Product_storeId_missing_pricing_idx")
