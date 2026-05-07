@@ -1,13 +1,9 @@
-import { auth } from "@/lib/auth";
 import { AppChromeClient } from "@/components/app-chrome-client";
 import { normalizeStoreTheme } from "@/lib/store-theme";
-import { getStoreContextForUserId } from "@/lib/store-context";
+import { getSessionStoreContextBundle } from "@/lib/store-context";
 
 export async function AppChrome({ children }: { children: React.ReactNode }) {
-  const session = await auth();
-  const storeContext = session?.user?.id
-    ? await getStoreContextForUserId(session.user.id)
-    : null;
+  const { session, storeContext } = await getSessionStoreContextBundle();
   const activeStore = storeContext?.activeStore ?? null;
   const shellTheme = normalizeStoreTheme(activeStore?.theme ?? null);
 

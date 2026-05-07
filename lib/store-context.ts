@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+import type { Session } from "next-auth";
 import { cookies } from "next/headers";
 import type { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
@@ -33,20 +35,34 @@ export async function getStoreContextForUserId(
   };
 }
 
-export async function getStoreContext(): Promise<StoreContext | null> {
-  const session = await auth();
-  const userId = session?.user?.id ?? null;
-  if (!userId) return null;
+export type SessionStoreContextBundle = {
+  session: Session | null;
+  storeContext: StoreContext | null;
+};
 
-  return getStoreContextForUserId(userId);
+/** One auth + store resolution per React request tree (RSC, metadata, route handlers in same request). */
+export const getSessionStoreContextBundle = cache(
+  async (): Promise<SessionStoreContextBundle> => {
+    const session = await auth();
+    const userId = session?.user?.id ?? null;
+    if (!userId) {
+      return { session, storeContext: null };
+    }
+    const storeContext = await getStoreContextForUserId(userId);
+    return { session, storeContext };
+  },
+);
+
+export async function getStoreContext(): Promise<StoreContext | null> {
+  const { storeContext } = await getSessionStoreContextBundle();
+  return storeContext;
 }
 
 export async function requireStoreContext(): Promise<
   { ok: true; context: StoreContext } | { ok: false; response: NextResponse }
 > {
-  const context = await getStoreContext();
-  if (!context) {
-    const session = await auth();
+  const { session, storeContext } = await getSessionStoreContextBundle();
+  if (!storeContext) {
     if (!session?.user) {
       return { ok: false, response: jsonError("Unauthorized", 401) };
     }
@@ -56,5 +72,5 @@ export async function requireStoreContext(): Promise<
     };
   }
 
-  return { ok: true, context };
+  return { ok: true, context: storeContext };
 }
