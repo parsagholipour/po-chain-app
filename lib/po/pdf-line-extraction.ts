@@ -32,10 +32,11 @@ type LabeledSkuValue = {
 };
 
 const SKU_LABEL_PATTERN =
-  /\b(Supplier\s*SKU|(?:(?!(?:SKU|SUPPLIER)\b)[A-Za-z0-9][A-Za-z0-9&'./()#-]*\s+){1,6}SKU)\b(?=[\s:#=]|$)/i;
+  /\b(Supplier\s*SKU|(?:(?!(?:SKU|SUPPLIER|AMOUNT|TAX|NET|PRICE|ORDERED|QTY|QUANTITY|DESCRIPTION|RECEIPT|DATE|COMMENT)\b)[A-Za-z0-9][A-Za-z0-9&'./()#-]*\s+){1,6}SKU)\b(?=[\s:#=]|$)/i;
 const SKU_LABEL_MATCH_PATTERN =
-  /\b(Supplier\s*SKU|(?:(?!(?:SKU|SUPPLIER)\b)[A-Za-z0-9][A-Za-z0-9&'./()#-]*\s+){1,6}SKU)\b(?=[\s:#=]|$)/gi;
+  /\b(Supplier\s*SKU|(?:(?!(?:SKU|SUPPLIER|AMOUNT|TAX|NET|PRICE|ORDERED|QTY|QUANTITY|DESCRIPTION|RECEIPT|DATE|COMMENT)\b)[A-Za-z0-9][A-Za-z0-9&'./()#-]*\s+){1,6}SKU)\b(?=[\s:#=]|$)/gi;
 const SKU_VALUE_PATTERN = /[A-Za-z0-9][A-Za-z0-9._/#-]*/g;
+const SKU_TABLE_VALUE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/#-]*$/;
 const SUPPLIER_SKU_PAIRING_LINE_WINDOW = 8;
 const IGNORED_SKU_VALUE_TOKENS = new Set([
   "SKU",
@@ -154,7 +155,99 @@ function findLabeledSkuValues(text: string) {
   return values;
 }
 
-function buildSupplierSkuOverrides(text: string) {
+function isLikelySkuTableValue(value: string) {
+  const normalized = value.trim().replace(/[,.]+$/, "");
+  if (!SKU_TABLE_VALUE_PATTERN.test(normalized)) return false;
+  if (IGNORED_SKU_VALUE_TOKENS.has(normalized.toUpperCase())) return false;
+  if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(normalized)) return false;
+  if (/^\$?\d+(?:,\d{3})*(?:\.\d+)?$/.test(normalized)) return false;
+  return true;
+}
+
+function hasNumericTableValue(tokens: string[]) {
+  return tokens.some((token) => /^\$?\d+(?:,\d{3})*(?:\.\d+)?$/.test(token));
+}
+
+function hasSupplierSkuTableHeader(line: string) {
+  const labelKinds = Array.from(line.matchAll(SKU_LABEL_MATCH_PATTERN)).map((match) =>
+    readSkuLabelKind(match[1] ?? ""),
+  );
+
+  return labelKinds.includes("supplier") && labelKinds.includes("alternate");
+}
+
+function readSupplierSkuTableRow(line: string) {
+  const tokens = line.trim().split(/\s+/).filter(Boolean);
+  if (tokens.length < 4 || !hasNumericTableValue(tokens)) return null;
+
+  const supplierSku = tokens[0];
+  const alternateSku = tokens[tokens.length - 1];
+  const quantity = tokens
+    .slice(1, -1)
+    .map((token) => token.replace(/,/g, ""))
+    .find((token) => /^\d+$/.test(token));
+
+  if (!quantity) return null;
+  if (!isLikelySkuTableValue(alternateSku) || !isLikelySkuTableValue(supplierSku)) {
+    return null;
+  }
+  if (normalizeSkuKey(alternateSku) === normalizeSkuKey(supplierSku)) return null;
+
+  return { alternateSku, supplierSku, quantity: Number(quantity) };
+}
+
+function readSupplierSkuTableRows(text: string) {
+  const lines = text.split(/\r?\n/);
+  const rows: Array<{
+    alternateSku: string;
+    supplierSku: string;
+    quantity: number;
+  }> = [];
+  let isInSupplierSkuTable = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    if (hasSupplierSkuTableHeader(trimmed)) {
+      isInSupplierSkuTable = true;
+      continue;
+    }
+
+    if (!isInSupplierSkuTable) continue;
+
+    if (/^(?:Purchase Order Total|Page \d+ of \d+|-- )/i.test(trimmed)) {
+      isInSupplierSkuTable = false;
+      continue;
+    }
+
+    const row = readSupplierSkuTableRow(trimmed);
+    if (row) {
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
+function buildSupplierSkuTableOverrides(text: string) {
+  const overrides = new Map<string, string>();
+
+  for (const row of readSupplierSkuTableRows(text)) {
+    overrides.set(normalizeSkuKey(row.alternateSku), row.supplierSku);
+  }
+
+  return overrides;
+}
+
+function extractSupplierSkuTableLines(text: string): ExtractedPurchaseOrderLine[] {
+  return readSupplierSkuTableRows(text).map((row) => ({
+    sku: row.supplierSku,
+    quantity: row.quantity,
+  }));
+}
+
+function buildSupplierSkuLabelOverrides(text: string) {
   const labeledValues = findLabeledSkuValues(text);
   const alternateSkuValues = labeledValues.filter((entry) => entry.kind === "alternate");
   const supplierSkuValues = labeledValues.filter((entry) => entry.kind === "supplier");
@@ -189,6 +282,13 @@ function buildSupplierSkuOverrides(text: string) {
   }
 
   return overrides;
+}
+
+function buildSupplierSkuOverrides(text: string) {
+  return new Map([
+    ...buildSupplierSkuLabelOverrides(text),
+    ...buildSupplierSkuTableOverrides(text),
+  ]);
 }
 
 function preferSupplierSkus(
@@ -241,6 +341,11 @@ export async function extractPurchaseOrderLinesFromPdfText(
   const compactText = compactPdfText(pdfText);
   if (compactText.length === 0) {
     return [];
+  }
+
+  const supplierSkuTableLines = extractSupplierSkuTableLines(compactText);
+  if (supplierSkuTableLines.length > 0) {
+    return mergeDuplicateSkus(supplierSkuTableLines);
   }
 
   const response = await createDeepSeekChatCompletion({

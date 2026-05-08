@@ -38,6 +38,32 @@ function skuCountLabel(count: number) {
   return `${count} ${count === 1 ? "SKU" : "SKUs"}`;
 }
 
+function normalizeSkuForLog(sku: string) {
+  return sku.trim().toUpperCase();
+}
+
+function logDetectedPdfImportTable(data: PurchaseOrderPdfLineImportResponse) {
+  const matchedBySku = new Map(
+    data.lines.map((line) => [normalizeSkuForLog(line.sku), line]),
+  );
+  const unmatchedSkus = new Set(data.unmatched.map((line) => normalizeSkuForLog(line.sku)));
+
+  console.info("[po-pdf-import] Final detected table");
+  console.table(
+    data.extracted.map((line, index) => {
+      const matchedLine = matchedBySku.get(normalizeSkuForLog(line.sku));
+      return {
+        row: index + 1,
+        sku: line.sku,
+        quantity: line.quantity,
+        status: matchedLine ? "matched" : unmatchedSkus.has(normalizeSkuForLog(line.sku)) ? "unmatched" : "detected",
+        productName: matchedLine?.productName ?? "",
+        productId: matchedLine?.productId ?? "",
+      };
+    }),
+  );
+}
+
 export function NewPurchaseOrderWizard() {
   const qc = useQueryClient();
   const router = useRouter();
@@ -149,6 +175,7 @@ export function NewPurchaseOrderWizard() {
       )
       .then(({ data }) => {
         if (cancelled) return;
+        logDetectedPdfImportTable(data);
 
         if (data.lines.length === 0) {
           const message =
