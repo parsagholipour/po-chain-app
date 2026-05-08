@@ -22,6 +22,33 @@ const extractionSchema = z.object({
 
 export type ExtractedPurchaseOrderLine = z.infer<typeof extractedLineSchema>;
 
+type SkuLabelKind = "alternate" | "supplier";
+
+type LabeledSkuValue = {
+  kind: SkuLabelKind;
+  value: string;
+  lineIndex: number;
+  columnIndex: number;
+};
+
+const SKU_LABEL_PATTERN =
+  /\b(Supplier\s*SKU|(?:(?!(?:SKU|SUPPLIER)\b)[A-Za-z0-9][A-Za-z0-9&'./()#-]*\s+){1,6}SKU)\b(?=[\s:#=]|$)/i;
+const SKU_LABEL_MATCH_PATTERN =
+  /\b(Supplier\s*SKU|(?:(?!(?:SKU|SUPPLIER)\b)[A-Za-z0-9][A-Za-z0-9&'./()#-]*\s+){1,6}SKU)\b(?=[\s:#=]|$)/gi;
+const SKU_VALUE_PATTERN = /[A-Za-z0-9][A-Za-z0-9._/#-]*/g;
+const SUPPLIER_SKU_PAIRING_LINE_WINDOW = 8;
+const IGNORED_SKU_VALUE_TOKENS = new Set([
+  "SKU",
+  "SUPPLIER",
+  "X",
+  "QTY",
+  "QUANTITY",
+  "UNIT",
+  "PRICE",
+  "TOTAL",
+  "DESCRIPTION",
+]);
+
 function readPositiveIntEnv(name: string, fallback: number) {
   const raw = process.env[name];
   if (!raw) return fallback;
@@ -61,12 +88,142 @@ function coerceExtractionPayload(payload: unknown) {
   return Array.isArray(payload) ? { items: payload } : payload;
 }
 
+function normalizeSkuKey(sku: string) {
+  return sku.trim().toUpperCase();
+}
+
+function readSkuLabelKind(label: string): SkuLabelKind {
+  return /^SUPPLIER\s*SKU$/i.test(label.trim()) ? "supplier" : "alternate";
+}
+
+function extractSkuCandidate(valueText: string) {
+  const cleaned = valueText.trim().replace(/^[:#=,\-]+/, "").trim();
+
+  for (const match of cleaned.matchAll(SKU_VALUE_PATTERN)) {
+    const value = match[0].trim();
+    if (!value) continue;
+    if (IGNORED_SKU_VALUE_TOKENS.has(value.toUpperCase())) continue;
+    return value;
+  }
+
+  return null;
+}
+
+function extractNextLineSkuCandidate(lines: string[], lineIndex: number) {
+  for (let offset = 1; offset <= 2; offset += 1) {
+    const line = lines[lineIndex + offset]?.trim();
+    if (!line) continue;
+    if (SKU_LABEL_PATTERN.test(line)) return null;
+    return extractSkuCandidate(line);
+  }
+
+  return null;
+}
+
+function findLabeledSkuValues(text: string) {
+  const lines = text.split(/\r?\n/);
+  const values: LabeledSkuValue[] = [];
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const matches = Array.from(line.matchAll(SKU_LABEL_MATCH_PATTERN));
+    if (matches.length === 0) continue;
+
+    for (let matchIndex = 0; matchIndex < matches.length; matchIndex += 1) {
+      const match = matches[matchIndex];
+      const columnIndex = match.index ?? 0;
+      const label = match[1] ?? "";
+      const valueStart = columnIndex + match[0].length;
+      const valueEnd = matches[matchIndex + 1]?.index ?? line.length;
+      const inlineValue = extractSkuCandidate(line.slice(valueStart, valueEnd));
+      const fallbackValue =
+        matches.length === 1 ? extractNextLineSkuCandidate(lines, lineIndex) : null;
+      const value = inlineValue ?? fallbackValue;
+
+      if (!value) continue;
+
+      values.push({
+        kind: readSkuLabelKind(label),
+        value,
+        lineIndex,
+        columnIndex,
+      });
+    }
+  }
+
+  return values;
+}
+
+function buildSupplierSkuOverrides(text: string) {
+  const labeledValues = findLabeledSkuValues(text);
+  const alternateSkuValues = labeledValues.filter((entry) => entry.kind === "alternate");
+  const supplierSkuValues = labeledValues.filter((entry) => entry.kind === "supplier");
+  const overrides = new Map<string, string>();
+
+  for (const alternateSku of alternateSkuValues) {
+    const alternateKey = normalizeSkuKey(alternateSku.value);
+    const nearestSupplier = supplierSkuValues
+      .filter((supplierSku) => {
+        const lineDistance = Math.abs(supplierSku.lineIndex - alternateSku.lineIndex);
+        return (
+          lineDistance <= SUPPLIER_SKU_PAIRING_LINE_WINDOW &&
+          normalizeSkuKey(supplierSku.value) !== alternateKey
+        );
+      })
+      .sort((left, right) => {
+        const leftLineDistance = Math.abs(left.lineIndex - alternateSku.lineIndex);
+        const rightLineDistance = Math.abs(right.lineIndex - alternateSku.lineIndex);
+        if (leftLineDistance !== rightLineDistance) {
+          return leftLineDistance - rightLineDistance;
+        }
+
+        return (
+          Math.abs(left.columnIndex - alternateSku.columnIndex) -
+          Math.abs(right.columnIndex - alternateSku.columnIndex)
+        );
+      })[0];
+
+    if (nearestSupplier) {
+      overrides.set(alternateKey, nearestSupplier.value);
+    }
+  }
+
+  return overrides;
+}
+
+function preferSupplierSkus(
+  items: ExtractedPurchaseOrderLine[],
+  text: string,
+): ExtractedPurchaseOrderLine[] {
+  const supplierOverrides = buildSupplierSkuOverrides(text);
+  if (supplierOverrides.size === 0) return items;
+
+  const originalSkuKeys = new Set(items.map((item) => normalizeSkuKey(item.sku)));
+  const preferredItems: ExtractedPurchaseOrderLine[] = [];
+
+  for (const item of items) {
+    const supplierSku = supplierOverrides.get(normalizeSkuKey(item.sku));
+    if (!supplierSku) {
+      preferredItems.push(item);
+      continue;
+    }
+
+    if (originalSkuKeys.has(normalizeSkuKey(supplierSku))) {
+      continue;
+    }
+
+    preferredItems.push({ ...item, sku: supplierSku });
+  }
+
+  return preferredItems;
+}
+
 function mergeDuplicateSkus(items: ExtractedPurchaseOrderLine[]) {
   const bySku = new Map<string, ExtractedPurchaseOrderLine>();
 
   for (const item of items) {
     const sku = item.sku.trim();
-    const key = sku.toUpperCase();
+    const key = normalizeSkuKey(sku);
     const existing = bySku.get(key);
     if (existing) {
       existing.quantity += item.quantity;
@@ -95,6 +252,9 @@ export async function extractPurchaseOrderLinesFromPdfText(
           "Extract purchase order line items from PDF text.",
           "Return only valid JSON in this exact shape: {\"items\":[{\"sku\":\"...\",\"quantity\":1}]}",
           "Use the item SKU exactly as printed, usually the token before '--' in a line item.",
+          "If both Supplier SKU and another SKU label are shown for the same product, use Supplier SKU and ignore the other SKU.",
+          "If a table has separate Supplier SKU and other SKU rows or columns, choose the value under Supplier SKU.",
+          "When Supplier SKU and another SKU label appear on nearby rows for one product, return only the Supplier SKU row.",
           "Use the ordered quantity from the QTY column only; do not use unit price, extended price, totals, page numbers, order numbers, dates, or invoice numbers.",
           "If a product spans multiple text lines, still return the SKU and quantity.",
           "If the same SKU appears multiple times, include it once with the summed quantity.",
@@ -110,5 +270,5 @@ export async function extractPurchaseOrderLinesFromPdfText(
 
   const payload = coerceExtractionPayload(parseJsonFromAssistant(response.content ?? ""));
   const parsed = extractionSchema.parse(payload);
-  return mergeDuplicateSkus(parsed.items);
+  return mergeDuplicateSkus(preferSupplierSkus(parsed.items, compactText));
 }
