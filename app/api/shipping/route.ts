@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
+import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireStoreContext } from "@/lib/store-context";
+import {
+  distributorWriteForbidden,
+  isDistributorContext,
+  requireStoreContext,
+} from "@/lib/store-context";
 import {
   shippingCreateSchema,
   shippingCreateToPrisma,
@@ -152,21 +157,33 @@ async function validateShippingWrite(
 }
 
 export async function GET(request: Request) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
+  const isDistributor = isDistributorContext(authz.context);
+  const distributorSaleChannelId = authz.context.saleChannelId;
+  if (isDistributor && !distributorSaleChannelId) {
+    return jsonError("Distributor account is not linked to a sale channel", 403);
+  }
 
   const { searchParams } = new URL(request.url);
   const typeRaw = searchParams.get("type");
   const q = searchParams.get("q")?.trim() ?? "";
 
-  const where: {
-    storeId: string;
-    type?: ShippingType;
-    OR?: Array<Record<string, unknown>>;
-  } = { storeId };
+  const where: Prisma.ShippingWhereInput = { storeId };
 
-  if (typeRaw) {
+  if (isDistributor) {
+    where.type = "purchase_order";
+    where.purchaseOrderShippings = {
+      some: {
+        purchaseOrder: {
+          storeId,
+          type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+          saleChannelId: distributorSaleChannelId,
+        },
+      },
+    };
+  } else if (typeRaw) {
     const parsedType = shippingTypeSchema.safeParse(typeRaw);
     if (!parsedType.success) return jsonFromZod(parsedType.error);
     where.type = parsedType.data;
@@ -188,8 +205,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
+  if (isDistributorContext(authz.context)) return distributorWriteForbidden();
   const { userId, storeId } = authz.context;
 
   let body: unknown;

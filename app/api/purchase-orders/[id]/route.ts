@@ -10,19 +10,69 @@ import { createOrderStatusLog } from "@/lib/order-status-log";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
-import { requireStoreContext } from "@/lib/store-context";
+import {
+  distributorWriteForbidden,
+  isDistributorContext,
+  requireStoreContext,
+} from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
 const paramsSchema = z.object({ id: z.uuid() });
 
+type DistributorSanitizablePurchaseOrderDetail = {
+  lines: Array<
+    Record<string, unknown> & {
+      allocations?: unknown[];
+      warehouseAllocations?: unknown[];
+      unitCost?: unknown;
+    }
+  >;
+  osds: Array<
+    Record<string, unknown> & {
+      manufacturingOrderId?: unknown;
+      manufacturingOrder?: unknown;
+    }
+  >;
+  statusLogs: unknown[];
+  manufacturingOrderPurchaseOrders: unknown[];
+  warehouseOrderPurchaseOrders: unknown[];
+};
+
+function distributorPurchaseOrderDetail<T extends DistributorSanitizablePurchaseOrderDetail>(
+  row: T,
+): T {
+  return {
+    ...row,
+    lines: row.lines.map((line) => ({
+      ...line,
+      unitCost: null,
+      allocations: [],
+      warehouseAllocations: [],
+    })),
+    osds: row.osds.map((osd) => ({
+      ...osd,
+      manufacturingOrderId: null,
+      manufacturingOrder: null,
+    })),
+    statusLogs: [],
+    manufacturingOrderPurchaseOrders: [],
+    warehouseOrderPurchaseOrders: [],
+  } as T;
+}
+
 export async function GET(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
+  const isDistributor = isDistributorContext(authz.context);
+  const distributorSaleChannelId = authz.context.saleChannelId;
+  if (isDistributor && !distributorSaleChannelId) {
+    return jsonError("Distributor account is not linked to a sale channel", 403);
+  }
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -33,19 +83,22 @@ export async function GET(
       id: pid.data.id,
       storeId,
       type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+      ...(isDistributor ? { saleChannelId: distributorSaleChannelId } : {}),
     },
     include: purchaseOrderDetailInclude,
   });
   if (!row) return jsonError("Not found", 404);
-  return NextResponse.json(purchaseOrderDetailFromPrisma(row));
+  const payload = purchaseOrderDetailFromPrisma(row);
+  return NextResponse.json(isDistributor ? distributorPurchaseOrderDetail(payload) : payload);
 }
 
 export async function PATCH(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
+  if (isDistributorContext(authz.context)) return distributorWriteForbidden();
   const { storeId, userId } = authz.context;
 
   const { id } = await ctx.params;
@@ -163,8 +216,9 @@ export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
+  if (isDistributorContext(authz.context)) return distributorWriteForbidden();
   const { storeId } = authz.context;
 
   const { id } = await ctx.params;

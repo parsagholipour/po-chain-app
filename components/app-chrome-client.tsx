@@ -1,6 +1,7 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 
 import { AdminShell } from "@/components/admin-shell";
 import { SuperAdminShell } from "@/components/super-admin-shell";
@@ -18,6 +19,7 @@ export function AppChromeClient({
   stores,
   activeStoreId,
   activeStoreName,
+  userType,
   hasActiveStore,
   shellTheme,
   children,
@@ -26,11 +28,49 @@ export function AppChromeClient({
   stores: StoreOption[];
   activeStoreId: string | null;
   activeStoreName: string | null;
+  userType: "internal" | "distributor" | null;
   hasActiveStore: boolean;
   shellTheme: StoreTheme;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const isDistributor = userType === "distributor";
+  const distributorAllowed =
+    pathname === "/" ||
+    pathname === "/account" ||
+    pathname === "/purchase-orders" ||
+    pathname === "/purchase-orders-overview" ||
+    pathname.startsWith("/purchase-orders/") ||
+    pathname === "/shipping" ||
+    pathname.startsWith("/auth/error");
+
+  useEffect(() => {
+    if (isDistributor && !distributorAllowed) {
+      router.replace("/");
+    }
+  }, [distributorAllowed, isDistributor, router]);
+
+  if (isDistributor && !distributorAllowed) {
+    return (
+      <div
+        className="flex min-h-[100dvh] flex-1 flex-col"
+        style={hasActiveStore ? getStoreThemeStyle(shellTheme) : undefined}
+      >
+        <StoreThemeVariables theme={hasActiveStore ? shellTheme : null} />
+        <AdminShell
+          authenticated={authenticated}
+          stores={stores}
+          activeStoreId={activeStoreId}
+          activeStoreName={activeStoreName}
+          userType={userType}
+          logoHueRotateDeg={shellTheme.logoHueRotateDeg}
+        >
+          <div className="text-sm text-muted-foreground">Redirecting...</div>
+        </AdminShell>
+      </div>
+    );
+  }
 
   if (pathname.startsWith("/super-admin")) {
     return (
@@ -51,6 +91,7 @@ export function AppChromeClient({
         stores={stores}
         activeStoreId={activeStoreId}
         activeStoreName={activeStoreName}
+        userType={userType}
         logoHueRotateDeg={shellTheme.logoHueRotateDeg}
       >
         {children}

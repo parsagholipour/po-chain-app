@@ -12,7 +12,11 @@ import {
   PURCHASE_ORDER_TYPE_DISTRIBUTOR,
   PURCHASE_ORDER_TYPE_STOCK,
 } from "@/lib/purchase-order-type";
-import { requireStoreContext } from "@/lib/store-context";
+import {
+  distributorWriteForbidden,
+  isDistributorContext,
+  requireStoreContext,
+} from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
@@ -26,16 +30,38 @@ export async function GET(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
+  const isDistributor = isDistributorContext(authz.context);
+  const distributorSaleChannelId = authz.context.saleChannelId;
+  if (isDistributor && !distributorSaleChannelId) {
+    return jsonError("Distributor account is not linked to a sale channel", 403);
+  }
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
   if (!pid.success) return jsonFromZod(pid.error);
 
   const row = await prisma.shipping.findFirst({
-    where: { id: pid.data.id, storeId },
+    where: {
+      id: pid.data.id,
+      storeId,
+      ...(isDistributor
+        ? {
+            type: "purchase_order" as const,
+            purchaseOrderShippings: {
+              some: {
+                purchaseOrder: {
+                  storeId,
+                  type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+                  saleChannelId: distributorSaleChannelId,
+                },
+              },
+            },
+          }
+        : {}),
+    },
     include: shippingDetailInclude,
   });
   if (!row) return jsonError("Not found", 404);
@@ -46,8 +72,9 @@ export async function PATCH(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
+  if (isDistributorContext(authz.context)) return distributorWriteForbidden();
   const { storeId, userId } = authz.context;
 
   const { id } = await ctx.params;
@@ -288,8 +315,9 @@ export async function DELETE(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
+  if (isDistributorContext(authz.context)) return distributorWriteForbidden();
   const { storeId } = authz.context;
 
   const { id } = await ctx.params;

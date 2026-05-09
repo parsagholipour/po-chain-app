@@ -135,6 +135,17 @@ const nav: readonly NavItem[] = [
   { kind: "link", href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
+const distributorNav: readonly NavItem[] = [
+  { kind: "link", href: "/", label: "Dashboard", icon: LayoutDashboard },
+  {
+    kind: "link",
+    href: "/purchase-orders-overview",
+    label: "Purchase orders",
+    icon: ClipboardList,
+  },
+  { kind: "link", href: "/shipping", label: "Shipping", icon: Package },
+] as const;
+
 type StoreOption = {
   id: string;
   slug: string;
@@ -244,10 +255,12 @@ function NavList({
   onNavigate,
   className,
   isCollapsed,
+  navItems = nav,
 }: {
   onNavigate?: () => void;
   className?: string;
   isCollapsed?: boolean;
+  navItems?: readonly NavItem[];
 }) {
   const pathname = usePathname();
   const { data: navCounts } = useNavCounts();
@@ -297,7 +310,7 @@ function NavList({
             Menu
           </p>
         )}
-        {nav.map((item) => {
+        {navItems.map((item) => {
           if (item.kind === "link") {
             const active = navActive(pathname, item.href);
             return (
@@ -494,6 +507,7 @@ export function AdminShell({
   stores,
   activeStoreId,
   activeStoreName,
+  userType,
   logoHueRotateDeg,
   children,
 }: {
@@ -501,6 +515,7 @@ export function AdminShell({
   stores: StoreOption[];
   activeStoreId: string | null;
   activeStoreName: string | null;
+  userType: "internal" | "distributor" | null;
   logoHueRotateDeg: number;
   children: React.ReactNode;
 }) {
@@ -518,6 +533,8 @@ export function AdminShell({
       return next;
     });
   };
+  const isDistributor = userType === "distributor";
+  const navItems = isDistributor ? distributorNav : nav;
 
   if (!authenticated) {
     return (
@@ -565,7 +582,7 @@ export function AdminShell({
               logoHueRotateDeg={logoHueRotateDeg}
             />
             <ScrollArea className="min-h-0 flex-1">
-              <NavList isCollapsed={isCollapsed} />
+              <NavList isCollapsed={isCollapsed} navItems={navItems} />
             </ScrollArea>
             <SidebarFooter stores={stores} activeStoreId={activeStoreId} isCollapsed={isCollapsed} />
           </div>
@@ -574,12 +591,14 @@ export function AdminShell({
 
       {/* Main column */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-muted/30 dark:bg-background">
-        <AssistantSheet
-          open={assistantOpen}
-          onOpenChange={setAssistantOpen}
-          activeStoreId={activeStoreId}
-          activeStoreName={activeStoreName}
-        />
+        {!isDistributor ? (
+          <AssistantSheet
+            open={assistantOpen}
+            onOpenChange={setAssistantOpen}
+            activeStoreId={activeStoreId}
+            activeStoreName={activeStoreName}
+          />
+        ) : null}
 
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-border/70 bg-background/90 px-4 backdrop-blur-md md:hidden">
@@ -602,16 +621,18 @@ export function AdminShell({
               </span>
               <span className="truncate">{APP_NAME}</span>
             </Link>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setAssistantOpen(true)}
-              disabled={!activeStoreId}
-            >
-              <BrainCircuit className="size-3.5" />
-              AI
-            </Button>
+            {!isDistributor ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAssistantOpen(true)}
+                disabled={!activeStoreId}
+              >
+                <BrainCircuit className="size-3.5" />
+                AI
+              </Button>
+            ) : null}
             <ModeToggle />
             <div className="shrink-0">
               <AuthControls />
@@ -629,6 +650,7 @@ export function AdminShell({
               <NavList
                 onNavigate={() => setMobileNavOpen(false)}
                 className="pb-6"
+                navItems={navItems}
               />
             </ScrollArea>
             <SidebarFooter stores={stores} activeStoreId={activeStoreId} />
@@ -638,20 +660,24 @@ export function AdminShell({
         <header className="sticky top-0 z-10 hidden shrink-0 border-b border-border/70 bg-background/90 backdrop-blur-md md:block">
           <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6 lg:px-8">
             <div className="min-w-0 flex-1">
-              <Suspense fallback={null}>
-                <GlobalSearchBar />
-              </Suspense>
+              {!isDistributor ? (
+                <Suspense fallback={null}>
+                  <GlobalSearchBar />
+                </Suspense>
+              ) : null}
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setAssistantOpen(true)}
-              disabled={!activeStoreId}
-            >
-              <BrainCircuit className="size-3.5" />
-              AI
-            </Button>
+            {!isDistributor ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAssistantOpen(true)}
+                disabled={!activeStoreId}
+              >
+                <BrainCircuit className="size-3.5" />
+                AI
+              </Button>
+            ) : null}
           </div>
         </header>
 

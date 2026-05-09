@@ -103,6 +103,10 @@ export const saleChannelCreateSchema = z.object({
   contactNumber: nullableOptionalString,
   address: nullableOptionalString,
   email: nullableOptionalEmail,
+  loginPassword: z.preprocess(
+    blankToNull,
+    z.string().min(8, "Password must be at least 8 characters").max(256).nullable().optional(),
+  ),
   link: nullableOptionalUrl,
   notes: nullableOptionalString,
 });

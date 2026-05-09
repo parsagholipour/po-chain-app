@@ -1,7 +1,12 @@
 import NextAuth from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import authConfig from "@/auth.config";
-import { findUserById, findUserByKeycloakSub, syncUserWithDefaultStore } from "@/lib/store";
+import {
+  findUserById,
+  findUserByKeycloakSub,
+  syncUserWithDefaultStore,
+  type AppUserAuthFields,
+} from "@/lib/store";
 
 function emailFromProfile(sub: string, profile: Record<string, unknown>) {
   const raw = profile.email;
@@ -39,11 +44,10 @@ function nameFromToken(token: JWT) {
   return typeof token.name === "string" && token.name.length > 0 ? token.name : null;
 }
 
-function applyUserToToken(
-  token: JWT,
-  user: { id: string; realEmail: string | null; realName: string | null },
-) {
+function applyUserToToken(token: JWT, user: AppUserAuthFields) {
   token.appUserId = user.id;
+  token.userType = user.type;
+  token.saleChannelId = user.saleChannelId;
 
   if (token.realEmail === undefined) {
     token.realEmail = user.realEmail;
@@ -83,13 +87,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = emailFromProfile(sub, profileRecord);
       const name = nameFromProfile(profileRecord);
 
-      await syncUserWithDefaultStore({
-        keycloakSub: sub,
-        email,
-        name,
-        realEmail: realEmailFromProfile(profileRecord),
-        realName: realNameFromProfile(profileRecord),
-      });
+      const existingUser = await findUserByKeycloakSub(sub);
+      if (!existingUser) {
+        await syncUserWithDefaultStore({
+          keycloakSub: sub,
+          email,
+          name,
+          realEmail: realEmailFromProfile(profileRecord),
+          realName: realNameFromProfile(profileRecord),
+        });
+      }
 
       return true;
     },
@@ -123,17 +130,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const appUserId = typeof token.appUserId === "string" ? token.appUserId : null;
           const existingTokenUser = appUserId ? await findUserById(appUserId) : null;
 
-          if (existingTokenUser) {
-            applyUserToToken(token, existingTokenUser);
-          } else {
+        if (existingTokenUser) {
+          applyUserToToken(token, existingTokenUser);
+        } else {
             if (appUserId) {
               delete token.appUserId;
               console.warn("[auth] jwt appUserId was stale; resyncing user for keycloakSub", sub);
             }
-            const row = await syncUserForToken(sub, token, profileRecord);
-            token.appUserId = row.id;
-          }
-        } catch (err) {
+          const row = await syncUserForToken(sub, token, profileRecord);
+          applyUserToToken(token, row);
+        }
+      } catch (err) {
           console.error("[auth] jwt user lookup failed for keycloakSub", sub, err);
         }
       }
@@ -150,6 +157,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (existingTokenUser) {
           applyUserToToken(token, existingTokenUser);
           session.user.id = existingTokenUser.id;
+          session.user.type = existingTokenUser.type;
+          session.user.saleChannelId = existingTokenUser.saleChannelId;
           return session;
         }
 
@@ -162,6 +171,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           const row = await syncUserForToken(sub, token);
           applyUserToToken(token, row);
           session.user.id = row.id;
+          session.user.type = row.type;
+          session.user.saleChannelId = row.saleChannelId;
           return session;
         }
       } catch (err) {
@@ -175,6 +186,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       console.warn(
         "[auth] session without appUserId - API routes using createdById may fail",
       );
+      session.user.type = "internal";
+      session.user.saleChannelId = null;
       return session;
     },
   },

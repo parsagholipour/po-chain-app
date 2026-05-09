@@ -103,6 +103,34 @@ type ShippingLike = {
   }>;
 };
 
+type MoneyLike = { toNumber(): number } | number | string | null | undefined;
+
+function moneyJsonValue(value: MoneyLike) {
+  if (value == null) return null;
+  const n =
+    typeof value === "object" && "toNumber" in value
+      ? value.toNumber()
+      : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function productFromPrisma<
+  T extends {
+    cost: MoneyLike;
+    price: MoneyLike;
+    map: MoneyLike;
+    msrp: MoneyLike;
+  },
+>(product: T) {
+  return {
+    ...product,
+    cost: moneyJsonValue(product.cost),
+    price: moneyJsonValue(product.price),
+    map: moneyJsonValue(product.map),
+    msrp: moneyJsonValue(product.msrp),
+  };
+}
+
 export function shippingRowFromPrisma(row: ShippingLike) {
   const manufacturingOrders = (row.manufacturingOrderShippings ?? []).map((item) => ({
     id: item.manufacturingOrder.id,
@@ -128,12 +156,7 @@ export function shippingRowFromPrisma(row: ShippingLike) {
     orderType: "warehouse_order" as const,
   }));
 
-  const costJson =
-    row.cost == null
-      ? null
-      : typeof row.cost === "object" && row.cost !== null && "toNumber" in row.cost
-        ? row.cost.toNumber()
-        : Number(row.cost);
+  const costJson = moneyJsonValue(row.cost);
 
   return {
     id: row.id,
@@ -167,9 +190,19 @@ export function shippingRowFromPrisma(row: ShippingLike) {
 }
 
 export function purchaseOrderLineFromPrisma(line: PurchaseOrderLineApiPayload) {
-  const { manufacturingOrderLines, warehouseOrderLines, ...lineRest } = line;
+  const {
+    manufacturingOrderLines,
+    warehouseOrderLines,
+    product,
+    unitCost,
+    unitPrice,
+    ...lineRest
+  } = line;
   return {
     ...lineRest,
+    unitCost: moneyJsonValue(unitCost),
+    unitPrice: moneyJsonValue(unitPrice),
+    product: productFromPrisma(product),
     allocations: manufacturingOrderLines.map((mol) => ({
       manufacturingOrderId: mol.manufacturingOrderId,
       manufacturerId: mol.manufacturerId,
@@ -206,7 +239,12 @@ function mapPurchaseOrderOsd(osd: PurchaseOrderOsdDetailPayload) {
       purchaseOrderLineId: ol.purchaseOrderLineId,
       storeId: ol.storeId,
       createdAt: ol.createdAt.toISOString(),
-      purchaseOrderLine: ol.purchaseOrderLine,
+      purchaseOrderLine: {
+        ...ol.purchaseOrderLine,
+        unitCost: moneyJsonValue(ol.purchaseOrderLine.unitCost),
+        unitPrice: moneyJsonValue(ol.purchaseOrderLine.unitPrice),
+        product: productFromPrisma(ol.purchaseOrderLine.product),
+      },
     })),
   };
 }

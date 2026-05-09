@@ -48,6 +48,7 @@ export function emptySaleChannelFormValues(): SaleChannelFormValues {
     contactNumber: "",
     address: "",
     email: "",
+    loginPassword: "",
     link: "",
     notes: "",
   };
@@ -71,6 +72,7 @@ export function SaleChannelForm({ defaultValues, editingId, onSubmit, onCancel }
   });
   const { isSubmitting } = useFormState({ control: form.control });
   const watchedValues = useWatch({ control: form.control });
+  const watchedType = watchedValues.type;
 
   const storedLogoKey =
     removeStoredLogo || logoFile ? null : (defaultValues.logoKey ?? null);
@@ -96,7 +98,11 @@ export function SaleChannelForm({ defaultValues, editingId, onSubmit, onCancel }
   }
 
   return (
-    <form onSubmit={form.handleSubmit(handleSubmit)}>
+    <form
+      onSubmit={(event) => {
+        void form.handleSubmit(handleSubmit)(event);
+      }}
+    >
       <FieldSet className="gap-4">
         <FieldGroup className="gap-4">
           <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">
@@ -151,6 +157,23 @@ export function SaleChannelForm({ defaultValues, editingId, onSubmit, onCancel }
               <FieldError errors={[form.formState.errors.email]} />
             </FieldContent>
           </Field>
+          {watchedType === "distributor" ? (
+            <Field data-invalid={!!form.formState.errors.loginPassword} className="gap-1.5">
+              <FieldLabel htmlFor="scf-login-password">
+                {editingId ? "Login password" : "Login password"}
+              </FieldLabel>
+              <FieldContent>
+                <Input
+                  id="scf-login-password"
+                  type="password"
+                  autoComplete="new-password"
+                  {...form.register("loginPassword")}
+                  placeholder={editingId ? "Leave blank to keep current password" : "Set password"}
+                />
+                <FieldError errors={[form.formState.errors.loginPassword]} />
+              </FieldContent>
+            </Field>
+          ) : null}
           <Field data-invalid={!!form.formState.errors.link} className="gap-1.5">
             <FieldLabel htmlFor="scf-link">Website link</FieldLabel>
             <FieldContent>

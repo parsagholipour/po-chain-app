@@ -100,7 +100,12 @@ export function LogisticsPartnerForm({
   }
 
   return (
-    <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+    <form
+      onSubmit={(event) => {
+        void form.handleSubmit(handleSubmit)(event);
+      }}
+      className="space-y-4"
+    >
       <FieldSet>
         <input type="hidden" {...form.register("type")} />
 

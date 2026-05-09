@@ -21,11 +21,21 @@ import { PriceView } from "@/components/ui/price-view";
 interface ShippingTableProps {
   shippings: ShippingRow[];
   isPending?: boolean;
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => void;
+  onEdit?: (id: string) => void;
+  onDelete?: (id: string) => void;
+  readOnly?: boolean;
 }
 
-export function ShippingTable({ shippings, isPending = false, onEdit, onDelete }: ShippingTableProps) {
+export function ShippingTable({
+  shippings,
+  isPending = false,
+  onEdit,
+  onDelete,
+  readOnly = false,
+}: ShippingTableProps) {
+  const showActions = !readOnly && onEdit != null && onDelete != null;
+  const colSpan = showActions ? 9 : 8;
+
   return (
     <div className="rounded-md border">
       <Table>
@@ -39,13 +49,13 @@ export function ShippingTable({ shippings, isPending = false, onEdit, onDelete }
             <TableHead>Shipped At</TableHead>
             <TableHead>Linked Orders</TableHead>
             <TableHead>Links</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            {showActions ? <TableHead className="text-right">Actions</TableHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
           {isPending ? (
             <TableRow>
-              <TableCell colSpan={9} className="h-28 text-center text-muted-foreground">
+              <TableCell colSpan={colSpan} className="h-28 text-center text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
@@ -110,30 +120,32 @@ export function ShippingTable({ shippings, isPending = false, onEdit, onDelete }
                   {!shipping.trackingLink && !shipping.invoiceDocumentKey ? "-" : null}
                 </div>
               </TableCell>
-              <TableCell className="text-right">
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => onEdit(shipping.id)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-destructive"
-                    onClick={() => onDelete(shipping.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </TableCell>
+              {showActions ? (
+                <TableCell className="text-right">
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => onEdit!(shipping.id)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-destructive"
+                      onClick={() => onDelete!(shipping.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </TableCell>
+              ) : null}
             </TableRow>
           ))}
           {!isPending && shippings.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={colSpan} className="h-24 text-center text-muted-foreground">
                 No shipping records found
               </TableCell>
             </TableRow>

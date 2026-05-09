@@ -30,6 +30,7 @@ export function SaleChannelUpsertDialog({ open, onOpenChange, editing, onSave }:
         contactNumber: editing.contactNumber ?? "",
         address: editing.address ?? "",
         email: editing.email ?? "",
+        loginPassword: "",
         link: editing.link ?? "",
         notes: editing.notes ?? "",
       }

@@ -4,7 +4,11 @@ import { purchaseOrderLineCreateSchema } from "@/lib/validations/purchase-order"
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
-import { requireStoreContext } from "@/lib/store-context";
+import {
+  distributorWriteForbidden,
+  isDistributorContext,
+  requireStoreContext,
+} from "@/lib/store-context";
 import { productPricingSnapshot } from "@/lib/purchase-order-line-pricing";
 import { purchaseOrderLineApiInclude } from "@/lib/purchase-order-include";
 import { purchaseOrderLineFromPrisma } from "@/lib/shipping-api";
@@ -22,9 +26,14 @@ export async function GET(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
+  const isDistributor = isDistributorContext(authz.context);
+  const distributorSaleChannelId = authz.context.saleChannelId;
+  if (isDistributor && !distributorSaleChannelId) {
+    return jsonError("Distributor account is not linked to a sale channel", 403);
+  }
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -35,6 +44,7 @@ export async function GET(
       id: pid.data.id,
       storeId,
       type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+      ...(isDistributor ? { saleChannelId: distributorSaleChannelId } : {}),
     },
   });
   if (!po) return jsonError("Purchase order not found", 404);
@@ -50,15 +60,26 @@ export async function GET(
     include: purchaseOrderLineApiInclude,
     orderBy: { createdAt: "asc" },
   });
-  return NextResponse.json(lines.map((l) => purchaseOrderLineFromPrisma(l)));
+  const payload = lines.map((l) => purchaseOrderLineFromPrisma(l));
+  return NextResponse.json(
+    isDistributor
+      ? payload.map((line) => ({
+          ...line,
+          unitCost: null,
+          allocations: [],
+          warehouseAllocations: [],
+        }))
+      : payload,
+  );
 }
 
 export async function POST(
   request: Request,
   ctx: { params: Promise<{ id: string }> },
 ) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
+  if (isDistributorContext(authz.context)) return distributorWriteForbidden();
   const { userId, storeId } = authz.context;
 
   const { id } = await ctx.params;

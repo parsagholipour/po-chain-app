@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { useRouter } from "nextjs-toploader/app";
 import { useMemo, useState } from "react";
 import { api } from "@/lib/axios";
@@ -64,6 +65,8 @@ function PoDetailSkeleton() {
 export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
   const qc = useQueryClient();
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
+  const isDistributor = session?.user.type === "distributor";
   const poKey = ["purchase-order", purchaseOrderId] as const;
 
   const {
@@ -85,6 +88,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
 
   const { data: saleChannelOptions = [] } = useQuery({
     queryKey: ["sale-channels"],
+    enabled: sessionStatus !== "loading" && !isDistributor,
     queryFn: async () => {
       const { data } = await api.get<SaleChannel[]>("/api/sale-channels");
       return data;
@@ -97,6 +101,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
 
   const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: ["manufacturers"] as const,
+    enabled: sessionStatus !== "loading" && !isDistributor,
     queryFn: async () => {
       const { data } = await api.get<Manufacturer[]>("/api/manufacturers");
       return data;
@@ -424,107 +429,125 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         po={po}
         statusLogs={po.statusLogs}
         saleChannelOptions={distributorSaleChannelOptions}
-        onStatusChange={(s) => patchPo.mutate({ status: s })}
-        onSaveStatusLogNote={async (logId, note) => {
-          await saveStatusLogNote.mutateAsync({ logId, note });
-        }}
-        onSaleChannelChange={(saleChannelId) => patchPo.mutate({ saleChannelId })}
-        onDocumentUpload={uploadDocument}
+        onStatusChange={!isDistributor ? (s) => patchPo.mutate({ status: s }) : undefined}
+        onSaveStatusLogNote={
+          !isDistributor
+            ? async (logId, note) => {
+                await saveStatusLogNote.mutateAsync({ logId, note });
+              }
+            : undefined
+        }
+        onSaleChannelChange={
+          !isDistributor ? (saleChannelId) => patchPo.mutate({ saleChannelId }) : undefined
+        }
+        onDocumentUpload={!isDistributor ? uploadDocument : undefined}
         isSaving={patchPo.isPending}
         isDocumentSaving={isDocumentSaving}
-        onDelete={() => deletePo.mutateAsync()}
+        onDelete={!isDistributor ? () => deletePo.mutateAsync() : undefined}
         isDeleting={deletePo.isPending}
       />
 
-      <PoOrderInvoiceSection
-        invoice={po.invoice}
-        onCreate={() => setInvoiceDialogMode("create")}
-        onEdit={() => setInvoiceDialogMode("edit")}
-      />
+      {!isDistributor ? (
+        <PoOrderInvoiceSection
+          invoice={po.invoice}
+          onCreate={() => setInvoiceDialogMode("create")}
+          onEdit={() => setInvoiceDialogMode("edit")}
+        />
+      ) : null}
 
       <PoLinesSection
         lines={po.lines}
-        onAddLine={() => setLineOpen(true)}
-        onPatchLine={(lineId, body) => patchLine.mutate({ lineId, body })}
-        onDeleteLine={(lineId) => deleteLine.mutate(lineId)}
+        onAddLine={!isDistributor ? () => setLineOpen(true) : undefined}
+        onPatchLine={!isDistributor ? (lineId, body) => patchLine.mutate({ lineId, body }) : undefined}
+        onDeleteLine={!isDistributor ? (lineId) => deleteLine.mutate(lineId) : undefined}
         lineMutationPending={patchLine.isPending}
         onEditProduct={
-          !manufacturersPending && manufacturers.length > 0
+          !isDistributor && !manufacturersPending && manufacturers.length > 0
             ? (product) => {
                 setEditingProduct(product);
                 setProductEditOpen(true);
               }
             : undefined
         }
+        readOnly={isDistributor}
       />
 
-      <PoOsdSection
-        osds={po.osds}
-        onNew={() => {
-          setOsdDialogMode("create");
-          setEditingOsd(null);
-          setOsdDialogOpen(true);
-        }}
-        onEdit={(osd) => {
-          setOsdDialogMode("edit");
-          setEditingOsd(osd);
-          setOsdDialogOpen(true);
-        }}
-        onDelete={(id) => deleteOsd.mutate(id)}
-        busy={deleteOsd.isPending || patchOsd.isPending || createOsd.isPending}
-      />
+      {!isDistributor ? (
+        <PoOsdSection
+          osds={po.osds}
+          onNew={() => {
+            setOsdDialogMode("create");
+            setEditingOsd(null);
+            setOsdDialogOpen(true);
+          }}
+          onEdit={(osd) => {
+            setOsdDialogMode("edit");
+            setEditingOsd(osd);
+            setOsdDialogOpen(true);
+          }}
+          onDelete={(id) => deleteOsd.mutate(id)}
+          busy={deleteOsd.isPending || patchOsd.isPending || createOsd.isPending}
+        />
+      ) : null}
 
-      <PoLinkedMosSection manufacturingOrders={linkedMos} />
+      {!isDistributor ? <PoLinkedMosSection manufacturingOrders={linkedMos} /> : null}
 
-      <PoLinkedWarehouseOrdersSection warehouseOrders={linkedWarehouseOrders} />
+      {!isDistributor ? (
+        <PoLinkedWarehouseOrdersSection warehouseOrders={linkedWarehouseOrders} />
+      ) : null}
 
       <PoShipmentsSection
         shippings={po.shippings}
         orderType="purchase_order"
         orderId={purchaseOrderId}
+        readOnly={isDistributor}
       />
 
-      <AddPoLineDialog
-        open={lineOpen}
-        onOpenChange={setLineOpen}
-        onSubmit={(v) => addLine.mutateAsync(v)}
-      />
+      {!isDistributor ? (
+        <>
+          <AddPoLineDialog
+            open={lineOpen}
+            onOpenChange={setLineOpen}
+            onSubmit={(v) => addLine.mutateAsync(v)}
+          />
 
-      <AddOsdDialog
-        key={
-          osdDialogOpen ? `osd-${osdDialogMode}-${editingOsd?.id ?? "new"}` : "osd-shut"
-        }
-        open={osdDialogOpen}
-        onOpenChange={setOsdDialogOpen}
-        lines={po.lines}
-        mode={osdDialogMode}
-        editing={editingOsd}
-        onCreate={(body) => createOsd.mutateAsync(body)}
-        onEdit={(osdId, body) => patchOsd.mutateAsync({ osdId, body })}
-      />
+          <AddOsdDialog
+            key={
+              osdDialogOpen ? `osd-${osdDialogMode}-${editingOsd?.id ?? "new"}` : "osd-shut"
+            }
+            open={osdDialogOpen}
+            onOpenChange={setOsdDialogOpen}
+            lines={po.lines}
+            mode={osdDialogMode}
+            editing={editingOsd}
+            onCreate={(body) => createOsd.mutateAsync(body)}
+            onEdit={(osdId, body) => patchOsd.mutateAsync({ osdId, body })}
+          />
 
-      <ProductUpsertDialog
-        open={productEditOpen}
-        onOpenChange={(o) => {
-          setProductEditOpen(o);
-          if (!o) setEditingProduct(null);
-        }}
-        editing={editingProduct}
-        manufacturers={manufacturers}
-        onSave={saveProductFromPo}
-      />
+          <ProductUpsertDialog
+            open={productEditOpen}
+            onOpenChange={(o) => {
+              setProductEditOpen(o);
+              if (!o) setEditingProduct(null);
+            }}
+            editing={editingProduct}
+            manufacturers={manufacturers}
+            onSave={saveProductFromPo}
+          />
 
-      <InvoiceUpsertDialog
-        open={!!invoiceDialogMode}
-        onOpenChange={(o) => {
-          if (!o) setInvoiceDialogMode(null);
-        }}
-        title={invoiceDialogMode === "edit" ? "Edit invoice" : "Create invoice"}
-        defaultValues={invoiceDialogDefaults}
-        existingDocumentKey={po.invoice?.documentKey ?? null}
-        resetToken={invoiceResetToken}
-        onSubmit={submitPurchaseOrderInvoice}
-      />
+          <InvoiceUpsertDialog
+            open={!!invoiceDialogMode}
+            onOpenChange={(o) => {
+              if (!o) setInvoiceDialogMode(null);
+            }}
+            title={invoiceDialogMode === "edit" ? "Edit invoice" : "Create invoice"}
+            defaultValues={invoiceDialogDefaults}
+            existingDocumentKey={po.invoice?.documentKey ?? null}
+            resetToken={invoiceResetToken}
+            onSubmit={submitPurchaseOrderInvoice}
+          />
+        </>
+      ) : null}
     </div>
   );
 }

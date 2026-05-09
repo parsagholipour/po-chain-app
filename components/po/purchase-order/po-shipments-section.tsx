@@ -23,6 +23,7 @@ type Props = {
   orderId: string;
   /** Hide title row and Add button when the parent supplies them (e.g. collapsible header). */
   hideToolbar?: boolean;
+  readOnly?: boolean;
 };
 
 export function PoShipmentsSection({
@@ -30,6 +31,7 @@ export function PoShipmentsSection({
   orderType,
   orderId,
   hideToolbar = false,
+  readOnly = false,
 }: Props) {
   const qc = useQueryClient();
   const confirm = useConfirm();
@@ -65,19 +67,21 @@ export function PoShipmentsSection({
           <h2 id="po-shipments-heading" className="text-lg font-semibold">
             Shipments
           </h2>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => {
-              setEditingId(null);
-              setUpsertOpen(true);
-            }}
-          >
-            <Plus className="size-4" />
-            Add shipment
-          </Button>
+          {!readOnly ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setEditingId(null);
+                setUpsertOpen(true);
+              }}
+            >
+              <Plus className="size-4" />
+              Add shipment
+            </Button>
+          ) : null}
         </div>
-      ) : (
+      ) : !readOnly ? (
         <div className="flex justify-end">
           <Button
             type="button"
@@ -91,12 +95,11 @@ export function PoShipmentsSection({
             Add shipment
           </Button>
         </div>
-      )}
+      ) : null}
       <div className="space-y-3">
         {shippings.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border/80 bg-muted/20 py-12 text-center text-sm text-muted-foreground">
-            No shipments yet. Use <span className="font-medium text-foreground">Add shipment</span>{" "}
-            when you send or receive tracking.
+            No shipments yet.
           </p>
         ) : (
           shippings.map((shipping) => (
@@ -143,37 +146,39 @@ export function PoShipmentsSection({
                       </p>
                     ) : null}
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => {
-                        setEditingId(shipping.id);
-                        setUpsertOpen(true);
-                      }}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="text-destructive"
-                      onClick={() => {
-                        void (async () => {
-                          const ok = await confirm({
-                            title: "Delete this shipment?",
-                            confirmLabel: "Delete",
-                            variant: "destructive",
-                          });
-                          if (ok) deleteMut.mutate(shipping.id);
-                        })();
-                      }}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
+                  {!readOnly ? (
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => {
+                          setEditingId(shipping.id);
+                          setUpsertOpen(true);
+                        }}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="text-destructive"
+                        onClick={() => {
+                          void (async () => {
+                            const ok = await confirm({
+                              title: "Delete this shipment?",
+                              confirmLabel: "Delete",
+                              variant: "destructive",
+                            });
+                            if (ok) deleteMut.mutate(shipping.id);
+                          })();
+                        }}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -181,22 +186,24 @@ export function PoShipmentsSection({
         )}
       </div>
 
-      <ShippingUpsertDialog
-        open={upsertOpen}
-        onOpenChange={(open) => {
-          setUpsertOpen(open);
-          if (!open) setEditingId(null);
-        }}
-        editingId={editingId}
-        defaultType={orderType}
-        requiredManufacturingOrderIds={requiredManufacturingOrderIds}
-        requiredPurchaseOrderIds={requiredPurchaseOrderIds}
-        requiredWarehouseOrderIds={requiredWarehouseOrderIds}
-        onSuccess={() => {
-          setUpsertOpen(false);
-          setEditingId(null);
-        }}
-      />
+      {!readOnly ? (
+        <ShippingUpsertDialog
+          open={upsertOpen}
+          onOpenChange={(open) => {
+            setUpsertOpen(open);
+            if (!open) setEditingId(null);
+          }}
+          editingId={editingId}
+          defaultType={orderType}
+          requiredManufacturingOrderIds={requiredManufacturingOrderIds}
+          requiredPurchaseOrderIds={requiredPurchaseOrderIds}
+          requiredWarehouseOrderIds={requiredWarehouseOrderIds}
+          onSuccess={() => {
+            setUpsertOpen(false);
+            setEditingId(null);
+          }}
+        />
+      ) : null}
     </section>
   );
 }

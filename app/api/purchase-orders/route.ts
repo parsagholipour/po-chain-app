@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { requireStoreContext } from "@/lib/store-context";
+import {
+  distributorWriteForbidden,
+  isDistributorContext,
+  requireStoreContext,
+} from "@/lib/store-context";
 import {
   purchaseOrderCreateSchema,
   purchaseOrderStatusSchema,
@@ -20,9 +24,14 @@ import {
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
+  const isDistributor = isDistributorContext(authz.context);
+  const distributorSaleChannelId = authz.context.saleChannelId;
+  if (isDistributor && !distributorSaleChannelId) {
+    return jsonError("Distributor account is not linked to a sale channel", 403);
+  }
 
   const { searchParams } = new URL(request.url);
   const statusRaw = searchParams.get("status");
@@ -38,9 +47,13 @@ export async function GET(request: Request) {
     const st = purchaseOrderStatusSchema.safeParse(statusRaw);
     if (st.success) where.status = st.data;
   }
-  const scParsed = saleChannelIdRaw ? z.uuid().safeParse(saleChannelIdRaw) : null;
-  if (scParsed?.success) {
-    where.saleChannelId = scParsed.data;
+  if (isDistributor) {
+    where.saleChannelId = distributorSaleChannelId;
+  } else {
+    const scParsed = saleChannelIdRaw ? z.uuid().safeParse(saleChannelIdRaw) : null;
+    if (scParsed?.success) {
+      where.saleChannelId = scParsed.data;
+    }
   }
   const mfParsed = manufacturerIdRaw ? z.uuid().safeParse(manufacturerIdRaw) : null;
   if (mfParsed?.success) {
@@ -133,30 +146,36 @@ export async function GET(request: Request) {
       status: r.status,
       createdAt: r.createdAt,
       saleChannel: r.saleChannel,
-      manufacturers: Array.from(
-        new Set(
-          r.lines
-            .flatMap((line) => line.manufacturingOrderLines.map((mol) => mol.manufacturerId))
-            .filter((id): id is string => id != null)
-        )
-      ).map((manufacturerId) => ({
-        manufacturerId,
-        name: "",
-        status: "",
-      })),
-      manufacturingOrders: r.manufacturingOrderPurchaseOrders.map((mo) => ({
-        id: mo.manufacturingOrder.id,
-        number: mo.manufacturingOrder.number,
-        name: mo.manufacturingOrder.name,
-        status: mo.manufacturingOrder.status,
-      })),
-      warehouseOrders: r.warehouseOrderPurchaseOrders.map((wo) => ({
-        id: wo.warehouseOrder.id,
-        number: wo.warehouseOrder.number,
-        name: wo.warehouseOrder.name,
-        status: wo.warehouseOrder.status,
-        warehouseName: wo.warehouseOrder.warehouse.name,
-      })),
+      manufacturers: isDistributor
+        ? []
+        : Array.from(
+            new Set(
+              r.lines
+                .flatMap((line) => line.manufacturingOrderLines.map((mol) => mol.manufacturerId))
+                .filter((id): id is string => id != null)
+            )
+          ).map((manufacturerId) => ({
+            manufacturerId,
+            name: "",
+            status: "",
+          })),
+      manufacturingOrders: isDistributor
+        ? []
+        : r.manufacturingOrderPurchaseOrders.map((mo) => ({
+            id: mo.manufacturingOrder.id,
+            number: mo.manufacturingOrder.number,
+            name: mo.manufacturingOrder.name,
+            status: mo.manufacturingOrder.status,
+          })),
+      warehouseOrders: isDistributor
+        ? []
+        : r.warehouseOrderPurchaseOrders.map((wo) => ({
+            id: wo.warehouseOrder.id,
+            number: wo.warehouseOrder.number,
+            name: wo.warehouseOrder.name,
+            status: wo.warehouseOrder.status,
+            warehouseName: wo.warehouseOrder.warehouse.name,
+          })),
       shippingBadges: r.purchaseOrderShippings.map((s) => ({
         id: s.shipping.id,
         status: s.shipping.status,
@@ -168,8 +187,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const authz = await requireStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
+  if (isDistributorContext(authz.context)) return distributorWriteForbidden();
   const { userId, storeId } = authz.context;
 
   let body: unknown;

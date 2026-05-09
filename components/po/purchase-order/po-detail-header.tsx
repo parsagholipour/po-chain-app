@@ -60,7 +60,7 @@ function poOrderStatusItemsForValue(currentStatus: string) {
 type Props = {
   po: PurchaseOrderDetail;
   statusLogs: PurchaseOrderDetail["statusLogs"];
-  onStatusChange: (status: string) => void;
+  onStatusChange?: (status: string) => void;
   onSaveStatusLogNote?: (logId: string, note: string | null) => Promise<void>;
   /** Distributor PO only — omit for stock orders */
   saleChannelOptions?: SaleChannel[];
@@ -126,6 +126,7 @@ export function PoDetailHeader({
   const visibleDocumentName = pendingDocumentName ?? currentDocumentName;
   const isDocumentBusy = isSaving || isDocumentSaving || isDeleting;
   const shipCount = po.shippings.length;
+  const canEditStatus = onStatusChange != null;
 
   function handleDocumentChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
@@ -206,25 +207,35 @@ export function PoDetailHeader({
               {statusFieldLabel}
             </Label>
             <div className="flex w-full items-center gap-2 sm:w-auto">
-              <Select
-                value={po.status}
-                items={poOrderStatusItemsForValue(po.status)}
-                disabled={isSaving}
-                onValueChange={(v) => {
-                  if (v) onStatusChange(v);
-                }}
-              >
-                <SelectTrigger id={statusId} className="w-full sm:w-[220px]" aria-busy={isSaving}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {distributorPoStatuses.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {distributorPoStatusLabels[s] ?? s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {canEditStatus ? (
+                <Select
+                  value={po.status}
+                  items={poOrderStatusItemsForValue(po.status)}
+                  disabled={isSaving}
+                  onValueChange={(v) => {
+                    if (v) onStatusChange(v);
+                  }}
+                >
+                  <SelectTrigger id={statusId} className="w-full sm:w-[220px]" aria-busy={isSaving}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {distributorPoStatuses.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {distributorPoStatusLabels[s] ?? s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Badge
+                  id={statusId}
+                  variant="secondary"
+                  className={`${statusBadgeClassName(po.status)} min-h-9 px-3 text-sm font-medium`}
+                >
+                  {distributorPoStatusLabels[po.status] ?? po.status}
+                </Badge>
+              )}
               <OrderStatusLogsDialog
                 title={statusDialogTitle}
                 description={statusDialogDescription}

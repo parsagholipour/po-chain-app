@@ -12,12 +12,24 @@ import {
   listUserStores,
   type StoreContext,
 } from "@/lib/store";
+import { prisma } from "@/lib/prisma";
+
+export const USER_TYPE_INTERNAL = "internal" as const;
+export const USER_TYPE_DISTRIBUTOR = "distributor" as const;
 
 export async function getStoreContextForUserId(
   userId: string,
 ): Promise<StoreContext | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { type: true, saleChannelId: true },
+  });
+  if (!user) return null;
+
   let stores = await listUserStores(userId);
   if (stores.length === 0) {
+    if (user.type === USER_TYPE_DISTRIBUTOR) return null;
+
     const defaultStore = await ensureDefaultStoreForUser(userId);
     if (!defaultStore) return null;
     stores = [defaultStore];
@@ -29,6 +41,8 @@ export async function getStoreContextForUserId(
 
   return {
     userId,
+    userType: user.type,
+    saleChannelId: user.saleChannelId,
     storeId: activeStore.id,
     stores,
     activeStore,
@@ -58,7 +72,13 @@ export async function getStoreContext(): Promise<StoreContext | null> {
   return storeContext;
 }
 
-export async function requireStoreContext(): Promise<
+type StoreContextAccessOptions = {
+  allowDistributor?: boolean;
+};
+
+export async function requireStoreContext(
+  options: StoreContextAccessOptions = {},
+): Promise<
   { ok: true; context: StoreContext } | { ok: false; response: NextResponse }
 > {
   const { session, storeContext } = await getSessionStoreContextBundle();
@@ -72,5 +92,35 @@ export async function requireStoreContext(): Promise<
     };
   }
 
+  if (
+    storeContext.userType === USER_TYPE_DISTRIBUTOR &&
+    !options.allowDistributor
+  ) {
+    return { ok: false, response: distributorInternalForbidden() };
+  }
+
   return { ok: true, context: storeContext };
+}
+
+export function isDistributorContext(context: StoreContext) {
+  return context.userType === USER_TYPE_DISTRIBUTOR;
+}
+
+export function distributorWriteForbidden() {
+  return jsonError("Distributor accounts are read-only", 403);
+}
+
+export function distributorInternalForbidden() {
+  return jsonError("This area is only available to internal users", 403);
+}
+
+export async function requireInternalStoreContext(): Promise<
+  { ok: true; context: StoreContext } | { ok: false; response: NextResponse }
+> {
+  const authz = await requireStoreContext();
+  if (!authz.ok) return authz;
+  if (isDistributorContext(authz.context)) {
+    return { ok: false, response: distributorInternalForbidden() };
+  }
+  return authz;
 }

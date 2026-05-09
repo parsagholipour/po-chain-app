@@ -102,6 +102,7 @@ export type SaleChannel = {
   contactNumber: string | null;
   link: string | null;
   email: string | null;
+  loginEnabled: boolean;
   address: string | null;
   notes: string | null;
   createdAt: string;

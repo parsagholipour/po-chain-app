@@ -84,7 +84,11 @@ export function ManufacturerForm({ defaultValues, editingId, onSubmit, onCancel 
   }
 
   return (
-    <form onSubmit={form.handleSubmit(handleSubmit)}>
+    <form
+      onSubmit={(event) => {
+        void form.handleSubmit(handleSubmit)(event);
+      }}
+    >
       <FieldSet className="gap-4">
         <FieldGroup className="gap-4">
           <Field data-invalid={!!form.formState.errors.name} className="gap-1.5">

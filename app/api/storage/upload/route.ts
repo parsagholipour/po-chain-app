@@ -11,6 +11,9 @@ export async function POST(request: Request) {
   if (!session?.user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   }
+  if (session.user.type === "distributor") {
+    return NextResponse.json({ message: "Distributor accounts are read-only" }, { status: 403 });
+  }
 
   let cfg;
   try {

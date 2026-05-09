@@ -17,6 +17,11 @@ enum SaleChannelType {
   cjdropshipping
 }
 
+enum UserType {
+  internal
+  distributor
+}
+
 /// Row kind for `PurchaseOrder`: distributor PO vs internal stock order (same table).
 enum PurchaseOrderType {
   distributor
@@ -176,14 +181,17 @@ model UserStore {
 }
 
 model User {
-  id          String   @id @default(uuid()) @db.Uuid
-  keycloakSub String   @unique @db.Uuid
-  email       String   @unique
-  name        String?
-  realEmail   String?
-  realName    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String       @id @default(uuid()) @db.Uuid
+  keycloakSub   String       @unique @db.Uuid
+  email         String       @unique
+  name          String?
+  realEmail     String?
+  realName      String?
+  type          UserType     @default(internal)
+  saleChannelId String?      @unique @db.Uuid
+  saleChannel   SaleChannel? @relation("SaleChannelLoginUser", fields: [saleChannelId], references: [id], onDelete: Restrict)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   userStores                                  UserStore[]
   manufacturersCreated                        Manufacturer[]                        @relation("ManufacturerCreatedBy")
@@ -274,6 +282,7 @@ model SaleChannel {
 
   purchaseOrders PurchaseOrder[]
   warehouses     Warehouse[]
+  loginUser      User?           @relation("SaleChannelLoginUser")
 
   @@index([storeId, type, name])
   @@index([storeId, createdAt])

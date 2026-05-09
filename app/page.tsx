@@ -1,4 +1,5 @@
 import { DashboardView } from "@/components/dashboard/dashboard-view";
+import { DistributorDashboardView } from "@/components/dashboard/distributor-dashboard-view";
 import { AuthControls } from "@/components/auth-controls";
 import { APP_NAME } from "@/lib/app-name";
 import { auth } from "@/lib/auth";
@@ -43,6 +44,10 @@ export default async function HomePage() {
 
   if (!session?.user) {
     return <SignInHome />;
+  }
+
+  if (session.user.type === "distributor") {
+    return <DistributorDashboardView />;
   }
 
   return <DashboardView />;

@@ -13,6 +13,7 @@ export async function AppChrome({ children }: { children: React.ReactNode }) {
       stores={storeContext?.stores ?? []}
       activeStoreId={activeStore?.id ?? null}
       activeStoreName={activeStore?.name ?? null}
+      userType={storeContext?.userType ?? null}
       hasActiveStore={Boolean(activeStore)}
       shellTheme={shellTheme}
     >

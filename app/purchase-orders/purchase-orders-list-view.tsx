@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/axios";
@@ -225,6 +226,9 @@ function PoListFiltersAndTable({
   onDeleteOrder?: (id: string) => Promise<void>;
   deletingOrderId?: string | undefined;
 }) {
+  const showActions = onDeleteOrder != null;
+  const colSpan = showActions ? 7 : 6;
+
   return (
     <>
       <div className="flex flex-wrap gap-3">
@@ -265,27 +269,29 @@ function PoListFiltersAndTable({
               <TableHead className="min-w-[12rem]">Fulfillment</TableHead>
               <TableHead className="min-w-[12rem]">Status</TableHead>
               <TableHead className="w-40">Created</TableHead>
-              <TableHead className="w-12">
-                <span className="sr-only">Actions</span>
-              </TableHead>
+              {showActions ? (
+                <TableHead className="w-12">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              ) : null}
             </TableRow>
           </TableHeader>
           <TableBody>
             {!filterReady ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={colSpan} className="h-28 text-center text-muted-foreground">
                   {emptyNoScopeMessage}
                 </TableCell>
               </TableRow>
             ) : isPending ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={colSpan} className="h-28 text-center text-muted-foreground">
                   Loading…
                 </TableCell>
               </TableRow>
             ) : data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={colSpan} className="h-28 text-center text-muted-foreground">
                   {emptyFilteredMessage}
                 </TableCell>
               </TableRow>
@@ -310,6 +316,8 @@ function PoListFiltersAndTable({
 
 export function PurchaseOrdersListView() {
   const qc = useQueryClient();
+  const { data: session } = useSession();
+  const isDistributor = session?.user.type === "distributor";
   const [perspective, setPerspective] = useState<Perspective>("sale_channels");
   const [selectedSaleChannelId, setSelectedSaleChannelId] = useState<string>(
     PO_LIST_ALL_SCOPE_ID,
@@ -330,6 +338,7 @@ export function PurchaseOrdersListView() {
 
   const { data: saleChannels = [], isPending: saleChannelsPending } = useQuery({
     queryKey: saleChannelsKey,
+    enabled: !isDistributor,
     queryFn: async () => {
       const { data: rows } = await api.get<SaleChannel[]>("/api/sale-channels");
       return rows;
@@ -338,6 +347,7 @@ export function PurchaseOrdersListView() {
 
   const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: manufacturersKey,
+    enabled: !isDistributor,
     queryFn: async () => {
       const { data: rows } = await api.get<Manufacturer[]>("/api/manufacturers");
       return rows;
@@ -346,6 +356,7 @@ export function PurchaseOrdersListView() {
 
   const { data: openCounts, isPending: openCountsPending } = useQuery({
     queryKey: poOpenCountsKey,
+    enabled: !isDistributor,
     queryFn: async () => {
       const { data } = await api.get<{
         bySaleChannel: Record<string, number>;
@@ -369,8 +380,9 @@ export function PurchaseOrdersListView() {
     ? null
     : saleChannelItems.reduce((sum, c) => sum + (c.openCount ?? 0), 0);
 
-  const filterReady =
-    perspective === "sale_channels"
+  const filterReady = isDistributor
+    ? true
+    : perspective === "sale_channels"
       ? selectedSaleChannelId === PO_LIST_ALL_SCOPE_ID ||
         saleChannels.some((c) => c.id === selectedSaleChannelId)
       : selectedManufacturerId === PO_LIST_ALL_SCOPE_ID ||
@@ -392,14 +404,14 @@ export function PurchaseOrdersListView() {
       const params = new URLSearchParams();
       if (debouncedQ) params.set("q", debouncedQ);
       if (status !== "all") params.set("status", status);
-      if (
+      if (!isDistributor &&
         perspective === "sale_channels" &&
         selectedSaleChannelId &&
         selectedSaleChannelId !== PO_LIST_ALL_SCOPE_ID
       ) {
         params.set("saleChannelId", selectedSaleChannelId);
       }
-      if (
+      if (!isDistributor &&
         perspective === "manufacturers" &&
         selectedManufacturerId &&
         selectedManufacturerId !== PO_LIST_ALL_SCOPE_ID
@@ -466,7 +478,7 @@ export function PurchaseOrdersListView() {
   }
 
   const onEditProduct =
-    !manufacturersPending && manufacturers.length > 0
+    !isDistributor && !manufacturersPending && manufacturers.length > 0
       ? (product: Product) => {
           setEditingProduct(product);
           setProductEditOpen(true);
@@ -482,15 +494,43 @@ export function PurchaseOrdersListView() {
             Distributor orders by channel or manufacturer involvement, then filter by PO status.
           </p>
         </div>
-        <Link
-          href="/purchase-orders/new"
-          className={cn(buttonVariants(), "inline-flex gap-1.5")}
-        >
-          <Plus className="size-4" />
-          New purchase order
-        </Link>
+        {!isDistributor ? (
+          <Link
+            href="/purchase-orders/new"
+            className={cn(buttonVariants(), "inline-flex gap-1.5")}
+          >
+            <Plus className="size-4" />
+            New purchase order
+          </Link>
+        ) : null}
       </div>
 
+      {isDistributor ? (
+        <TableContainer
+          className="shadow-sm"
+          footer={
+            <TablePagination
+              {...pagination}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+            />
+          }
+        >
+          <div className="space-y-5 p-5">
+            <PoListFiltersAndTable
+              q={q}
+              onQChange={setQ}
+              status={status}
+              onStatusChange={setStatus}
+              filterReady={filterReady}
+              isPending={isPending}
+              data={pagedRows}
+              emptyNoScopeMessage="Loading..."
+              emptyFilteredMessage="No purchase orders match your filters."
+            />
+          </div>
+        </TableContainer>
+      ) : (
       <TableContainer
         className="shadow-sm"
         footer={
@@ -590,17 +630,20 @@ export function PurchaseOrdersListView() {
           </TabsContent>
         </Tabs>
       </TableContainer>
+      )}
 
-      <ProductUpsertDialog
-        open={productEditOpen}
-        onOpenChange={(o) => {
-          setProductEditOpen(o);
-          if (!o) setEditingProduct(null);
-        }}
-        editing={editingProduct}
-        manufacturers={manufacturers}
-        onSave={saveProduct}
-      />
+      {!isDistributor ? (
+        <ProductUpsertDialog
+          open={productEditOpen}
+          onOpenChange={(o) => {
+            setProductEditOpen(o);
+            if (!o) setEditingProduct(null);
+          }}
+          editing={editingProduct}
+          manufacturers={manufacturers}
+          onSave={saveProduct}
+        />
+      ) : null}
     </div>
   );
 }

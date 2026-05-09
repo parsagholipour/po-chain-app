@@ -20,10 +20,11 @@ import { Loader2, Pencil, Trash2 } from "lucide-react";
 
 type Props = {
   line: PoLineRow;
-  onPatch: (body: Record<string, unknown>) => void;
-  onDelete: () => void;
+  onPatch?: (body: Record<string, unknown>) => void;
+  onDelete?: () => void;
   busy: boolean;
   onEditProduct?: (product: Product) => void;
+  readOnly?: boolean;
 };
 
 function moneyInputValue(value: string | number | null | undefined) {
@@ -45,6 +46,7 @@ export function PoLineGridCard({
   onDelete,
   busy,
   onEditProduct,
+  readOnly = false,
 }: Props) {
   const [orderedQty, setOrderedQty] = useState(line.orderedQuantity);
   const [pricingOpen, setPricingOpen] = useState(false);
@@ -70,6 +72,7 @@ export function PoLineGridCard({
 
   function submitPricing(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!onPatch) return;
     const unitCost = parseMoney(costValue);
     const unitPrice = parseMoney(priceValue);
     if (unitCost === undefined || unitPrice === undefined) {
@@ -124,35 +127,39 @@ export function PoLineGridCard({
                   <div className="text-muted-foreground">Price</div>
                   <PriceView value={line.unitPrice} />
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  disabled={busy}
-                  onClick={openPricingEditor}
-                  aria-label={`Edit cost and price for ${line.product.name}`}
-                  title="Edit cost and price"
-                >
-                  <Pencil className="size-3.5" />
-                </Button>
+                {!readOnly && onPatch ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={busy}
+                    onClick={openPricingEditor}
+                    aria-label={`Edit cost and price for ${line.product.name}`}
+                    title="Edit cost and price"
+                  >
+                    <Pencil className="size-3.5" />
+                  </Button>
+                ) : null}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={1}
-                className="min-w-0 flex-1"
-                value={orderedQty}
-                onChange={(e) => setOrderedQty(Math.max(1, Number(e.target.value) || 1))}
-                onBlur={() => {
-                  if (orderedQty !== line.orderedQuantity) onPatch({ quantity: orderedQty });
-                }}
-                disabled={busy}
-              />
-              <Button type="button" variant="ghost" size="icon-sm" onClick={onDelete}>
-                <Trash2 className="size-4 text-destructive" />
-              </Button>
-            </div>
+            {!readOnly && onPatch && onDelete ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={1}
+                  className="min-w-0 flex-1"
+                  value={orderedQty}
+                  onChange={(e) => setOrderedQty(Math.max(1, Number(e.target.value) || 1))}
+                  onBlur={() => {
+                    if (orderedQty !== line.orderedQuantity) onPatch({ quantity: orderedQty });
+                  }}
+                  disabled={busy}
+                />
+                <Button type="button" variant="ghost" size="icon-sm" onClick={onDelete}>
+                  <Trash2 className="size-4 text-destructive" />
+                </Button>
+              </div>
+            ) : null}
           </div>
         }
       />

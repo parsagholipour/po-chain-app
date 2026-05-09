@@ -35,19 +35,20 @@ export function SaleChannelsTable({ rows, isPending, onEdit, onDelete }: Props) 
             <TableHead>Type</TableHead>
             <TableHead className="max-w-[140px]">Contact number</TableHead>
             <TableHead className="max-w-[160px]">Email</TableHead>
+            <TableHead>Login</TableHead>
             <TableHead className="w-[120px] text-end">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {isPending ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                 No sale channels yet.
               </TableCell>
             </TableRow>
@@ -70,6 +71,11 @@ export function SaleChannelsTable({ rows, isPending, onEdit, onDelete }: Props) 
                 </TableCell>
                 <TableCell className="max-w-[160px] truncate text-muted-foreground">
                   {row.email?.trim() || "—"}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={row.loginEnabled ? "default" : "secondary"}>
+                    {row.loginEnabled ? "Enabled" : "Off"}
+                  </Badge>
                 </TableCell>
                 <TableCell className="text-end">
                   <div className="flex justify-end gap-1">

@@ -106,8 +106,7 @@ function Select<Value, Multiple extends boolean | undefined = false>(
   }
 
   // A single ref keeps the wrapped handler referentially stable while still
-  // reading the latest props synchronously inside the callback. Mutating during
-  // render is safe here because every assignment is idempotent for given props.
+  // reading the latest props synchronously inside the callback.
   const latestRef = React.useRef<Latest>({
     isControlled,
     value: rest.value,
@@ -116,11 +115,19 @@ function Select<Value, Multiple extends boolean | undefined = false>(
     onValueChange: rest.onValueChange,
     lastUncontrolled: isControlled ? undefined : rest.defaultValue,
   })
-  latestRef.current.isControlled = isControlled
-  latestRef.current.value = rest.value
-  latestRef.current.multiple = rest.multiple
-  latestRef.current.isItemEqualToValue = rest.isItemEqualToValue
-  latestRef.current.onValueChange = rest.onValueChange
+  React.useLayoutEffect(() => {
+    latestRef.current.isControlled = isControlled
+    latestRef.current.value = rest.value
+    latestRef.current.multiple = rest.multiple
+    latestRef.current.isItemEqualToValue = rest.isItemEqualToValue
+    latestRef.current.onValueChange = rest.onValueChange
+  }, [
+    isControlled,
+    rest.value,
+    rest.multiple,
+    rest.isItemEqualToValue,
+    rest.onValueChange,
+  ])
 
   const handleValueChange = React.useCallback<NonNullable<RootProps["onValueChange"]>>(
     (nextValue, eventDetails) => {

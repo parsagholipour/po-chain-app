@@ -22,8 +22,20 @@ export type StoreOption = {
   theme: StoreTheme;
 };
 
+export type AppUserType = "internal" | "distributor";
+
+export type AppUserAuthFields = {
+  id: string;
+  realEmail: string | null;
+  realName: string | null;
+  type: AppUserType;
+  saleChannelId: string | null;
+};
+
 export type StoreContext = {
   userId: string;
+  userType: AppUserType;
+  saleChannelId: string | null;
   storeId: string;
   stores: StoreOption[];
   activeStore: StoreOption;
@@ -140,6 +152,7 @@ export async function syncUserWithDefaultStore({
         name,
         realEmail: realEmail ?? null,
         realName: realName ?? null,
+        type: "internal",
       },
       update: {
         email,
@@ -170,6 +183,8 @@ export async function findUserByKeycloakSub(keycloakSub: string) {
       id: true,
       realEmail: true,
       realName: true,
+      type: true,
+      saleChannelId: true,
     },
   });
 }
@@ -181,6 +196,8 @@ export async function findUserById(id: string) {
       id: true,
       realEmail: true,
       realName: true,
+      type: true,
+      saleChannelId: true,
     },
   });
 }

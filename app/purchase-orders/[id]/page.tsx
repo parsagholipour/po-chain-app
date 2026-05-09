@@ -34,6 +34,9 @@ export async function generateMetadata({
       id: parsed.data,
       storeId: storeContext.storeId,
       type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+      ...(storeContext.userType === "distributor"
+        ? { saleChannelId: storeContext.saleChannelId }
+        : {}),
     },
     select: {
       name: true,
