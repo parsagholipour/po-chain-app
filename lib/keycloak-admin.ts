@@ -6,6 +6,8 @@ type KeycloakUserRepresentation = {
   email?: string;
 };
 
+const DISTRIBUTOR_KEYCLOAK_LAST_NAME = "distributor";
+
 type KeycloakAdminLocation = {
   baseUrl: string;
   realm: string;
@@ -146,6 +148,7 @@ async function updateKeycloakUser(
       username: input.email,
       email: input.email,
       firstName: input.name ?? undefined,
+      lastName: DISTRIBUTOR_KEYCLOAK_LAST_NAME,
       enabled: true,
       emailVerified: true,
     }),
@@ -183,10 +186,33 @@ export async function provisionDistributorKeycloakUser(input: {
   email: string;
   name: string | null;
   password?: string | null;
+  existingUserId?: string | null;
 }) {
   const issuer = requiredEnv("AUTH_KEYCLOAK_ISSUER");
   const location = adminLocationFromIssuer(issuer);
   const email = input.email.trim().toLowerCase();
+
+  const existingUserId = input.existingUserId;
+  if (existingUserId) {
+    let updatedExistingUser = false;
+    try {
+      await updateKeycloakUser(location, existingUserId, { email, name: input.name });
+      updatedExistingUser = true;
+    } catch (error) {
+      if (
+        !(error instanceof KeycloakAdminError && (error.status === 404 || error.status === 409))
+      ) {
+        throw error;
+      }
+    }
+
+    if (updatedExistingUser) {
+      if (input.password) {
+        await resetKeycloakPassword(location, existingUserId, input.password);
+      }
+      return { id: existingUserId, created: false };
+    }
+  }
 
   const existing = await findKeycloakUserByEmail(location, email);
   if (existing?.id) {
@@ -203,6 +229,7 @@ export async function provisionDistributorKeycloakUser(input: {
       username: email,
       email,
       firstName: input.name ?? undefined,
+      lastName: DISTRIBUTOR_KEYCLOAK_LAST_NAME,
       enabled: true,
       emailVerified: true,
       credentials: input.password

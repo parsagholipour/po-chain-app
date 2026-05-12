@@ -26,6 +26,25 @@ interface ShippingTableProps {
   readOnly?: boolean;
 }
 
+function shippingDestinationLabel(shipping: ShippingRow) {
+  const cityLine = [
+    shipping.shipToCity,
+    shipping.shipToStateProvince,
+    shipping.shipToPostalCode,
+    shipping.shipToCountry,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return [
+    shipping.shipToRecipientName,
+    shipping.shipToCompanyName,
+    shipping.shipToAddressLine1,
+    cityLine,
+  ]
+    .filter(Boolean)
+    .join(" - ");
+}
+
 export function ShippingTable({
   shippings,
   isPending = false,
@@ -34,7 +53,7 @@ export function ShippingTable({
   readOnly = false,
 }: ShippingTableProps) {
   const showActions = !readOnly && onEdit != null && onDelete != null;
-  const colSpan = showActions ? 9 : 8;
+  const colSpan = showActions ? 10 : 9;
 
   return (
     <div className="rounded-md border">
@@ -46,6 +65,7 @@ export function ShippingTable({
             <TableHead className="text-end">Cost</TableHead>
             <TableHead>DDP</TableHead>
             <TableHead>Partner</TableHead>
+            <TableHead>Destination</TableHead>
             <TableHead>Shipped At</TableHead>
             <TableHead>Linked Orders</TableHead>
             <TableHead>Links</TableHead>
@@ -77,6 +97,12 @@ export function ShippingTable({
               </TableCell>
               <TableCell>
                 {shipping.logisticsPartner?.name || "-"}
+              </TableCell>
+              <TableCell
+                className="max-w-[240px] truncate text-muted-foreground"
+                title={shippingDestinationLabel(shipping) || undefined}
+              >
+                {shippingDestinationLabel(shipping) || "-"}
               </TableCell>
               <TableCell>
                 {shipping.shippedAt

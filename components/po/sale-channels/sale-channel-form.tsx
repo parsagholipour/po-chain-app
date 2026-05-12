@@ -6,6 +6,7 @@ import { z } from "zod";
 import { Controller, useForm, useFormState, useWatch, type Resolver } from "react-hook-form";
 import { uploadFileToStorage } from "@/lib/upload-client";
 import { saleChannelCreateSchema } from "@/lib/validations/master-data";
+import { apiErrorMessage } from "@/lib/api-error-message";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -91,9 +92,18 @@ export function SaleChannelForm({ defaultValues, editingId, onSubmit, onCancel }
     } else {
       logoKey = defaultValues.logoKey ?? null;
     }
-    const entityId = await onSubmit({ ...values, logoKey });
-    if (customFieldsRef.current?.hasFields) {
-      await customFieldsRef.current.save(entityId);
+    let entityId: string;
+    try {
+      entityId = await onSubmit({ ...values, logoKey });
+    } catch {
+      return;
+    }
+    try {
+      if (customFieldsRef.current?.hasFields) {
+        await customFieldsRef.current.save(entityId);
+      }
+    } catch (e) {
+      toast.error(apiErrorMessage(e, "Could not save custom fields"));
     }
   }
 

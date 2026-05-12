@@ -81,6 +81,7 @@ export async function GET(request: Request) {
           logoKey: true,
         },
       },
+      saleChannelLocation: true,
       purchaseOrderShippings: {
         select: {
           shipping: {
@@ -103,6 +104,7 @@ export async function GET(request: Request) {
       status: r.status,
       createdAt: r.createdAt,
       saleChannel: r.saleChannel,
+      saleChannelLocation: r.saleChannelLocation,
       manufacturers: Array.from(
         new Set(
           r.lines
@@ -139,7 +141,7 @@ export async function POST(request: Request) {
   const parsed = stockOrderCreateSchema.safeParse(body);
   if (!parsed.success) return jsonFromZod(parsed.error);
 
-  const { name, documentKey, saleChannelId, lines } = parsed.data;
+  const { name, documentKey, saleChannelId, saleChannelLocationId, lines } = parsed.data;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -183,6 +185,17 @@ export async function POST(request: Request) {
         select: { id: true },
       });
       if (!sc) throw new Error("SALE_CHANNEL_NOT_FOUND");
+      if (saleChannelLocationId) {
+        const location = await tx.saleChannelLocation.findFirst({
+          where: {
+            id: saleChannelLocationId,
+            storeId,
+            saleChannelId,
+          },
+          select: { id: true },
+        });
+        if (!location) throw new Error("SALE_CHANNEL_LOCATION_NOT_FOUND");
+      }
 
       const po = await tx.purchaseOrder.create({
         data: {
@@ -191,6 +204,7 @@ export async function POST(request: Request) {
           documentKey: documentKey ?? null,
           storeId,
           saleChannelId,
+          saleChannelLocationId: saleChannelLocationId ?? null,
           createdById: userId,
         },
       });
@@ -234,6 +248,9 @@ export async function POST(request: Request) {
       }
       if (e.message === "SALE_CHANNEL_NOT_FOUND") {
         return jsonError("Sale channel not found", 400);
+      }
+      if (e.message === "SALE_CHANNEL_LOCATION_NOT_FOUND") {
+        return jsonError("Sale channel location was not found", 400);
       }
       if (e.message.startsWith("Cannot create this stock order")) {
         return jsonError(e.message, 400);

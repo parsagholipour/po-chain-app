@@ -44,10 +44,158 @@ type ShippingValidationDb = {
   warehouseOrder: {
     count(args: { where: { id: { in: string[] }; storeId: string } }): Promise<number>;
   };
+  saleChannelLocation: {
+    findFirst(args: {
+      where: { id: string; storeId: string };
+      select: {
+        id: true;
+        name: true;
+        recipientName: true;
+        companyName: true;
+        phoneNumber: true;
+        email: true;
+        addressLine1: true;
+        addressLine2: true;
+        city: true;
+        stateProvince: true;
+        postalCode: true;
+        country: true;
+        shippingNotes: true;
+        saleChannelId: true;
+      };
+    }): Promise<SaleChannelLocationDestination | null>;
+  };
 };
 
 function uniqueIds(ids: string[] | undefined) {
   return [...new Set(ids ?? [])];
+}
+
+type SaleChannelLocationDestination = {
+  id: string;
+  name: string;
+  recipientName: string;
+  companyName: string | null;
+  phoneNumber: string | null;
+  email: string | null;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  stateProvince: string | null;
+  postalCode: string | null;
+  country: string;
+  shippingNotes: string | null;
+  saleChannelId: string;
+};
+
+const destinationFieldNames = [
+  "shipToLocationName",
+  "shipToRecipientName",
+  "shipToCompanyName",
+  "shipToPhoneNumber",
+  "shipToEmail",
+  "shipToAddressLine1",
+  "shipToAddressLine2",
+  "shipToCity",
+  "shipToStateProvince",
+  "shipToPostalCode",
+  "shipToCountry",
+  "shipToNotes",
+] as const;
+
+type DestinationFieldName = (typeof destinationFieldNames)[number];
+
+type DestinationInput = Partial<Record<DestinationFieldName, string | null>> & {
+  saleChannelLocationId?: string | null;
+};
+
+function hasDestinationSnapshotValue(data: DestinationInput) {
+  return destinationFieldNames.some((field) => {
+    const value = data[field];
+    return typeof value === "string" ? value.trim().length > 0 : value != null;
+  });
+}
+
+function shippingDestinationFromLocation(location: SaleChannelLocationDestination) {
+  return {
+    saleChannelLocationId: location.id,
+    shipToLocationName: location.name,
+    shipToRecipientName: location.recipientName,
+    shipToCompanyName: location.companyName,
+    shipToPhoneNumber: location.phoneNumber,
+    shipToEmail: location.email,
+    shipToAddressLine1: location.addressLine1,
+    shipToAddressLine2: location.addressLine2,
+    shipToCity: location.city,
+    shipToStateProvince: location.stateProvince,
+    shipToPostalCode: location.postalCode,
+    shipToCountry: location.country,
+    shipToNotes: location.shippingNotes,
+  };
+}
+
+async function validateShippingSaleChannelLocation(
+  db: ShippingValidationDb,
+  {
+    storeId,
+    saleChannelLocationId,
+  }: {
+    storeId: string;
+    saleChannelLocationId: string;
+  },
+) {
+  const location = await db.saleChannelLocation.findFirst({
+    where: { id: saleChannelLocationId, storeId },
+    select: {
+      id: true,
+      name: true,
+      recipientName: true,
+      companyName: true,
+      phoneNumber: true,
+      email: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      stateProvince: true,
+      postalCode: true,
+      country: true,
+      shippingNotes: true,
+      saleChannelId: true,
+    },
+  });
+  if (!location) {
+    throw new Error("SALE_CHANNEL_LOCATION_NOT_FOUND");
+  }
+  return location;
+}
+
+async function autoDestinationFromLinkedPurchaseOrders(
+  tx: Prisma.TransactionClient,
+  {
+    storeId,
+    purchaseOrderIds,
+  }: {
+    storeId: string;
+    purchaseOrderIds: string[];
+  },
+) {
+  if (purchaseOrderIds.length === 0) return null;
+  const orders = await tx.purchaseOrder.findMany({
+    where: { id: { in: purchaseOrderIds }, storeId },
+    select: {
+      saleChannelLocationId: true,
+      saleChannelLocation: true,
+    },
+  });
+  if (orders.length !== purchaseOrderIds.length) return null;
+  if (orders.some((order) => !order.saleChannelLocationId || !order.saleChannelLocation)) {
+    return null;
+  }
+  const locationIds = new Set(orders.map((order) => order.saleChannelLocationId));
+  if (locationIds.size !== 1) return null;
+  return orders[0].saleChannelLocation
+    ? shippingDestinationFromLocation(orders[0].saleChannelLocation)
+    : null;
 }
 
 async function validateShippingWrite(
@@ -232,9 +380,54 @@ export async function POST(request: Request) {
         warehouseOrderIds: parsed.data.warehouseOrderIds,
       });
 
+      let shippingData = shippingCreateToPrisma(parsed.data);
+      const hasDestinationSnapshot = hasDestinationSnapshotValue(parsed.data);
+      const explicitLocation = parsed.data.saleChannelLocationId
+        ? await validateShippingSaleChannelLocation(tx, {
+            storeId,
+            saleChannelLocationId: parsed.data.saleChannelLocationId,
+          })
+        : null;
+
+      if (
+        explicitLocation &&
+        (parsed.data.type === "purchase_order" || parsed.data.type === "stock_order") &&
+        purchaseOrderIds.length > 0
+      ) {
+        const linkedOrdersForLocation = await tx.purchaseOrder.count({
+          where: {
+            id: { in: purchaseOrderIds },
+            storeId,
+            saleChannelId: explicitLocation.saleChannelId,
+          },
+        });
+        if (linkedOrdersForLocation !== purchaseOrderIds.length) {
+          throw new Error("SALE_CHANNEL_LOCATION_ORDER_MISMATCH");
+        }
+      }
+
+      if (explicitLocation && !hasDestinationSnapshot) {
+        shippingData = {
+          ...shippingData,
+          ...shippingDestinationFromLocation(explicitLocation),
+        };
+      } else if (
+        !parsed.data.saleChannelLocationId &&
+        !hasDestinationSnapshot &&
+        (parsed.data.type === "purchase_order" || parsed.data.type === "stock_order")
+      ) {
+        const autoDestination = await autoDestinationFromLinkedPurchaseOrders(tx, {
+          storeId,
+          purchaseOrderIds,
+        });
+        if (autoDestination) {
+          shippingData = { ...shippingData, ...autoDestination };
+        }
+      }
+
       const shipping = await tx.shipping.create({
         data: {
-          ...shippingCreateToPrisma(parsed.data),
+          ...shippingData,
           storeId,
           createdById: userId,
         },
@@ -298,6 +491,12 @@ export async function POST(request: Request) {
       }
       if (e.message === "ORDER_NOT_FOUND") {
         return jsonError("One or more linked orders were not found", 400);
+      }
+      if (e.message === "SALE_CHANNEL_LOCATION_NOT_FOUND") {
+        return jsonError("Sale channel location was not found", 400);
+      }
+      if (e.message === "SALE_CHANNEL_LOCATION_ORDER_MISMATCH") {
+        return jsonError("Sale channel location does not match the linked orders", 400);
       }
     }
     const j = jsonFromPrisma(e);

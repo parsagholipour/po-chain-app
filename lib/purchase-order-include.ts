@@ -37,6 +37,7 @@ export const purchaseOrderOsdListInclude = {
 export const purchaseOrderDetailInclude = {
   invoice: true,
   saleChannel: true,
+  saleChannelLocation: true,
   lines: {
     include: purchaseOrderLineApiInclude,
     orderBy: { createdAt: "asc" as const },

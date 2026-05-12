@@ -60,6 +60,12 @@ const optionalTrimmedString = z.preprocess(
   z.string().optional(),
 );
 
+const requiredTrimmedString = (message: string) =>
+  z.preprocess(
+    (value) => (typeof value === "string" ? value.trim() : value),
+    z.string().min(1, message),
+  );
+
 export const saleChannelTypeSchema = z.enum([
   "distributor",
   "amazon",
@@ -112,6 +118,23 @@ export const saleChannelCreateSchema = z.object({
 });
 
 export const saleChannelUpdateSchema = saleChannelCreateSchema.partial();
+
+export const saleChannelLocationCreateSchema = z.object({
+  name: requiredTrimmedString("Name is required"),
+  recipientName: requiredTrimmedString("Recipient name is required"),
+  companyName: nullableOptionalString,
+  phoneNumber: nullableOptionalString,
+  email: nullableOptionalEmail,
+  addressLine1: requiredTrimmedString("Address line 1 is required"),
+  addressLine2: nullableOptionalString,
+  city: requiredTrimmedString("City is required"),
+  stateProvince: nullableOptionalString,
+  postalCode: nullableOptionalString,
+  country: requiredTrimmedString("Country is required"),
+  shippingNotes: nullableOptionalString,
+});
+
+export const saleChannelLocationUpdateSchema = saleChannelLocationCreateSchema.partial();
 
 export const logisticsPartnerCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),

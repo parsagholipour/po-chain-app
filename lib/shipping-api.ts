@@ -46,6 +46,19 @@ type ShippingLike = {
   notes: string | null;
   invoiceDocumentKey: string | null;
   logisticsPartnerId: string | null;
+  saleChannelLocationId: string | null;
+  shipToLocationName: string | null;
+  shipToRecipientName: string | null;
+  shipToCompanyName: string | null;
+  shipToPhoneNumber: string | null;
+  shipToEmail: string | null;
+  shipToAddressLine1: string | null;
+  shipToAddressLine2: string | null;
+  shipToCity: string | null;
+  shipToStateProvince: string | null;
+  shipToPostalCode: string | null;
+  shipToCountry: string | null;
+  shipToNotes: string | null;
   statusLogs?: Array<{
     id: string;
     fromStatus: string;
@@ -76,6 +89,7 @@ type ShippingLike = {
     createdAt: Date;
     updatedAt: Date;
   } | null;
+  saleChannelLocation?: SaleChannelLocationLike;
   manufacturingOrderShippings?: Array<{
     manufacturingOrder: {
       id: string;
@@ -104,6 +118,43 @@ type ShippingLike = {
 };
 
 type MoneyLike = { toNumber(): number } | number | string | null | undefined;
+
+type SaleChannelLocationLike = {
+  id: string;
+  name: string;
+  recipientName: string;
+  companyName: string | null;
+  phoneNumber: string | null;
+  email: string | null;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  stateProvince: string | null;
+  postalCode: string | null;
+  country: string;
+  shippingNotes: string | null;
+  saleChannelId: string;
+} | null;
+
+function saleChannelLocationRefFromPrisma(location: SaleChannelLocationLike) {
+  if (!location) return null;
+  return {
+    id: location.id,
+    name: location.name,
+    recipientName: location.recipientName,
+    companyName: location.companyName,
+    phoneNumber: location.phoneNumber,
+    email: location.email,
+    addressLine1: location.addressLine1,
+    addressLine2: location.addressLine2,
+    city: location.city,
+    stateProvince: location.stateProvince,
+    postalCode: location.postalCode,
+    country: location.country,
+    shippingNotes: location.shippingNotes,
+    saleChannelId: location.saleChannelId,
+  };
+}
 
 function moneyJsonValue(value: MoneyLike) {
   if (value == null) return null;
@@ -170,6 +221,20 @@ export function shippingRowFromPrisma(row: ShippingLike) {
     notes: row.notes ?? null,
     invoiceDocumentKey: row.invoiceDocumentKey ?? null,
     logisticsPartnerId: row.logisticsPartnerId ?? null,
+    saleChannelLocationId: row.saleChannelLocationId ?? null,
+    saleChannelLocation: saleChannelLocationRefFromPrisma(row.saleChannelLocation ?? null),
+    shipToLocationName: row.shipToLocationName ?? null,
+    shipToRecipientName: row.shipToRecipientName ?? null,
+    shipToCompanyName: row.shipToCompanyName ?? null,
+    shipToPhoneNumber: row.shipToPhoneNumber ?? null,
+    shipToEmail: row.shipToEmail ?? null,
+    shipToAddressLine1: row.shipToAddressLine1 ?? null,
+    shipToAddressLine2: row.shipToAddressLine2 ?? null,
+    shipToCity: row.shipToCity ?? null,
+    shipToStateProvince: row.shipToStateProvince ?? null,
+    shipToPostalCode: row.shipToPostalCode ?? null,
+    shipToCountry: row.shipToCountry ?? null,
+    shipToNotes: row.shipToNotes ?? null,
     statusLogs: (row.statusLogs ?? []).map(orderStatusLogFromPrisma),
     logisticsPartner: row.logisticsPartner
       ? {
@@ -259,6 +324,7 @@ export function purchaseOrderDetailFromPrisma(row: PurchaseOrderDetailWithRelati
     lines,
     osds,
     invoice,
+    saleChannelLocation,
     statusLogs,
     warehouseOrderPurchaseOrders,
     ...rest
@@ -273,6 +339,7 @@ export function purchaseOrderDetailFromPrisma(row: PurchaseOrderDetailWithRelati
           documentKey: invoice.documentKey ?? null,
         }
       : null,
+    saleChannelLocation: saleChannelLocationRefFromPrisma(saleChannelLocation),
     lines: lines.map((line) => purchaseOrderLineFromPrisma(line)),
     osds: osds.map(mapPurchaseOrderOsd),
     statusLogs: statusLogs.map(orderStatusLogFromPrisma),

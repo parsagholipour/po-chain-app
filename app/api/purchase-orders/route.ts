@@ -99,6 +99,7 @@ export async function GET(request: Request) {
           logoKey: true,
         },
       },
+      saleChannelLocation: true,
       manufacturingOrderPurchaseOrders: {
         select: {
           manufacturingOrder: {
@@ -146,6 +147,7 @@ export async function GET(request: Request) {
       status: r.status,
       createdAt: r.createdAt,
       saleChannel: r.saleChannel,
+      saleChannelLocation: r.saleChannelLocation,
       manufacturers: isDistributor
         ? []
         : Array.from(
@@ -202,7 +204,7 @@ export async function POST(request: Request) {
   const parsed = purchaseOrderCreateSchema.safeParse(body);
   if (!parsed.success) return jsonFromZod(parsed.error);
 
-  const { name, documentKey, saleChannelId, lines } = parsed.data;
+  const { name, documentKey, saleChannelId, saleChannelLocationId, lines } = parsed.data;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -211,6 +213,19 @@ export async function POST(request: Request) {
       });
       if (!sc) {
         throw new Error("SALE_CHANNEL_NOT_FOUND");
+      }
+      if (saleChannelLocationId) {
+        const location = await tx.saleChannelLocation.findFirst({
+          where: {
+            id: saleChannelLocationId,
+            storeId,
+            saleChannelId,
+          },
+          select: { id: true },
+        });
+        if (!location) {
+          throw new Error("SALE_CHANNEL_LOCATION_NOT_FOUND");
+        }
       }
 
       const productPricingById = new Map<string, { cost: unknown; price: unknown }>();
@@ -255,6 +270,7 @@ export async function POST(request: Request) {
           documentKey: documentKey ?? null,
           storeId,
           saleChannelId,
+          saleChannelLocationId: saleChannelLocationId ?? null,
           createdById: userId,
         },
       });
@@ -291,6 +307,9 @@ export async function POST(request: Request) {
     if (e instanceof Error) {
       if (e.message === "SALE_CHANNEL_NOT_FOUND") {
         return jsonError("Sale channel was not found", 400);
+      }
+      if (e.message === "SALE_CHANNEL_LOCATION_NOT_FOUND") {
+        return jsonError("Sale channel location was not found", 400);
       }
       if (e.message === "PRODUCT_NOT_FOUND") {
         return jsonError("One or more products were not found", 400);

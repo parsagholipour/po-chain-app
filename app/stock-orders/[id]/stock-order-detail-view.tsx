@@ -14,6 +14,7 @@ import type {
   Product,
   PurchaseOrderDetail,
   SaleChannel,
+  SaleChannelLocation,
 } from "@/lib/types/api";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
@@ -87,6 +88,18 @@ export function StockOrderDetailView({ stockOrderId }: { stockOrderId: string })
   const nonDistributorSaleChannelOptions = saleChannelOptions.filter(
     (sc) => sc.type !== "distributor",
   );
+
+  const currentSaleChannelId = po?.saleChannel?.id ?? "";
+  const { data: saleChannelLocations = [], isPending: saleChannelLocationsPending } = useQuery({
+    queryKey: ["sale-channel-locations", currentSaleChannelId],
+    enabled: currentSaleChannelId.length > 0,
+    queryFn: async () => {
+      const { data } = await api.get<SaleChannelLocation[]>(
+        `/api/sale-channels/${currentSaleChannelId}/locations`,
+      );
+      return data;
+    },
+  });
 
   const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: ["manufacturers"] as const,
@@ -372,6 +385,9 @@ export function StockOrderDetailView({ stockOrderId }: { stockOrderId: string })
           await saveStatusLogNote.mutateAsync({ logId, note });
         }}
         onSaleChannelChange={(saleChannelId) => patchSo.mutate({ saleChannelId })}
+        saleChannelLocations={saleChannelLocations}
+        saleChannelLocationsPending={saleChannelLocationsPending}
+        onLocationChange={(saleChannelLocationId) => patchSo.mutate({ saleChannelLocationId })}
         onDocumentUpload={uploadDocument}
         isSaving={patchSo.isPending}
         isDocumentSaving={isDocumentSaving}

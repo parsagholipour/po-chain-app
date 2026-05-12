@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import {
   CustomFieldsRenderer,
@@ -51,6 +51,7 @@ type OrderOption = {
   id: string;
   number: number;
   name: string;
+  saleChannelLocation?: ShippingRow["saleChannelLocation"] | null;
   /** From linked POs / stock orders (manufacturing orders only). */
   linkedSaleChannels?: string[];
 };
@@ -90,6 +91,21 @@ const shippingStatusSelectItems = Object.entries(shippingStatusLabels).map(
   }),
 );
 
+const destinationFieldNames = [
+  "shipToLocationName",
+  "shipToRecipientName",
+  "shipToCompanyName",
+  "shipToPhoneNumber",
+  "shipToEmail",
+  "shipToAddressLine1",
+  "shipToAddressLine2",
+  "shipToCity",
+  "shipToStateProvince",
+  "shipToPostalCode",
+  "shipToCountry",
+  "shipToNotes",
+] as const satisfies readonly (keyof ShippingFormValues)[];
+
 function uniqueIds(ids: string[] | undefined) {
   return [...new Set(ids ?? [])];
 }
@@ -108,6 +124,42 @@ function dateTimeLocalNow() {
   const now = new Date();
   const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000);
   return local.toISOString().slice(0, 16);
+}
+
+function destinationValuesFromLocation(location: NonNullable<ShippingRow["saleChannelLocation"]>) {
+  return {
+    saleChannelLocationId: location.id,
+    shipToLocationName: location.name,
+    shipToRecipientName: location.recipientName,
+    shipToCompanyName: location.companyName ?? "",
+    shipToPhoneNumber: location.phoneNumber ?? "",
+    shipToEmail: location.email ?? "",
+    shipToAddressLine1: location.addressLine1,
+    shipToAddressLine2: location.addressLine2 ?? "",
+    shipToCity: location.city,
+    shipToStateProvince: location.stateProvince ?? "",
+    shipToPostalCode: location.postalCode ?? "",
+    shipToCountry: location.country,
+    shipToNotes: location.shippingNotes ?? "",
+  } satisfies Partial<ShippingFormValues>;
+}
+
+function emptyDestinationValues() {
+  return {
+    saleChannelLocationId: null,
+    shipToLocationName: "",
+    shipToRecipientName: "",
+    shipToCompanyName: "",
+    shipToPhoneNumber: "",
+    shipToEmail: "",
+    shipToAddressLine1: "",
+    shipToAddressLine2: "",
+    shipToCity: "",
+    shipToStateProvince: "",
+    shipToPostalCode: "",
+    shipToCountry: "",
+    shipToNotes: "",
+  } satisfies Partial<ShippingFormValues>;
 }
 
 export function ShippingForm({
@@ -129,6 +181,7 @@ export function ShippingForm({
   const invoiceDocumentInputRef = useRef<HTMLInputElement>(null);
   const [invoiceDocumentFile, setInvoiceDocumentFile] = useState<File | null>(null);
   const [removeStoredInvoiceDocument, setRemoveStoredInvoiceDocument] = useState(false);
+  const [destinationTouched, setDestinationTouched] = useState(Boolean(editingId));
 
   const form = useForm<ShippingFormValues>({
     resolver: zodResolver(shippingCreateSchema) as Resolver<ShippingFormValues>,
@@ -144,6 +197,19 @@ export function ShippingForm({
       notes: defaultValues?.notes ?? "",
       invoiceDocumentKey: defaultValues?.invoiceDocumentKey ?? null,
       logisticsPartnerId: defaultValues?.logisticsPartnerId ?? null,
+      saleChannelLocationId: defaultValues?.saleChannelLocationId ?? null,
+      shipToLocationName: defaultValues?.shipToLocationName ?? "",
+      shipToRecipientName: defaultValues?.shipToRecipientName ?? "",
+      shipToCompanyName: defaultValues?.shipToCompanyName ?? "",
+      shipToPhoneNumber: defaultValues?.shipToPhoneNumber ?? "",
+      shipToEmail: defaultValues?.shipToEmail ?? "",
+      shipToAddressLine1: defaultValues?.shipToAddressLine1 ?? "",
+      shipToAddressLine2: defaultValues?.shipToAddressLine2 ?? "",
+      shipToCity: defaultValues?.shipToCity ?? "",
+      shipToStateProvince: defaultValues?.shipToStateProvince ?? "",
+      shipToPostalCode: defaultValues?.shipToPostalCode ?? "",
+      shipToCountry: defaultValues?.shipToCountry ?? "",
+      shipToNotes: defaultValues?.shipToNotes ?? "",
       manufacturingOrderIds: uniqueIds([
         ...(defaultValues?.manufacturingOrderIds ?? []),
         ...requiredManufacturingOrderIds,
@@ -173,6 +239,10 @@ export function ShippingForm({
     useWatch({ control: form.control, name: "logisticsPartnerId" }) ??
     NO_PARTNER_VALUE;
   const shippedAt = useWatch({ control: form.control, name: "shippedAt" }) ?? null;
+  const saleChannelLocationId =
+    useWatch({ control: form.control, name: "saleChannelLocationId" }) ?? null;
+  const shipToLocationName =
+    useWatch({ control: form.control, name: "shipToLocationName" }) ?? "";
   const selectedManufacturingOrderIds =
     useWatch({ control: form.control, name: "manufacturingOrderIds" }) ?? [];
   const selectedPurchaseOrderIds =
@@ -198,6 +268,57 @@ export function ShippingForm({
       label: partner.name,
     })),
   ];
+  const showDestination = type === "purchase_order" || type === "stock_order";
+  const selectedPurchaseOrders = availablePurchaseOrders.filter((order) =>
+    selectedPurchaseOrderIds.includes(order.id),
+  );
+  const selectedDestinationLocation = (() => {
+    if (selectedPurchaseOrders.length === 0) return null;
+    const locations = selectedPurchaseOrders.map((order) => order.saleChannelLocation ?? null);
+    if (locations.some((location) => !location)) return null;
+    const first = locations[0];
+    if (!first) return null;
+    return locations.every((location) => location?.id === first.id) ? first : null;
+  })();
+
+  const setDestinationValues = useCallback((values: Partial<ShippingFormValues>) => {
+    form.setValue("saleChannelLocationId", values.saleChannelLocationId ?? null, {
+      shouldDirty: true,
+      shouldValidate: false,
+    });
+    for (const field of destinationFieldNames) {
+      form.setValue(field, values[field] ?? "", {
+        shouldDirty: true,
+        shouldValidate: false,
+      });
+    }
+  }, [form]);
+
+  function registerDestinationField(name: (typeof destinationFieldNames)[number]) {
+    const registration = form.register(name);
+    return {
+      ...registration,
+      onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setDestinationTouched(true);
+        void registration.onChange(event);
+      },
+    };
+  }
+
+  useEffect(() => {
+    if (editingId || destinationTouched || !showDestination) return;
+    if (selectedDestinationLocation) {
+      setDestinationValues(destinationValuesFromLocation(selectedDestinationLocation));
+    } else {
+      setDestinationValues(emptyDestinationValues());
+    }
+  }, [
+    destinationTouched,
+    editingId,
+    selectedDestinationLocation,
+    setDestinationValues,
+    showDestination,
+  ]);
 
   function toggleIds(
     currentIds: string[],
@@ -226,8 +347,14 @@ export function ShippingForm({
       invoiceDocumentKey = null;
     }
 
+    const destinationPayload =
+      values.type === "purchase_order" || values.type === "stock_order"
+        ? {}
+        : emptyDestinationValues();
+
     const entityId = await onSubmit({
       ...values,
+      ...destinationPayload,
       invoiceDocumentKey,
       manufacturingOrderIds: uniqueIds([
         ...(values.manufacturingOrderIds ?? []),
@@ -647,6 +774,102 @@ export function ShippingForm({
             <FieldError>{form.formState.errors.purchaseOrderIds?.message}</FieldError>
           </Field>
         )}
+
+        {showDestination ? (
+          <div className="md:col-span-2">
+            <div className="grid gap-4 rounded-lg border border-border/80 p-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <h3 className="text-sm font-medium">Destination</h3>
+                {saleChannelLocationId ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {shipToLocationName || selectedDestinationLocation?.name}
+                  </p>
+                ) : null}
+              </div>
+              <Field data-invalid={!!form.formState.errors.shipToRecipientName}>
+                <FieldLabel htmlFor="sf-ship-recipient">Recipient</FieldLabel>
+                <FieldContent>
+                  <Input id="sf-ship-recipient" {...registerDestinationField("shipToRecipientName")} />
+                  <FieldError errors={[form.formState.errors.shipToRecipientName]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.shipToCompanyName}>
+                <FieldLabel htmlFor="sf-ship-company">Company</FieldLabel>
+                <FieldContent>
+                  <Input id="sf-ship-company" {...registerDestinationField("shipToCompanyName")} />
+                  <FieldError errors={[form.formState.errors.shipToCompanyName]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.shipToPhoneNumber}>
+                <FieldLabel htmlFor="sf-ship-phone">Phone</FieldLabel>
+                <FieldContent>
+                  <Input id="sf-ship-phone" {...registerDestinationField("shipToPhoneNumber")} />
+                  <FieldError errors={[form.formState.errors.shipToPhoneNumber]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.shipToEmail}>
+                <FieldLabel htmlFor="sf-ship-email">Email</FieldLabel>
+                <FieldContent>
+                  <Input id="sf-ship-email" type="email" {...registerDestinationField("shipToEmail")} />
+                  <FieldError errors={[form.formState.errors.shipToEmail]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.shipToAddressLine1} className="md:col-span-2">
+                <FieldLabel htmlFor="sf-ship-address1">Address line 1</FieldLabel>
+                <FieldContent>
+                  <Input id="sf-ship-address1" {...registerDestinationField("shipToAddressLine1")} />
+                  <FieldError errors={[form.formState.errors.shipToAddressLine1]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.shipToAddressLine2} className="md:col-span-2">
+                <FieldLabel htmlFor="sf-ship-address2">Address line 2</FieldLabel>
+                <FieldContent>
+                  <Input id="sf-ship-address2" {...registerDestinationField("shipToAddressLine2")} />
+                  <FieldError errors={[form.formState.errors.shipToAddressLine2]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.shipToCity}>
+                <FieldLabel htmlFor="sf-ship-city">City</FieldLabel>
+                <FieldContent>
+                  <Input id="sf-ship-city" {...registerDestinationField("shipToCity")} />
+                  <FieldError errors={[form.formState.errors.shipToCity]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.shipToStateProvince}>
+                <FieldLabel htmlFor="sf-ship-state">State / Province</FieldLabel>
+                <FieldContent>
+                  <Input id="sf-ship-state" {...registerDestinationField("shipToStateProvince")} />
+                  <FieldError errors={[form.formState.errors.shipToStateProvince]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.shipToPostalCode}>
+                <FieldLabel htmlFor="sf-ship-postal">Postal code</FieldLabel>
+                <FieldContent>
+                  <Input id="sf-ship-postal" {...registerDestinationField("shipToPostalCode")} />
+                  <FieldError errors={[form.formState.errors.shipToPostalCode]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.shipToCountry}>
+                <FieldLabel htmlFor="sf-ship-country">Country</FieldLabel>
+                <FieldContent>
+                  <Input id="sf-ship-country" {...registerDestinationField("shipToCountry")} />
+                  <FieldError errors={[form.formState.errors.shipToCountry]} />
+                </FieldContent>
+              </Field>
+              <Field data-invalid={!!form.formState.errors.shipToNotes} className="md:col-span-2">
+                <FieldLabel htmlFor="sf-ship-destination-notes">Destination notes</FieldLabel>
+                <FieldContent>
+                  <Textarea
+                    id="sf-ship-destination-notes"
+                    rows={3}
+                    {...registerDestinationField("shipToNotes")}
+                  />
+                  <FieldError errors={[form.formState.errors.shipToNotes]} />
+                </FieldContent>
+              </Field>
+            </div>
+          </div>
+        ) : null}
 
         <CustomFieldsRenderer
           ref={customFieldsRef}

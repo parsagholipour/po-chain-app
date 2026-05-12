@@ -14,17 +14,27 @@ import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { useConfirm } from "@/components/confirm-provider";
 import type { SaleChannel } from "@/lib/types/api";
 import { saleChannelTypeLabels } from "@/lib/po/sale-channel-labels";
-import { Pencil, Trash2 } from "lucide-react";
+import { MapPinned, Pencil, Trash2 } from "lucide-react";
 
 type Props = {
   rows: SaleChannel[];
   isPending: boolean;
+  canManageSaleChannels?: boolean;
+  onLocations: (row: SaleChannel) => void;
   onEdit: (row: SaleChannel) => void;
   onDelete: (row: SaleChannel) => void;
 };
 
-export function SaleChannelsTable({ rows, isPending, onEdit, onDelete }: Props) {
+export function SaleChannelsTable({
+  rows,
+  isPending,
+  canManageSaleChannels = true,
+  onLocations,
+  onEdit,
+  onDelete,
+}: Props) {
   const confirm = useConfirm();
+  const columnCount = canManageSaleChannels ? 7 : 6;
 
   return (
     <Table>
@@ -35,20 +45,20 @@ export function SaleChannelsTable({ rows, isPending, onEdit, onDelete }: Props) 
             <TableHead>Type</TableHead>
             <TableHead className="max-w-[140px]">Contact number</TableHead>
             <TableHead className="max-w-[160px]">Email</TableHead>
-            <TableHead>Login</TableHead>
-            <TableHead className="w-[120px] text-end">Actions</TableHead>
+            {canManageSaleChannels ? <TableHead>Login</TableHead> : null}
+            <TableHead className="w-[156px] text-end">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {isPending ? (
             <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
                 Loading…
               </TableCell>
             </TableRow>
           ) : rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+              <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
                 No sale channels yet.
               </TableCell>
             </TableRow>
@@ -72,13 +82,26 @@ export function SaleChannelsTable({ rows, isPending, onEdit, onDelete }: Props) 
                 <TableCell className="max-w-[160px] truncate text-muted-foreground">
                   {row.email?.trim() || "—"}
                 </TableCell>
-                <TableCell>
-                  <Badge variant={row.loginEnabled ? "default" : "secondary"}>
-                    {row.loginEnabled ? "Enabled" : "Off"}
-                  </Badge>
-                </TableCell>
+                {canManageSaleChannels ? (
+                  <TableCell>
+                    <Badge variant={row.loginEnabled ? "default" : "secondary"}>
+                      {row.loginEnabled ? "Enabled" : "Off"}
+                    </Badge>
+                  </TableCell>
+                ) : null}
                 <TableCell className="text-end">
                   <div className="flex justify-end gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => onLocations(row)}
+                      aria-label="Locations"
+                    >
+                      <MapPinned className="size-4" />
+                    </Button>
+                    {canManageSaleChannels ? (
+                      <>
                     <Button
                       type="button"
                       variant="ghost"
@@ -107,6 +130,8 @@ export function SaleChannelsTable({ rows, isPending, onEdit, onDelete }: Props) 
                     >
                       <Trash2 className="size-4" />
                     </Button>
+                      </>
+                    ) : null}
                   </div>
                 </TableCell>
               </TableRow>

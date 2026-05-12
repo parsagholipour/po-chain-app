@@ -27,6 +27,7 @@ type OrderOption = {
   id: string;
   number: number;
   name: string;
+  saleChannelLocation?: ShippingRow["saleChannelLocation"] | null;
   linkedSaleChannels?: string[];
 };
 
@@ -225,6 +226,19 @@ export function ShippingUpsertDialog({
         notes: shipping.notes,
         invoiceDocumentKey: shipping.invoiceDocumentKey,
         logisticsPartnerId: shipping.logisticsPartnerId,
+        saleChannelLocationId: shipping.saleChannelLocationId,
+        shipToLocationName: shipping.shipToLocationName,
+        shipToRecipientName: shipping.shipToRecipientName,
+        shipToCompanyName: shipping.shipToCompanyName,
+        shipToPhoneNumber: shipping.shipToPhoneNumber,
+        shipToEmail: shipping.shipToEmail,
+        shipToAddressLine1: shipping.shipToAddressLine1,
+        shipToAddressLine2: shipping.shipToAddressLine2,
+        shipToCity: shipping.shipToCity,
+        shipToStateProvince: shipping.shipToStateProvince,
+        shipToPostalCode: shipping.shipToPostalCode,
+        shipToCountry: shipping.shipToCountry,
+        shipToNotes: shipping.shipToNotes,
         manufacturingOrderIds: shipping.orders
           .filter((o) => o.orderType === "manufacturing_order")
           .map((o) => o.id),

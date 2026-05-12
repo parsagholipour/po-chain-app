@@ -8,7 +8,7 @@ import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { uploadFileToStorage } from "@/lib/upload-client";
 import { useWizardDocumentUpload } from "@/lib/use-wizard-document-upload";
-import type { Product, SaleChannel } from "@/lib/types/api";
+import type { Product, SaleChannel, SaleChannelLocation } from "@/lib/types/api";
 import { WizardStepBasics, documentDisplayName } from "@/components/po/purchase-order-wizard/wizard-step-basics";
 import {
   WizardStepLines,
@@ -43,6 +43,7 @@ export function NewStockOrderWizard() {
     onRetryDocUpload,
   } = useWizardDocumentUpload("purchase-orders");
   const [saleChannelId, setSaleChannelId] = useState("");
+  const [saleChannelLocationId, setSaleChannelLocationId] = useState<string | null>(null);
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [isFinishing, setIsFinishing] = useState(false);
 
@@ -57,6 +58,17 @@ export function NewStockOrderWizard() {
   const nonDistributorChannels = saleChannels.filter(
     (sc) => sc.type !== "distributor",
   );
+
+  const { data: saleChannelLocations = [], isPending: saleChannelLocationsPending } = useQuery({
+    queryKey: ["sale-channel-locations", saleChannelId],
+    enabled: saleChannelId.length > 0,
+    queryFn: async () => {
+      const { data } = await api.get<SaleChannelLocation[]>(
+        `/api/sale-channels/${saleChannelId}/locations`,
+      );
+      return data;
+    },
+  });
 
   useEffect(() => {
     if (saleChannelId === "" && nonDistributorChannels.length === 1) {
@@ -78,6 +90,7 @@ export function NewStockOrderWizard() {
         name: name.trim(),
         documentKey: vars.documentKey,
         saleChannelId,
+        saleChannelLocationId,
         lines: filledLines(lines).map((l) => ({
           productId: l.productId,
           quantity: l.quantity,
@@ -172,6 +185,8 @@ export function NewStockOrderWizard() {
 
   const saleChannelName =
     nonDistributorChannels.find((s) => s.id === saleChannelId)?.name ?? null;
+  const saleChannelLocationName =
+    saleChannelLocations.find((location) => location.id === saleChannelLocationId)?.name ?? null;
   const productAssetIssues = lineDraftProductAssetIssues(lines, products);
   const documentName = documentDisplayName(documentKey, docFile);
   const hasPdfPreview =
@@ -245,7 +260,14 @@ export function NewStockOrderWizard() {
               isPending={saleChannelsPending}
               saleChannels={nonDistributorChannels}
               value={saleChannelId}
-              onChange={setSaleChannelId}
+              onChange={(nextSaleChannelId) => {
+                setSaleChannelId(nextSaleChannelId);
+                setSaleChannelLocationId(null);
+              }}
+              locations={saleChannelLocations}
+              locationValue={saleChannelLocationId}
+              onLocationChange={setSaleChannelLocationId}
+              locationsPending={saleChannelLocationsPending}
             />
           ) : null}
 
@@ -270,6 +292,7 @@ export function NewStockOrderWizard() {
               documentKey={documentKey}
               documentFile={docFile}
               saleChannelName={saleChannelName}
+              saleChannelLocationName={saleChannelLocationName}
               manufacturerNames={[]}
               lines={filledLines(lines)}
               products={products}

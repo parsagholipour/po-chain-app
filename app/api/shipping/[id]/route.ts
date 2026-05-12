@@ -192,6 +192,42 @@ export async function PATCH(
         }
       }
 
+      const nextManufacturingOrderIds =
+        parsed.data.manufacturingOrderIds !== undefined
+          ? manufacturingOrderIds
+          : existingManufacturingOrderIds;
+      const nextPurchaseOrderIds =
+        parsed.data.purchaseOrderIds !== undefined ? purchaseOrderIds : existingPurchaseOrderIds;
+      const nextWarehouseOrderIds =
+        parsed.data.warehouseOrderIds !== undefined
+          ? warehouseOrderIds
+          : existingWarehouseOrderIds;
+
+      if (parsed.data.saleChannelLocationId) {
+        const location = await tx.saleChannelLocation.findFirst({
+          where: { id: parsed.data.saleChannelLocationId, storeId },
+          select: { saleChannelId: true },
+        });
+        if (!location) {
+          throw new Error("SALE_CHANNEL_LOCATION_NOT_FOUND");
+        }
+        if (
+          (existing.type === "purchase_order" || existing.type === "stock_order") &&
+          nextPurchaseOrderIds.length > 0
+        ) {
+          const linkedOrdersForLocation = await tx.purchaseOrder.count({
+            where: {
+              id: { in: nextPurchaseOrderIds },
+              storeId,
+              saleChannelId: location.saleChannelId,
+            },
+          });
+          if (linkedOrdersForLocation !== nextPurchaseOrderIds.length) {
+            throw new Error("SALE_CHANNEL_LOCATION_ORDER_MISMATCH");
+          }
+        }
+      }
+
       const shippingData = { ...parsed.data };
       delete shippingData.manufacturingOrderIds;
       delete shippingData.purchaseOrderIds;
@@ -258,17 +294,6 @@ export async function PATCH(
         }
       }
 
-      const nextManufacturingOrderIds =
-        parsed.data.manufacturingOrderIds !== undefined
-          ? manufacturingOrderIds
-          : existingManufacturingOrderIds;
-      const nextPurchaseOrderIds =
-        parsed.data.purchaseOrderIds !== undefined ? purchaseOrderIds : existingPurchaseOrderIds;
-      const nextWarehouseOrderIds =
-        parsed.data.warehouseOrderIds !== undefined
-          ? warehouseOrderIds
-          : existingWarehouseOrderIds;
-
       await reconcileLinkedOrderStatusesForShipping(tx, {
         storeId,
         manufacturingOrderIds: uniqueIds([
@@ -303,6 +328,12 @@ export async function PATCH(
       }
       if (e.message === "ORDER_NOT_FOUND") {
         return jsonError("One or more linked orders were not found", 400);
+      }
+      if (e.message === "SALE_CHANNEL_LOCATION_NOT_FOUND") {
+        return jsonError("Sale channel location was not found", 400);
+      }
+      if (e.message === "SALE_CHANNEL_LOCATION_ORDER_MISMATCH") {
+        return jsonError("Sale channel location does not match the linked orders", 400);
       }
     }
     const j = jsonFromPrisma(e);

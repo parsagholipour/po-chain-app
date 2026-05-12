@@ -61,13 +61,19 @@ export async function PATCH(
     return jsonError("No fields to update", 400);
   }
 
-  const { saleChannelId, invoice, ...scalarRest } = parsed.data;
+  const { saleChannelId, saleChannelLocationId, invoice, ...scalarRest } = parsed.data;
 
   try {
     await prisma.$transaction(async (tx) => {
       const existing = await tx.purchaseOrder.findFirst({
         where: { id: pid.data.id, storeId, type: PURCHASE_ORDER_TYPE_STOCK },
-        select: { id: true, invoiceId: true, status: true },
+        select: {
+          id: true,
+          invoiceId: true,
+          status: true,
+          saleChannelId: true,
+          saleChannelLocation: { select: { saleChannelId: true } },
+        },
       });
       if (!existing) {
         throw new Error("SO_NOT_FOUND");
@@ -81,6 +87,34 @@ export async function PATCH(
         if (!sc) {
           throw new Error("SALE_CHANNEL_NOT_FOUND");
         }
+      }
+
+      const nextSaleChannelId = saleChannelId ?? existing.saleChannelId;
+      const locationData: { saleChannelLocationId?: string | null } = {};
+      if (saleChannelLocationId !== undefined) {
+        if (saleChannelLocationId) {
+          if (!nextSaleChannelId) {
+            throw new Error("SALE_CHANNEL_LOCATION_NOT_FOUND");
+          }
+          const location = await tx.saleChannelLocation.findFirst({
+            where: {
+              id: saleChannelLocationId,
+              storeId,
+              saleChannelId: nextSaleChannelId,
+            },
+            select: { id: true },
+          });
+          if (!location) {
+            throw new Error("SALE_CHANNEL_LOCATION_NOT_FOUND");
+          }
+        }
+        locationData.saleChannelLocationId = saleChannelLocationId;
+      } else if (
+        saleChannelId !== undefined &&
+        existing.saleChannelLocation &&
+        existing.saleChannelLocation.saleChannelId !== saleChannelId
+      ) {
+        locationData.saleChannelLocationId = null;
       }
 
       if (invoice) {
@@ -108,6 +142,7 @@ export async function PATCH(
       const data = {
         ...scalarRest,
         ...(saleChannelId !== undefined ? { saleChannelId } : {}),
+        ...locationData,
       };
       if (Object.keys(data).length > 0) {
         await tx.purchaseOrder.update({
@@ -139,6 +174,9 @@ export async function PATCH(
     }
     if (e instanceof Error && e.message === "SALE_CHANNEL_NOT_FOUND") {
       return jsonError("Sale channel was not found", 400);
+    }
+    if (e instanceof Error && e.message === "SALE_CHANNEL_LOCATION_NOT_FOUND") {
+      return jsonError("Sale channel location was not found", 400);
     }
     const j = jsonFromPrisma(e);
     if (j) return j;

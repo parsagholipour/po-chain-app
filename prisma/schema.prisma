@@ -140,6 +140,7 @@ model Store {
   manufacturers                        Manufacturer[]
   warehouses                           Warehouse[]
   saleChannels                         SaleChannel[]
+  saleChannelLocations                 SaleChannelLocation[]
   products                             Product[]
   invoices                             Invoice[]
   purchaseOrders                       PurchaseOrder[]
@@ -197,6 +198,7 @@ model User {
   manufacturersCreated                        Manufacturer[]                        @relation("ManufacturerCreatedBy")
   warehousesCreated                           Warehouse[]                           @relation("WarehouseCreatedBy")
   saleChannelsCreated                         SaleChannel[]                         @relation("SaleChannelCreatedBy")
+  saleChannelLocationsCreated                 SaleChannelLocation[]                 @relation("SaleChannelLocationCreatedBy")
   productsCreated                             Product[]                             @relation("ProductCreatedBy")
   invoicesCreated                             Invoice[]                             @relation("InvoiceCreatedBy")
   purchaseOrdersCreated                       PurchaseOrder[]                       @relation("PurchaseOrderCreatedBy")
@@ -282,9 +284,40 @@ model SaleChannel {
 
   purchaseOrders PurchaseOrder[]
   warehouses     Warehouse[]
-  loginUser      User?           @relation("SaleChannelLoginUser")
+  locations      SaleChannelLocation[]
+  loginUser      User?                 @relation("SaleChannelLoginUser")
 
   @@index([storeId, type, name])
+  @@index([storeId, createdAt])
+}
+
+model SaleChannelLocation {
+  id            String      @id @default(uuid()) @db.Uuid
+  name          String
+  recipientName String
+  companyName   String?
+  phoneNumber   String?
+  email         String?
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  stateProvince String?
+  postalCode    String?
+  country       String
+  shippingNotes String?
+  saleChannelId String      @db.Uuid
+  saleChannel   SaleChannel @relation(fields: [saleChannelId], references: [id], onDelete: Restrict)
+  storeId       String      @db.Uuid
+  store         Store       @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  createdById   String      @db.Uuid
+  createdBy     User        @relation("SaleChannelLocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+
+  purchaseOrders PurchaseOrder[]
+  shippings      Shipping[]
+
+  @@index([storeId, saleChannelId, name])
   @@index([storeId, createdAt])
 }
 
@@ -406,22 +439,24 @@ model Invoice {
 }
 
 model PurchaseOrder {
-  id            String              @id @default(uuid()) @db.Uuid
-  number        Int                 @unique @default(autoincrement())
-  name          String
-  type          PurchaseOrderType   @default(distributor)
-  status        PurchaseOrderStatus @default(open)
-  invoiceId     String?             @unique @db.Uuid
-  invoice       Invoice?            @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  documentKey   String?
-  saleChannelId String?             @db.Uuid
-  saleChannel   SaleChannel?        @relation(fields: [saleChannelId], references: [id], onDelete: Restrict)
-  storeId       String              @db.Uuid
-  store         Store               @relation(fields: [storeId], references: [id], onDelete: Restrict)
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  createdById   String              @db.Uuid
-  createdBy     User                @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  id                    String               @id @default(uuid()) @db.Uuid
+  number                Int                  @unique @default(autoincrement())
+  name                  String
+  type                  PurchaseOrderType    @default(distributor)
+  status                PurchaseOrderStatus  @default(open)
+  invoiceId             String?              @unique @db.Uuid
+  invoice               Invoice?             @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  documentKey           String?
+  saleChannelId         String?              @db.Uuid
+  saleChannel           SaleChannel?         @relation(fields: [saleChannelId], references: [id], onDelete: Restrict)
+  saleChannelLocationId String?              @db.Uuid
+  saleChannelLocation   SaleChannelLocation? @relation(fields: [saleChannelLocationId], references: [id], onDelete: Restrict)
+  storeId               String               @db.Uuid
+  store                 Store                @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  createdById           String               @db.Uuid
+  createdBy             User                 @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   lines                            PurchaseOrderLine[]
   manufacturingOrderPurchaseOrders ManufacturingOrderPurchaseOrder[]
@@ -434,6 +469,7 @@ model PurchaseOrder {
   @@index([storeId, type, status, updatedAt])
   @@index([storeId, number])
   @@index([storeId, saleChannelId])
+  @@index([storeId, saleChannelLocationId])
   @@index([storeId, createdAt])
   @@index([storeId, invoiceId])
 }
@@ -655,24 +691,38 @@ model LogisticsPartner {
 }
 
 model Shipping {
-  id                 String            @id @default(uuid()) @db.Uuid
-  type               ShippingType
-  status             ShippingStatus    @default(pending)
-  cost               Decimal?          @db.Decimal(12, 2)
-  deliveryDutiesPaid Boolean           @default(false)
-  trackingNumber     String
-  shippedAt          DateTime?
-  trackingLink       String?
-  notes              String?
-  invoiceDocumentKey String?
-  logisticsPartnerId String?           @db.Uuid
-  logisticsPartner   LogisticsPartner? @relation(fields: [logisticsPartnerId], references: [id], onDelete: SetNull)
-  storeId            String            @db.Uuid
-  store              Store             @relation(fields: [storeId], references: [id], onDelete: Restrict)
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
-  createdById        String            @db.Uuid
-  createdBy          User              @relation("ShippingCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  id                    String               @id @default(uuid()) @db.Uuid
+  type                  ShippingType
+  status                ShippingStatus       @default(pending)
+  cost                  Decimal?             @db.Decimal(12, 2)
+  deliveryDutiesPaid    Boolean              @default(false)
+  trackingNumber        String
+  shippedAt             DateTime?
+  trackingLink          String?
+  notes                 String?
+  invoiceDocumentKey    String?
+  logisticsPartnerId    String?              @db.Uuid
+  logisticsPartner      LogisticsPartner?    @relation(fields: [logisticsPartnerId], references: [id], onDelete: SetNull)
+  saleChannelLocationId String?              @db.Uuid
+  saleChannelLocation   SaleChannelLocation? @relation(fields: [saleChannelLocationId], references: [id], onDelete: SetNull)
+  shipToLocationName    String?
+  shipToRecipientName   String?
+  shipToCompanyName     String?
+  shipToPhoneNumber     String?
+  shipToEmail           String?
+  shipToAddressLine1    String?
+  shipToAddressLine2    String?
+  shipToCity            String?
+  shipToStateProvince   String?
+  shipToPostalCode      String?
+  shipToCountry         String?
+  shipToNotes           String?
+  storeId               String               @db.Uuid
+  store                 Store                @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  createdById           String               @db.Uuid
+  createdBy             User                 @relation("ShippingCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   manufacturingOrderShippings ManufacturingOrderShipping[]
   purchaseOrderShippings      PurchaseOrderShipping[]
@@ -681,6 +731,7 @@ model Shipping {
 
   @@index([storeId, type, status])
   @@index([storeId, logisticsPartnerId])
+  @@index([storeId, saleChannelLocationId])
   @@index([storeId, createdAt])
   @@index([storeId, shippedAt])
 }

@@ -23,6 +23,7 @@ export const purchaseOrderCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   documentKey: z.string().min(1).nullable().optional(),
   saleChannelId: z.uuid(),
+  saleChannelLocationId: z.uuid().nullable().optional(),
   lines: z
     .array(
       z.object({
@@ -38,6 +39,7 @@ export const purchaseOrderPatchSchema = z.object({
   status: purchaseOrderStatusSchema.optional(),
   documentKey: z.string().min(1).nullable().optional(),
   saleChannelId: z.uuid().optional(),
+  saleChannelLocationId: z.uuid().nullable().optional(),
   invoice: invoiceUpsertSchema.optional(),
 });
 
@@ -45,6 +47,7 @@ export const stockOrderCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
   documentKey: z.string().min(1).nullable().optional(),
   saleChannelId: z.uuid(),
+  saleChannelLocationId: z.uuid().nullable().optional(),
   lines: z
     .array(
       z.object({
@@ -60,6 +63,7 @@ export const stockOrderPatchSchema = z.object({
   status: purchaseOrderStatusSchema.optional(),
   documentKey: z.string().min(1).nullable().optional(),
   saleChannelId: z.uuid().optional(),
+  saleChannelLocationId: z.uuid().nullable().optional(),
   invoice: invoiceUpsertSchema.optional(),
 });
 

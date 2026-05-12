@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { PurchaseOrderDetail, SaleChannel } from "@/lib/types/api";
+import type { PurchaseOrderDetail, SaleChannel, SaleChannelLocation } from "@/lib/types/api";
 import { saleChannelTypeLabels } from "@/lib/po/sale-channel-labels";
 import {
   distributorPoStatusLabels,
@@ -43,6 +43,7 @@ const poOrderStatusSelectItems = distributorPoStatuses.map((s) => ({
   value: s,
   label: distributorPoStatusLabels[s] ?? s,
 }));
+const NO_LOCATION_ID = "none";
 
 function poOrderStatusItemsForValue(currentStatus: string) {
   if ((distributorPoStatuses as readonly string[]).includes(currentStatus)) {
@@ -65,6 +66,9 @@ type Props = {
   /** Distributor PO only — omit for stock orders */
   saleChannelOptions?: SaleChannel[];
   onSaleChannelChange?: (saleChannelId: string) => void;
+  saleChannelLocations?: SaleChannelLocation[];
+  saleChannelLocationsPending?: boolean;
+  onLocationChange?: (locationId: string | null) => void;
   onDocumentUpload?: (file: File) => Promise<void>;
   isSaving?: boolean;
   isDocumentSaving?: boolean;
@@ -77,6 +81,9 @@ export function PoDetailHeader({
   statusLogs,
   saleChannelOptions = [],
   onSaleChannelChange,
+  saleChannelLocations = [],
+  saleChannelLocationsPending = false,
+  onLocationChange,
   onDocumentUpload,
   onStatusChange,
   onSaveStatusLogNote,
@@ -121,12 +128,23 @@ export function PoDetailHeader({
   const lineCount = po.lines.length;
   const moCount = po.manufacturingOrderPurchaseOrders.length;
   const showSaleChannel = po.saleChannel != null && onSaleChannelChange != null;
+  const showLocation = po.saleChannel != null && onLocationChange != null;
   const documentInputId = isStock ? "stock-order-document" : "po-document";
   const currentDocumentName = storageObjectDisplayName(po.documentKey);
   const visibleDocumentName = pendingDocumentName ?? currentDocumentName;
   const isDocumentBusy = isSaving || isDocumentSaving || isDeleting;
   const shipCount = po.shippings.length;
   const canEditStatus = onStatusChange != null;
+  const locationItems = useMemo(
+    () => [
+      { value: NO_LOCATION_ID, label: "No location" },
+      ...saleChannelLocations.map((location) => ({
+        value: location.id,
+        label: location.name,
+      })),
+    ],
+    [saleChannelLocations],
+  );
 
   function handleDocumentChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
@@ -392,6 +410,37 @@ export function PoDetailHeader({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          ) : null}
+          {showLocation ? (
+            <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+              <Label htmlFor="po-sale-channel-location" className="text-muted-foreground sm:shrink-0">
+                Location
+              </Label>
+              <Select
+                value={po.saleChannelLocationId ?? NO_LOCATION_ID}
+                items={locationItems}
+                disabled={isSaving || saleChannelLocationsPending}
+                onValueChange={(v) => {
+                  onLocationChange(v === NO_LOCATION_ID ? null : v);
+                }}
+              >
+                <SelectTrigger
+                  id="po-sale-channel-location"
+                  className="w-[min(100%,280px)] sm:w-[260px]"
+                  aria-busy={isSaving || saleChannelLocationsPending}
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_LOCATION_ID}>No location</SelectItem>
+                  {saleChannelLocations.map((location) => (
+                    <SelectItem key={location.id} value={location.id}>
+                      {location.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           ) : null}
         </div>

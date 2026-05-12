@@ -26,6 +26,25 @@ type Props = {
   readOnly?: boolean;
 };
 
+function shippingDestinationLabel(shipping: PoShippingRow) {
+  const cityLine = [
+    shipping.shipToCity,
+    shipping.shipToStateProvince,
+    shipping.shipToPostalCode,
+    shipping.shipToCountry,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return [
+    shipping.shipToRecipientName,
+    shipping.shipToCompanyName,
+    shipping.shipToAddressLine1,
+    cityLine,
+  ]
+    .filter(Boolean)
+    .join(" - ");
+}
+
 export function PoShipmentsSection({
   shippings,
   orderType,
@@ -121,6 +140,11 @@ export function PoShipmentsSection({
                         ? new Date(shipping.shippedAt).toLocaleString()
                         : "Not shipped"}
                     </p>
+                    {shippingDestinationLabel(shipping) ? (
+                      <p className="max-w-2xl text-muted-foreground">
+                        {shippingDestinationLabel(shipping)}
+                      </p>
+                    ) : null}
                     <div className="flex flex-wrap items-center gap-3">
                       {shipping.trackingLink ? (
                         <a

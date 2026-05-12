@@ -105,6 +105,7 @@ type Props = {
   /** Selected file, when the wizard still has the browser File available. */
   documentFile?: File | null;
   saleChannelName: string | null;
+  saleChannelLocationName?: string | null;
   manufacturerNames: string[];
   lines: LineDraft[];
   products: Product[];
@@ -121,6 +122,7 @@ export function WizardStepReview({
   documentKey = null,
   documentFile = null,
   saleChannelName,
+  saleChannelLocationName = null,
   manufacturerNames,
   lines,
   products,
@@ -183,10 +185,16 @@ export function WizardStepReview({
         )}
       </div>
       {hideSaleChannel ? null : (
-        <div>
-          <span className="text-muted-foreground">Sale channel: </span>
-          {saleChannelName ?? "None"}
-        </div>
+        <>
+          <div>
+            <span className="text-muted-foreground">Sale channel: </span>
+            {saleChannelName ?? "None"}
+          </div>
+          <div>
+            <span className="text-muted-foreground">Location: </span>
+            {saleChannelLocationName ?? "None"}
+          </div>
+        </>
       )}
       {hideManufacturers ? null : (
         <div>

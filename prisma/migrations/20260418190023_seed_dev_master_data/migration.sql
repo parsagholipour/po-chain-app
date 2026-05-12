@@ -91,6 +91,37 @@ VALUES
     '4e5db5c0-0cc8-4e6a-8d40-cc5ce5131c13'
   );
 
+INSERT INTO "ProductCategory" ("id", "name", "storeId", "updatedAt", "createdById")
+VALUES
+  (
+    'd0000001-0000-4000-8000-000000000001',
+    'Widgets',
+    '4e5db5c0-0cc8-4e6a-8d40-cc5ce5131c13',
+    CURRENT_TIMESTAMP,
+    '00000000-0000-4000-8000-000000000001'
+  ),
+  (
+    'd0000001-0000-4000-8000-000000000002',
+    'Gadgets',
+    '4e5db5c0-0cc8-4e6a-8d40-cc5ce5131c13',
+    CURRENT_TIMESTAMP,
+    '00000000-0000-4000-8000-000000000001'
+  ),
+  (
+    'd0000001-0000-4000-8000-000000000003',
+    'Home Textiles',
+    '4e5db5c0-0cc8-4e6a-8d40-cc5ce5131c13',
+    CURRENT_TIMESTAMP,
+    '00000000-0000-4000-8000-000000000001'
+  ),
+  (
+    'd0000001-0000-4000-8000-000000000004',
+    'Cables',
+    '4e5db5c0-0cc8-4e6a-8d40-cc5ce5131c13',
+    CURRENT_TIMESTAMP,
+    '00000000-0000-4000-8000-000000000001'
+  );
+
 INSERT INTO "Product" (
   "id",
   "name",
@@ -102,6 +133,7 @@ INSERT INTO "Product" (
   "packagingKey",
   "storeId",
   "defaultManufacturerId",
+  "categoryId",
   "verified",
   "updatedAt",
   "createdById"
@@ -118,6 +150,7 @@ VALUES
     'products/3fd226b8-f335-43fb-9de5-f123266b11fe-images-1-.png?width=206&height=245',
     '4e5db5c0-0cc8-4e6a-8d40-cc5ce5131c13',
     'a0000001-0000-4000-8000-000000000001',
+    'd0000001-0000-4000-8000-000000000001',
     true,
     CURRENT_TIMESTAMP,
     '00000000-0000-4000-8000-000000000001'
@@ -133,6 +166,7 @@ VALUES
     'products/3fd226b8-f335-43fb-9de5-f123266b11fe-images-1-.png?width=206&height=245',
     '4e5db5c0-0cc8-4e6a-8d40-cc5ce5131c13',
     'a0000001-0000-4000-8000-000000000001',
+    'd0000001-0000-4000-8000-000000000001',
     true,
     CURRENT_TIMESTAMP,
     '00000000-0000-4000-8000-000000000001'
@@ -148,6 +182,7 @@ VALUES
     'products/3fd226b8-f335-43fb-9de5-f123266b11fe-images-1-.png?width=206&height=245',
     '4e5db5c0-0cc8-4e6a-8d40-cc5ce5131c13',
     'a0000001-0000-4000-8000-000000000002',
+    'd0000001-0000-4000-8000-000000000002',
     true,
     CURRENT_TIMESTAMP,
     '00000000-0000-4000-8000-000000000001'
@@ -163,6 +198,7 @@ VALUES
     'products/3fd226b8-f335-43fb-9de5-f123266b11fe-images-1-.png?width=206&height=245',
     '4e5db5c0-0cc8-4e6a-8d40-cc5ce5131c13',
     'a0000001-0000-4000-8000-000000000003',
+    'd0000001-0000-4000-8000-000000000003',
     true,
     CURRENT_TIMESTAMP,
     '00000000-0000-4000-8000-000000000001'
@@ -178,6 +214,7 @@ VALUES
     'products/3fd226b8-f335-43fb-9de5-f123266b11fe-images-1-.png?width=206&height=245',
     '4e5db5c0-0cc8-4e6a-8d40-cc5ce5131c13',
     'a0000001-0000-4000-8000-000000000002',
+    'd0000001-0000-4000-8000-000000000004',
     true,
     CURRENT_TIMESTAMP,
     '00000000-0000-4000-8000-000000000001'

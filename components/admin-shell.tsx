@@ -16,6 +16,7 @@ import {
   Factory,
   FileText,
   LayoutDashboard,
+  MapPinned,
   Menu,
   Package,
   Radio,
@@ -143,6 +144,8 @@ const distributorNav: readonly NavItem[] = [
     label: "Purchase orders",
     icon: ClipboardList,
   },
+  { kind: "link", href: "/products", label: "Products", icon: Boxes },
+  { kind: "link", href: "/sale-channels", label: "Locations", icon: MapPinned },
   { kind: "link", href: "/shipping", label: "Shipping", icon: Package },
 ] as const;
 

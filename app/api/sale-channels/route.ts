@@ -4,7 +4,11 @@ import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { saleChannelCreateSchema } from "@/lib/validations/master-data";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
-import { requireInternalStoreContext } from "@/lib/store-context";
+import {
+  isDistributorContext,
+  requireInternalStoreContext,
+  requireStoreContext,
+} from "@/lib/store-context";
 import {
   KeycloakAdminConfigError,
   KeycloakAdminError,
@@ -14,12 +18,45 @@ import {
 export const runtime = "nodejs";
 
 const keycloakSubSchema = z.uuid();
+const DISTRIBUTOR_LOGIN_EMAIL_DOMAIN = "po-app.local";
 
 function saleChannelResponse<T extends { loginUser?: { id: string } | null }>(
   row: T,
 ) {
   const { loginUser: _loginUser, ...rest } = row;
   return { ...rest, loginEnabled: Boolean(_loginUser) };
+}
+
+async function availableDistributorAppEmail(
+  tx: Prisma.TransactionClient,
+  input: {
+    preferredEmail: string;
+    saleChannelId: string;
+    keycloakSub: string;
+    targetUserId?: string | null;
+  },
+) {
+  const preferredEmail = input.preferredEmail.trim().toLowerCase();
+  const preferredOwner = await tx.user.findFirst({
+    where: { OR: [{ email: input.preferredEmail }, { email: preferredEmail }] },
+    select: { id: true },
+  });
+  if (!preferredOwner || preferredOwner.id === input.targetUserId) {
+    return preferredEmail;
+  }
+
+  const aliases = [
+    `distributor-${input.saleChannelId}@${DISTRIBUTOR_LOGIN_EMAIL_DOMAIN}`,
+    `distributor-${input.saleChannelId}-${input.keycloakSub.slice(0, 8)}@${DISTRIBUTOR_LOGIN_EMAIL_DOMAIN}`,
+  ];
+  for (const email of aliases) {
+    const owner = await tx.user.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (!owner || owner.id === input.targetUserId) return email;
+  }
+  return `${input.keycloakSub}@${DISTRIBUTOR_LOGIN_EMAIL_DOMAIN}`;
 }
 
 async function upsertDistributorLoginUser(
@@ -32,67 +69,79 @@ async function upsertDistributorLoginUser(
     storeId: string;
   },
 ) {
-  const existingByEmail = await tx.user.findUnique({
-    where: { email: input.email },
-    select: { keycloakSub: true, saleChannelId: true, type: true },
+  const email = input.email.trim().toLowerCase();
+  const existingByEmail = await tx.user.findFirst({
+    where: { OR: [{ email: input.email }, { email }] },
+    select: { id: true, saleChannelId: true, type: true },
   });
-  if (
-    existingByEmail &&
-    (existingByEmail.keycloakSub !== input.keycloakSub ||
-      existingByEmail.type !== "distributor" ||
-      (existingByEmail.saleChannelId && existingByEmail.saleChannelId !== input.saleChannelId))
-  ) {
-    throw new Error("USER_EMAIL_EXISTS");
-  }
-
   const existingByKeycloakSub = await tx.user.findUnique({
     where: { keycloakSub: input.keycloakSub },
-    select: { type: true, saleChannelId: true },
+    select: { id: true, type: true, saleChannelId: true },
   });
-  if (
-    existingByKeycloakSub &&
-    (existingByKeycloakSub.type !== "distributor" ||
-      (existingByKeycloakSub.saleChannelId &&
-        existingByKeycloakSub.saleChannelId !== input.saleChannelId))
-  ) {
-    throw new Error("USER_EMAIL_EXISTS");
-  }
+  const targetUser =
+    existingByKeycloakSub ??
+    (existingByEmail?.type === "distributor" ? existingByEmail : null);
+  const appEmail = await availableDistributorAppEmail(tx, {
+    preferredEmail: email,
+    saleChannelId: input.saleChannelId,
+    keycloakSub: input.keycloakSub,
+    targetUserId: targetUser?.id,
+  });
 
-  const user = await tx.user.upsert({
-    where: { keycloakSub: input.keycloakSub },
-    create: {
-      keycloakSub: input.keycloakSub,
-      email: input.email,
-      name: input.name,
-      realEmail: input.email,
-      realName: input.name,
-      type: "distributor",
+  const userData = {
+    keycloakSub: input.keycloakSub,
+    email: appEmail,
+    name: input.name,
+    realEmail: email,
+    realName: input.name,
+    type: "distributor" as const,
+    saleChannelId: input.saleChannelId,
+  };
+  await tx.user.updateMany({
+    where: {
       saleChannelId: input.saleChannelId,
+      ...(targetUser ? { id: { not: targetUser.id } } : {}),
     },
-    update: {
-      email: input.email,
-      name: input.name,
-      realEmail: input.email,
-      realName: input.name,
-      type: "distributor",
-      saleChannelId: input.saleChannelId,
-    },
-    select: { id: true },
+    data: { saleChannelId: null },
   });
+
+  const user = targetUser
+    ? await tx.user.update({
+        where: { id: targetUser.id },
+        data: userData,
+        select: { id: true },
+      })
+    : await tx.user.create({
+        data: userData,
+        select: { id: true },
+      });
 
   await tx.userStore.createMany({
     data: [{ userId: user.id, storeId: input.storeId }],
     skipDuplicates: true,
   });
+
+  return true;
 }
 
 export async function GET() {
-  const authz = await requireInternalStoreContext();
+  const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
-  const { storeId } = authz.context;
+  const { saleChannelId, storeId } = authz.context;
+  const distributorSaleChannelId = isDistributorContext(authz.context)
+    ? saleChannelId
+    : null;
+  if (isDistributorContext(authz.context) && !distributorSaleChannelId) {
+    return NextResponse.json([]);
+  }
+
+  const where: Prisma.SaleChannelWhereInput = { storeId };
+  if (distributorSaleChannelId) {
+    where.id = distributorSaleChannelId;
+  }
 
   const rows = await prisma.saleChannel.findMany({
-    where: { storeId },
+    where,
     include: { loginUser: { select: { id: true } } },
     orderBy: { name: "asc" },
   });
@@ -126,10 +175,13 @@ export async function POST(request: Request) {
   }
 
   try {
-    const provisioned =
-      saleChannelData.type === "distributor" && saleChannelData.email
+    const distributorEmail = saleChannelData.email;
+    const shouldProvisionLogin =
+      saleChannelData.type === "distributor" &&
+      typeof distributorEmail === "string";
+    const provisioned = shouldProvisionLogin
         ? await provisionDistributorKeycloakUser({
-            email: saleChannelData.email,
+            email: distributorEmail,
             name: saleChannelData.name,
             password: loginPassword,
           })
@@ -178,9 +230,6 @@ export async function POST(request: Request) {
     }
     if (e instanceof KeycloakAdminError) {
       return jsonError(e.message, 502);
-    }
-    if (e instanceof Error && e.message === "USER_EMAIL_EXISTS") {
-      return jsonError("A user with this email already exists", 409);
     }
     const j = jsonFromPrisma(e);
     if (j) return j;

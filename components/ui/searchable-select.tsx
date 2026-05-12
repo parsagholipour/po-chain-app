@@ -17,7 +17,7 @@ const inputGroupClassName =
   "flex w-full min-w-0 items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors outline-none select-none focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground h-8 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
 
 const popupClassName =
-  "relative isolate z-50 min-h-0 max-h-(--available-height) w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+  "relative isolate z-50 min-h-0 max-h-[min(var(--available-height),18rem)] w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
 
 const listClassName = "min-h-0 scroll-my-1 p-1"
 
@@ -42,6 +42,7 @@ export type SearchableSelectProps = {
   onValueChange: (value: string) => void
   placeholder?: string
   disabled?: boolean
+  "aria-invalid"?: boolean
   className?: string
   emptyMessage?: string
   filter?: (item: SearchableSelectItem, query: string) => boolean
@@ -55,6 +56,7 @@ export function SearchableSelect({
   onValueChange,
   placeholder = "Select…",
   disabled = false,
+  "aria-invalid": ariaInvalid,
   className,
   emptyMessage = "No results.",
   filter = defaultFilter,
@@ -83,9 +85,11 @@ export function SearchableSelect({
     >
       <Combobox.InputGroup
         data-slot="searchable-select-trigger"
+        aria-invalid={ariaInvalid}
         className={cn(inputGroupClassName, className)}
       >
         <Combobox.Input
+          id={id}
           placeholder={placeholder}
           className={inputClassName}
         />
@@ -104,7 +108,7 @@ export function SearchableSelect({
             <Combobox.List className={listClassName}>
               {(item: SearchableSelectItem) => (
                 <Combobox.Item key={item.value} value={item} className={itemClassName}>
-                  <span className="flex flex-1 shrink-0 gap-2 whitespace-nowrap">{item.label}</span>
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
                   <Combobox.ItemIndicator
                     className="pointer-events-none absolute right-2 flex size-4 items-center justify-center"
                   >

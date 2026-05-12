@@ -39,9 +39,11 @@ export function AppChromeClient({
   const distributorAllowed =
     pathname === "/" ||
     pathname === "/account" ||
+    pathname === "/products" ||
     pathname === "/purchase-orders" ||
     pathname === "/purchase-orders-overview" ||
     pathname.startsWith("/purchase-orders/") ||
+    pathname === "/sale-channels" ||
     pathname === "/shipping" ||
     pathname.startsWith("/auth/error");
 

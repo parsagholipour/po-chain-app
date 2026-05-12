@@ -59,6 +59,27 @@ const optionalShippingCost = z.preprocess(
   z.number().nonnegative("Must be zero or greater").nullable().optional(),
 );
 
+const optionalNullableEmail = z.preprocess(
+  blankToNull,
+  z.string().email().nullable().optional(),
+);
+
+const shippingDestinationSchema = {
+  saleChannelLocationId: z.uuid().nullable().optional(),
+  shipToLocationName: optionalNullableString,
+  shipToRecipientName: optionalNullableString,
+  shipToCompanyName: optionalNullableString,
+  shipToPhoneNumber: optionalNullableString,
+  shipToEmail: optionalNullableEmail,
+  shipToAddressLine1: optionalNullableString,
+  shipToAddressLine2: optionalNullableString,
+  shipToCity: optionalNullableString,
+  shipToStateProvince: optionalNullableString,
+  shipToPostalCode: optionalNullableString,
+  shipToCountry: optionalNullableString,
+  shipToNotes: optionalNullableString,
+};
+
 export const shippingCreateSchema = z.object({
   type: shippingTypeSchema,
   status: shippingStatusSchema,
@@ -73,6 +94,7 @@ export const shippingCreateSchema = z.object({
   manufacturingOrderIds: z.array(z.uuid()).optional(),
   purchaseOrderIds: z.array(z.uuid()).optional(),
   warehouseOrderIds: z.array(z.uuid()).optional(),
+  ...shippingDestinationSchema,
 });
 
 export const shippingPatchSchema = shippingCreateSchema
@@ -101,6 +123,19 @@ export function shippingCreateToPrisma(data: z.infer<typeof shippingCreateSchema
     notes: trimNullable(data.notes),
     invoiceDocumentKey: trimNullable(data.invoiceDocumentKey),
     logisticsPartnerId: data.logisticsPartnerId ?? null,
+    saleChannelLocationId: data.saleChannelLocationId ?? null,
+    shipToLocationName: trimNullable(data.shipToLocationName),
+    shipToRecipientName: trimNullable(data.shipToRecipientName),
+    shipToCompanyName: trimNullable(data.shipToCompanyName),
+    shipToPhoneNumber: trimNullable(data.shipToPhoneNumber),
+    shipToEmail: trimNullable(data.shipToEmail),
+    shipToAddressLine1: trimNullable(data.shipToAddressLine1),
+    shipToAddressLine2: trimNullable(data.shipToAddressLine2),
+    shipToCity: trimNullable(data.shipToCity),
+    shipToStateProvince: trimNullable(data.shipToStateProvince),
+    shipToPostalCode: trimNullable(data.shipToPostalCode),
+    shipToCountry: trimNullable(data.shipToCountry),
+    shipToNotes: trimNullable(data.shipToNotes),
   };
 }
 
@@ -115,6 +150,19 @@ export function shippingPatchToPrisma(data: z.infer<typeof shippingPatchSchema>)
     notes?: string | null;
     invoiceDocumentKey?: string | null;
     logisticsPartnerId?: string | null;
+    saleChannelLocationId?: string | null;
+    shipToLocationName?: string | null;
+    shipToRecipientName?: string | null;
+    shipToCompanyName?: string | null;
+    shipToPhoneNumber?: string | null;
+    shipToEmail?: string | null;
+    shipToAddressLine1?: string | null;
+    shipToAddressLine2?: string | null;
+    shipToCity?: string | null;
+    shipToStateProvince?: string | null;
+    shipToPostalCode?: string | null;
+    shipToCountry?: string | null;
+    shipToNotes?: string | null;
   } = {};
 
   if (data.status !== undefined) out.status = data.status;
@@ -128,6 +176,37 @@ export function shippingPatchToPrisma(data: z.infer<typeof shippingPatchSchema>)
     out.invoiceDocumentKey = trimNullable(data.invoiceDocumentKey);
   }
   if (data.logisticsPartnerId !== undefined) out.logisticsPartnerId = data.logisticsPartnerId;
+  if (data.saleChannelLocationId !== undefined) {
+    out.saleChannelLocationId = data.saleChannelLocationId;
+  }
+  if (data.shipToLocationName !== undefined) {
+    out.shipToLocationName = trimNullable(data.shipToLocationName);
+  }
+  if (data.shipToRecipientName !== undefined) {
+    out.shipToRecipientName = trimNullable(data.shipToRecipientName);
+  }
+  if (data.shipToCompanyName !== undefined) {
+    out.shipToCompanyName = trimNullable(data.shipToCompanyName);
+  }
+  if (data.shipToPhoneNumber !== undefined) {
+    out.shipToPhoneNumber = trimNullable(data.shipToPhoneNumber);
+  }
+  if (data.shipToEmail !== undefined) out.shipToEmail = trimNullable(data.shipToEmail);
+  if (data.shipToAddressLine1 !== undefined) {
+    out.shipToAddressLine1 = trimNullable(data.shipToAddressLine1);
+  }
+  if (data.shipToAddressLine2 !== undefined) {
+    out.shipToAddressLine2 = trimNullable(data.shipToAddressLine2);
+  }
+  if (data.shipToCity !== undefined) out.shipToCity = trimNullable(data.shipToCity);
+  if (data.shipToStateProvince !== undefined) {
+    out.shipToStateProvince = trimNullable(data.shipToStateProvince);
+  }
+  if (data.shipToPostalCode !== undefined) {
+    out.shipToPostalCode = trimNullable(data.shipToPostalCode);
+  }
+  if (data.shipToCountry !== undefined) out.shipToCountry = trimNullable(data.shipToCountry);
+  if (data.shipToNotes !== undefined) out.shipToNotes = trimNullable(data.shipToNotes);
 
   return out;
 }

@@ -109,6 +109,43 @@ export type SaleChannel = {
   updatedAt: string;
 };
 
+export type SaleChannelLocation = {
+  id: string;
+  name: string;
+  recipientName: string;
+  companyName: string | null;
+  phoneNumber: string | null;
+  email: string | null;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  stateProvince: string | null;
+  postalCode: string | null;
+  country: string;
+  shippingNotes: string | null;
+  saleChannelId: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SaleChannelLocationRef = Pick<
+  SaleChannelLocation,
+  | "id"
+  | "name"
+  | "recipientName"
+  | "companyName"
+  | "phoneNumber"
+  | "email"
+  | "addressLine1"
+  | "addressLine2"
+  | "city"
+  | "stateProvince"
+  | "postalCode"
+  | "country"
+  | "shippingNotes"
+  | "saleChannelId"
+>;
+
 export type LogisticsPartner = {
   id: string;
   name: string;
@@ -153,6 +190,27 @@ export type Product = {
   collection: ProductCollection | null;
 };
 
+export type SaleChannelProduct = {
+  id: string;
+  sku: string;
+  name: string;
+  upcGtin: string | null;
+  category: ProductCategory | null;
+  collection: ProductCollection | null;
+  msrp: string | number | null;
+  map: string | number | null;
+  wholesalePrice: string | number | null;
+  moq: number | null;
+  imageLink: string;
+  barcodeKey: string | null;
+  stockCount: number | null;
+  quantityPerCarton: number | null;
+  description: string | null;
+  orderByDate: string | null;
+  releaseDateShipsFrom: string | null;
+  editionStatus: Product["editingStatus"];
+};
+
 export type PurchaseOrderSummaryManufacturer = {
   manufacturerId: string;
   name: string;
@@ -188,6 +246,7 @@ export type PurchaseOrderSummary = {
   status: string;
   createdAt: string;
   saleChannel: { id: string; name: string; type: string; logoKey: string | null } | null;
+  saleChannelLocation: SaleChannelLocationRef | null;
   manufacturers: PurchaseOrderSummaryManufacturer[];
   manufacturingOrders: PurchaseOrderSummaryManufacturingOrder[];
   warehouseOrders: PurchaseOrderSummaryWarehouseOrder[];
@@ -311,6 +370,20 @@ export type ShippingRow = {
   notes: string | null;
   invoiceDocumentKey: string | null;
   logisticsPartnerId: string | null;
+  saleChannelLocationId: string | null;
+  saleChannelLocation: SaleChannelLocationRef | null;
+  shipToLocationName: string | null;
+  shipToRecipientName: string | null;
+  shipToCompanyName: string | null;
+  shipToPhoneNumber: string | null;
+  shipToEmail: string | null;
+  shipToAddressLine1: string | null;
+  shipToAddressLine2: string | null;
+  shipToCity: string | null;
+  shipToStateProvince: string | null;
+  shipToPostalCode: string | null;
+  shipToCountry: string | null;
+  shipToNotes: string | null;
   statusLogs: OrderStatusLog[];
   logisticsPartner: LogisticsPartner | null;
   orders: ShippingOrderRef[];
@@ -353,6 +426,8 @@ type PurchaseOrderDetailBase = {
     documentKey: string | null;
   };
   documentKey: string | null;
+  saleChannelLocationId: string | null;
+  saleChannelLocation: SaleChannelLocationRef | null;
   lines: PoLineRow[];
   osds: PoOsd[];
   statusLogs: OrderStatusLog[];

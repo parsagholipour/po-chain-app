@@ -16,6 +16,7 @@ import type {
   Product,
   PurchaseOrderDetail,
   SaleChannel,
+  SaleChannelLocation,
 } from "@/lib/types/api";
 import type { OsdCreateInput, OsdPatchInput } from "@/lib/validations/purchase-order";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
@@ -98,6 +99,18 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
   const distributorSaleChannelOptions = saleChannelOptions.filter(
     (sc) => sc.type === "distributor",
   );
+
+  const currentSaleChannelId = po?.saleChannel?.id ?? "";
+  const { data: saleChannelLocations = [], isPending: saleChannelLocationsPending } = useQuery({
+    queryKey: ["sale-channel-locations", currentSaleChannelId],
+    enabled: sessionStatus !== "loading" && !isDistributor && currentSaleChannelId.length > 0,
+    queryFn: async () => {
+      const { data } = await api.get<SaleChannelLocation[]>(
+        `/api/sale-channels/${currentSaleChannelId}/locations`,
+      );
+      return data;
+    },
+  });
 
   const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: ["manufacturers"] as const,
@@ -439,6 +452,13 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         }
         onSaleChannelChange={
           !isDistributor ? (saleChannelId) => patchPo.mutate({ saleChannelId }) : undefined
+        }
+        saleChannelLocations={saleChannelLocations}
+        saleChannelLocationsPending={saleChannelLocationsPending}
+        onLocationChange={
+          !isDistributor
+            ? (saleChannelLocationId) => patchPo.mutate({ saleChannelLocationId })
+            : undefined
         }
         onDocumentUpload={!isDistributor ? uploadDocument : undefined}
         isSaving={patchPo.isPending}
