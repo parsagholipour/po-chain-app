@@ -25,7 +25,11 @@ export async function GET() {
       take: 100,
     }),
     prisma.purchaseOrderLine.findMany({
-      where: { storeId, OR: [{ unitCost: null }, { unitPrice: null }] },
+      where: {
+        storeId,
+        OR: [{ unitCost: null }, { unitPrice: null }],
+        purchaseOrder: { isBackOrder: false },
+      },
       select: { id: true, quantity: true, purchaseOrder: { select: { number: true } }, product: { select: { name: true } } },
       take: 100,
     }),
@@ -46,6 +50,7 @@ export async function GET() {
       where: {
         storeId,
         type: "distributor",
+        isBackOrder: false,
         status: "in_transit",
         updatedAt: { lt: fourteenDaysAgo },
       },

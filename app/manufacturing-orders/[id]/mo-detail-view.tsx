@@ -101,10 +101,12 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
   const { data: distributorPoList = [], isPending: distributorPoListPending } = useQuery({
     queryKey: ["purchase-orders", "list-all-for-mo"],
     queryFn: async () => {
-      const { data } = await api.get<{ id: string; number: number; name: string }[]>(
+      const { data } = await api.get<
+        { id: string; number: number; name: string; isBackOrder: boolean }[]
+      >(
         "/api/purchase-orders?status=open",
       );
-      return data;
+      return data.filter((order) => !order.isBackOrder);
     },
   });
 

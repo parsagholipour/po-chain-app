@@ -48,6 +48,7 @@ export async function POST(
           id: parsed.data.purchaseOrderId,
           storeId,
           type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+          isBackOrder: false,
         },
         select: { id: true },
       });

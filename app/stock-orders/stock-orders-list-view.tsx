@@ -179,12 +179,12 @@ function SoListFiltersAndTable({
 }) {
   return (
     <>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <Input
           placeholder="Search…"
           value={q}
           onChange={(e) => onQChange(e.target.value)}
-          className="max-w-xs"
+          className="w-full sm:max-w-xs"
           disabled={!filterReady}
         />
         <Select
@@ -194,7 +194,7 @@ function SoListFiltersAndTable({
           }}
           disabled={!filterReady}
         >
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-full sm:w-[200px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -409,7 +409,7 @@ export function StockOrdersListView() {
           />
         }
       >
-        <div className="space-y-5 p-5 pt-4">
+        <div className="space-y-5 p-3 pt-4 sm:p-5 sm:pt-4">
           <EntityTabRow
             items={manufacturerItems}
             selectedId={selectedManufacturerId}

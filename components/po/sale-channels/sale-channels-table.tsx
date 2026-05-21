@@ -14,13 +14,14 @@ import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { useConfirm } from "@/components/confirm-provider";
 import type { SaleChannel } from "@/lib/types/api";
 import { saleChannelTypeLabels } from "@/lib/po/sale-channel-labels";
-import { MapPinned, Pencil, Trash2 } from "lucide-react";
+import { Link2, MapPinned, Pencil, Trash2 } from "lucide-react";
 
 type Props = {
   rows: SaleChannel[];
   isPending: boolean;
   canManageSaleChannels?: boolean;
   onLocations: (row: SaleChannel) => void;
+  onMagicLinks?: (row: SaleChannel) => void;
   onEdit: (row: SaleChannel) => void;
   onDelete: (row: SaleChannel) => void;
 };
@@ -30,6 +31,7 @@ export function SaleChannelsTable({
   isPending,
   canManageSaleChannels = true,
   onLocations,
+  onMagicLinks,
   onEdit,
   onDelete,
 }: Props) {
@@ -72,7 +74,9 @@ export function SaleChannelsTable({
                     objectFit="cover"
                   />
                 </TableCell>
-                <TableCell className="font-medium">{row.name}</TableCell>
+                <TableCell className="max-w-56 truncate font-medium" title={row.name}>
+                  {row.name}
+                </TableCell>
                 <TableCell>
                   <Badge variant="secondary">{saleChannelTypeLabels[row.type]}</Badge>
                 </TableCell>
@@ -91,15 +95,27 @@ export function SaleChannelsTable({
                 ) : null}
                 <TableCell className="text-end">
                   <div className="flex justify-end gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => onLocations(row)}
-                      aria-label="Locations"
-                    >
-                      <MapPinned className="size-4" />
-                    </Button>
+                    {row.type === "store" && onMagicLinks ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => onMagicLinks(row)}
+                        aria-label="Magic links"
+                      >
+                        <Link2 className="size-4" />
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => onLocations(row)}
+                        aria-label="Locations"
+                      >
+                        <MapPinned className="size-4" />
+                      </Button>
+                    )}
                     {canManageSaleChannels ? (
                       <>
                     <Button

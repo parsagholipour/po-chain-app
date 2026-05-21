@@ -20,6 +20,51 @@ export const runtime = "nodejs";
 
 const paramsSchema = z.object({ id: z.uuid() });
 
+const clearPurchaseOrderDestinationSnapshot = {
+  shipToLocationName: null,
+  shipToRecipientName: null,
+  shipToCompanyName: null,
+  shipToPhoneNumber: null,
+  shipToEmail: null,
+  shipToAddressLine1: null,
+  shipToAddressLine2: null,
+  shipToCity: null,
+  shipToStateProvince: null,
+  shipToPostalCode: null,
+  shipToCountry: null,
+  shipToNotes: null,
+};
+
+function purchaseOrderDestinationFromLocation(location: {
+  name: string;
+  recipientName: string;
+  companyName: string | null;
+  phoneNumber: string | null;
+  email: string | null;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  stateProvince: string | null;
+  postalCode: string | null;
+  country: string;
+  shippingNotes: string | null;
+}) {
+  return {
+    shipToLocationName: location.name,
+    shipToRecipientName: location.recipientName,
+    shipToCompanyName: location.companyName,
+    shipToPhoneNumber: location.phoneNumber,
+    shipToEmail: location.email,
+    shipToAddressLine1: location.addressLine1,
+    shipToAddressLine2: location.addressLine2,
+    shipToCity: location.city,
+    shipToStateProvince: location.stateProvince,
+    shipToPostalCode: location.postalCode,
+    shipToCountry: location.country,
+    shipToNotes: location.shippingNotes,
+  };
+}
+
 type DistributorSanitizablePurchaseOrderDetail = {
   lines: Array<
     Record<string, unknown> & {
@@ -151,7 +196,7 @@ export async function PATCH(
       }
 
       const nextSaleChannelId = saleChannelId ?? existing.saleChannelId;
-      const locationData: { saleChannelLocationId?: string | null } = {};
+      const locationData: Record<string, unknown> = {};
       if (saleChannelLocationId !== undefined) {
         if (saleChannelLocationId) {
           if (!nextSaleChannelId) {
@@ -163,11 +208,13 @@ export async function PATCH(
               storeId,
               saleChannelId: nextSaleChannelId,
             },
-            select: { id: true },
           });
           if (!location) {
             throw new Error("SALE_CHANNEL_LOCATION_NOT_FOUND");
           }
+          Object.assign(locationData, purchaseOrderDestinationFromLocation(location));
+        } else {
+          Object.assign(locationData, clearPurchaseOrderDestinationSnapshot);
         }
         locationData.saleChannelLocationId = saleChannelLocationId;
       } else if (
@@ -176,6 +223,7 @@ export async function PATCH(
         existing.saleChannelLocation.saleChannelId !== saleChannelId
       ) {
         locationData.saleChannelLocationId = null;
+        Object.assign(locationData, clearPurchaseOrderDestinationSnapshot);
       }
 
       if (invoice) {

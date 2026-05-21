@@ -39,10 +39,10 @@ export function AuthControls({
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2">
       <Link
         href="/account"
-        className="text-sm text-muted-foreground hover:text-foreground"
+        className="min-w-0 truncate text-sm text-muted-foreground hover:text-foreground"
       >
         Account
       </Link>

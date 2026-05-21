@@ -111,13 +111,13 @@ export function WarehouseOrdersListView() {
           />
         }
       >
-        <div className="space-y-5 p-5 pt-4">
-          <div className="flex flex-wrap gap-3">
+        <div className="space-y-5 p-3 pt-4 sm:p-5 sm:pt-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Input
               placeholder="Search..."
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              className="max-w-xs"
+              className="w-full sm:max-w-xs"
               disabled={!filterReady}
             />
             <Select
@@ -127,7 +127,7 @@ export function WarehouseOrdersListView() {
               }}
               disabled={!filterReady}
             >
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-full sm:w-[180px]">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -146,7 +146,7 @@ export function WarehouseOrdersListView() {
               }}
               disabled={warehousesPending}
             >
-              <SelectTrigger className="w-[220px]">
+              <SelectTrigger className="w-full sm:w-[220px]">
                 <SelectValue placeholder="Warehouse" />
               </SelectTrigger>
               <SelectContent>
@@ -193,13 +193,15 @@ export function WarehouseOrdersListView() {
                 ) : (
                   pagedRows.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell>
+                      <TableCell className="min-w-56 max-w-80 whitespace-normal">
                         <Link href={`/warehouse-orders/${row.id}`} className="font-medium hover:underline">
                           {row.name}
                         </Link>
                       </TableCell>
-                      <TableCell>{row.warehouse.name}</TableCell>
-                      <TableCell>
+                      <TableCell className="max-w-48 truncate" title={row.warehouse.name}>
+                        {row.warehouse.name}
+                      </TableCell>
+                      <TableCell className="min-w-[12rem] whitespace-normal">
                         {row.linkedOrders.length === 0 ? (
                           <span className="text-muted-foreground">-</span>
                         ) : (
@@ -218,7 +220,7 @@ export function WarehouseOrdersListView() {
                           </div>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="min-w-[10rem] whitespace-normal">
                         <div className="flex flex-col gap-1.5">
                           <Badge
                             variant="secondary"

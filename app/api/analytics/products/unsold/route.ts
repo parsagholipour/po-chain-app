@@ -18,6 +18,7 @@ export async function GET(request: Request) {
       purchaseOrder: {
         storeId,
         type: "distributor",
+        isBackOrder: false,
         status: "closed",
         updatedAt: { gte: toStartOfDay(range.from), lte: toEndOfDay(range.to) },
       },

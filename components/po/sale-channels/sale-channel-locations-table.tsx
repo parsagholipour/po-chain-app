@@ -74,8 +74,12 @@ export function SaleChannelLocationsTable({
 
             return (
               <TableRow key={row.id}>
-                <TableCell className="font-medium">{row.name}</TableCell>
-                <TableCell className="text-muted-foreground">{row.recipientName}</TableCell>
+                <TableCell className="max-w-56 truncate font-medium" title={row.name}>
+                  {row.name}
+                </TableCell>
+                <TableCell className="max-w-56 truncate text-muted-foreground" title={row.recipientName}>
+                  {row.recipientName}
+                </TableCell>
                 <TableCell className="max-w-[360px] truncate text-muted-foreground" title={address}>
                   {address}
                 </TableCell>

@@ -87,6 +87,7 @@ async function closedPoCount(storeId: string, range: { from: string; to: string 
     where: {
       storeId,
       type: "distributor",
+      isBackOrder: false,
       status: "closed",
       updatedAt: {
         gte: new Date(`${range.from}T00:00:00.000Z`),

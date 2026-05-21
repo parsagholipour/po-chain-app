@@ -39,7 +39,7 @@ export function DoughnutChart({
     maintainAspectRatio: false,
     cutout,
     plugins: {
-      legend: { position: "right" },
+      legend: { position: "bottom" },
       tooltip: {
         callbacks: {
           label: (ctx) => {

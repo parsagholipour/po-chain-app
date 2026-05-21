@@ -25,6 +25,7 @@ export async function GET() {
       where: {
         storeId,
         type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+        isBackOrder: false,
         status: { not: "closed" },
         saleChannelId,
       },
@@ -40,6 +41,7 @@ export async function GET() {
     where: {
       storeId,
       type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+      isBackOrder: false,
       status: { not: "closed" },
       saleChannelId: { not: null },
     },
@@ -61,6 +63,7 @@ export async function GET() {
         purchaseOrder: {
           storeId,
           type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+          isBackOrder: false,
           status: { not: "closed" },
         },
       },

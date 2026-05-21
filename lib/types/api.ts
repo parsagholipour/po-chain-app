@@ -1,5 +1,12 @@
 /** API response shapes for JSON HTTP responses in this app. */
 
+export type PaginatedResponse<T> = {
+  rows: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
 export type CustomFieldCondition = {
   id: string;
   definitionId: string;
@@ -45,6 +52,54 @@ export type CustomFieldValue = {
 export type CustomFieldValuesResponse = {
   definitions: CustomFieldDefinition[];
   values: CustomFieldValue[];
+};
+
+export type ShopifyIntegrationSettings = {
+  id: string | null;
+  shopDomain: string;
+  enabled: boolean;
+  hasAccessToken: boolean;
+  hasWebhookSecret: boolean;
+  webhookSubscriptionId: string | null;
+  lastSyncAt: string | null;
+  lastSyncStatus: string | null;
+  lastSyncError: string | null;
+  lastSyncedProductCount: number;
+  lastMatchedSkuCount: number;
+  lastUnmatchedLocalSkuCount: number;
+  updatedAt: string | null;
+};
+
+export type StripeIntegrationSettings = {
+  id: string | null;
+  enabled: boolean;
+  currency: string;
+  hasSecretKey: boolean;
+  hasWebhookSecret: boolean;
+  secretKeyLast4: string | null;
+  webhookSecretLast4: string | null;
+  updatedAt: string | null;
+};
+
+export type ShopifySyncResult = {
+  integrationId: string;
+  skipped: boolean;
+  reason?: string;
+  lockExpiresAt?: string | null;
+  syncedProductCount: number;
+  matchedSkuCount: number;
+  unmatchedLocalSkuCount: number;
+};
+
+export type ProductStockSnapshotBackup = {
+  id: string;
+  snapshotDate: string;
+  objectKey: string;
+  fileName: string;
+  contentType: string;
+  size: number;
+  productCount: number;
+  createdAt: string;
 };
 
 export type ProductCategory = {
@@ -98,7 +153,7 @@ export type SaleChannel = {
   id: string;
   name: string;
   logoKey: string | null;
-  type: "distributor" | "amazon" | "cjdropshipping";
+  type: "distributor" | "store" | "amazon" | "cjdropshipping";
   contactNumber: string | null;
   link: string | null;
   email: string | null;
@@ -202,6 +257,7 @@ export type SaleChannelProduct = {
   wholesalePrice: string | number | null;
   moq: number | null;
   imageLink: string;
+  imageKey: string | null;
   barcodeKey: string | null;
   stockCount: number | null;
   quantityPerCarton: number | null;
@@ -244,9 +300,24 @@ export type PurchaseOrderSummary = {
   number: number;
   name: string;
   status: string;
+  isBackOrder: boolean;
+  actualizedPoId: string | null;
+  actualizedPo: { id: string; number: number; name: string } | null;
   createdAt: string;
   saleChannel: { id: string; name: string; type: string; logoKey: string | null } | null;
   saleChannelLocation: SaleChannelLocationRef | null;
+  shipToLocationName: string | null;
+  shipToRecipientName: string | null;
+  shipToCompanyName: string | null;
+  shipToPhoneNumber: string | null;
+  shipToEmail: string | null;
+  shipToAddressLine1: string | null;
+  shipToAddressLine2: string | null;
+  shipToCity: string | null;
+  shipToStateProvince: string | null;
+  shipToPostalCode: string | null;
+  shipToCountry: string | null;
+  shipToNotes: string | null;
   manufacturers: PurchaseOrderSummaryManufacturer[];
   manufacturingOrders: PurchaseOrderSummaryManufacturingOrder[];
   warehouseOrders: PurchaseOrderSummaryWarehouseOrder[];
@@ -419,6 +490,9 @@ type PurchaseOrderDetailBase = {
   number: number;
   name: string;
   status: string;
+  isBackOrder: boolean;
+  actualizedPoId: string | null;
+  actualizedPo: { id: string; number: number; name: string } | null;
   invoiceId: string | null;
   invoice: null | {
     id: string;
@@ -428,6 +502,18 @@ type PurchaseOrderDetailBase = {
   documentKey: string | null;
   saleChannelLocationId: string | null;
   saleChannelLocation: SaleChannelLocationRef | null;
+  shipToLocationName: string | null;
+  shipToRecipientName: string | null;
+  shipToCompanyName: string | null;
+  shipToPhoneNumber: string | null;
+  shipToEmail: string | null;
+  shipToAddressLine1: string | null;
+  shipToAddressLine2: string | null;
+  shipToCity: string | null;
+  shipToStateProvince: string | null;
+  shipToPostalCode: string | null;
+  shipToCountry: string | null;
+  shipToNotes: string | null;
   lines: PoLineRow[];
   osds: PoOsd[];
   statusLogs: OrderStatusLog[];

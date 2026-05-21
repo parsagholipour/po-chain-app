@@ -25,11 +25,14 @@ function linkedOrderHref(type: "distributor" | "stock", id: string) {
 const LINKED_ORDER_PREVIEW_MAX = 4;
 
 function MoLinkedOrdersChips({ orders }: { orders: ManufacturingOrderSummaryLinkedOrder[] }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (orders.length === 0) {
     return <span className="text-muted-foreground">—</span>;
   }
-  const visible = orders.slice(0, LINKED_ORDER_PREVIEW_MAX);
-  const overflow = orders.slice(LINKED_ORDER_PREVIEW_MAX);
+  const hasOverflow = orders.length > LINKED_ORDER_PREVIEW_MAX;
+  const visible = expanded ? orders : orders.slice(0, LINKED_ORDER_PREVIEW_MAX);
+  const overflow = expanded ? [] : orders.slice(LINKED_ORDER_PREVIEW_MAX);
   const overflowTitle =
     overflow.length > 0
       ? overflow
@@ -63,12 +66,36 @@ function MoLinkedOrdersChips({ orders }: { orders: ManufacturingOrderSummaryLink
         );
       })}
       {overflow.length > 0 ? (
-        <span
-          className="inline-flex w-fit items-center rounded-md border border-dashed border-border/80 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          className="h-6 w-fit border-dashed bg-transparent px-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted/25"
+          aria-expanded={expanded}
+          aria-label={`Show ${overflow.length} more linked orders`}
           title={overflowTitle}
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(true);
+          }}
         >
           +{overflow.length} more
-        </span>
+        </Button>
+      ) : hasOverflow ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="h-6 w-fit px-1.5 text-[10px] font-medium text-muted-foreground hover:bg-muted/25"
+          aria-expanded={expanded}
+          aria-label="Show fewer linked orders"
+          onClick={(e) => {
+            e.stopPropagation();
+            setExpanded(false);
+          }}
+        >
+          Show less
+        </Button>
       ) : null}
     </div>
   );
@@ -126,15 +153,15 @@ export function ExpandableManufacturingOrderSummaryRow({
             )}
           </Button>
         </TableCell>
-        <TableCell>
+        <TableCell className="min-w-56 max-w-80 whitespace-normal">
           <Link href={href} className="font-medium hover:underline">
             {row.name}
           </Link>
         </TableCell>
-        <TableCell className="align-top">
+        <TableCell className="min-w-[11rem] whitespace-normal align-top">
           <MoLinkedOrdersChips orders={row.linkedOrders ?? []} />
         </TableCell>
-        <TableCell>
+        <TableCell className="min-w-[12rem] whitespace-normal">
           {row.manufacturers.length > 0 ? (
             <div className="flex max-w-md flex-col gap-2">
               <div className="flex flex-wrap items-center gap-1.5">

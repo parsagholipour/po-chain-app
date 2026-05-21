@@ -44,7 +44,7 @@ export async function POST(
   if (!mo) return jsonError("Manufacturing order not found", 404);
 
   const po = await prisma.purchaseOrder.findFirst({
-    where: { id: parsed.data.purchaseOrderId, storeId },
+    where: { id: parsed.data.purchaseOrderId, storeId, isBackOrder: false },
   });
   if (!po) {
     return jsonError("Purchase order or stock order not found", 404);

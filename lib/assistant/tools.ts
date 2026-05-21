@@ -495,6 +495,7 @@ async function getRecentOpenItemsTool(context: AssistantToolContext): Promise<To
       where: {
         storeId: context.storeId,
         type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+        isBackOrder: false,
         status: notClosed,
       },
       orderBy: { updatedAt: "desc" },
@@ -661,6 +662,7 @@ async function searchOrdersTool(
           where: {
             storeId: context.storeId,
             type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+            isBackOrder: false,
             ...(poStatusFilter ? { status: poStatusFilter } : {}),
             ...orderWhere,
           },
@@ -1112,7 +1114,7 @@ async function searchMasterDataTool(
   const query = cleanText(args.query);
   const limit = 8;
   const saleChannelTypeQuery =
-    query === "distributor" || query === "amazon" || query === "cjdropshipping"
+    query === "distributor" || query === "store" || query === "amazon" || query === "cjdropshipping"
       ? query
       : null;
   const logisticsPartnerTypeQuery =

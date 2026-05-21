@@ -135,3 +135,51 @@
     cursor: not-allowed;
   }
 }
+
+@layer components {
+  [data-slot="table-scroll-shell"] {
+    isolation: isolate;
+  }
+
+  [data-slot="table-scroll-shell"]::before,
+  [data-slot="table-scroll-shell"]::after {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 2;
+    width: 1rem;
+  }
+
+  [data-slot="table-scroll-shell"]::before {
+    left: 0;
+    background: linear-gradient(to right, var(--card), transparent);
+  }
+
+  [data-slot="table-scroll-shell"]::after {
+    right: 0;
+    background: linear-gradient(to left, var(--card), transparent);
+  }
+
+  [data-slot="table-scroll"] {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--foreground) 24%, transparent)
+      transparent;
+  }
+
+  [data-slot="table-scroll"]::-webkit-scrollbar {
+    height: 0.625rem;
+  }
+
+  [data-slot="table-scroll"]::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  [data-slot="table-scroll"]::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklch, var(--foreground) 24%, transparent);
+    border: 0.1875rem solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+}

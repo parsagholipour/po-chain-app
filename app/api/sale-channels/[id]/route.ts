@@ -196,8 +196,8 @@ export async function PATCH(
       saleChannelData.email !== undefined ? saleChannelData.email : existing.email;
     const nextName = saleChannelData.name ?? existing.name;
 
-    if (nextType !== "distributor" && existing.loginUser) {
-      return jsonError("Remove the distributor login before changing this sale channel type", 400);
+    if (existing.loginUser && nextType !== existing.type) {
+      return jsonError("Remove the sale channel login before changing this sale channel type", 400);
     }
     if (nextType !== "distributor" && loginPassword) {
       return jsonError("Only distributor sale channels can have login passwords", 400);
@@ -287,7 +287,7 @@ export async function DELETE(
       where: { saleChannelId: pid.data.id },
     });
     if (loginUsers > 0) {
-      return jsonError("Sale channel has a distributor login user", 409);
+      return jsonError("Sale channel has a login user", 409);
     }
 
     const deleted = await prisma.saleChannel.deleteMany({

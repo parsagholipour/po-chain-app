@@ -33,7 +33,7 @@ export function KpiCard({
     <Card size="sm" className="border-border/70 bg-card/50">
       <CardHeader>
         <CardDescription>{label}</CardDescription>
-        <CardTitle className="text-2xl tabular-nums">{formatKpiValue(value, valueFormat)}</CardTitle>
+        <CardTitle className="break-words text-xl tabular-nums sm:text-2xl">{formatKpiValue(value, valueFormat)}</CardTitle>
       </CardHeader>
       <CardContent>
         <p className="text-xs text-muted-foreground">{deltaLabel}</p>

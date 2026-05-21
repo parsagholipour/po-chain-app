@@ -289,7 +289,7 @@ export function WarehouseOrderDetailView({ warehouseOrderId }: { warehouseOrderI
       const { data } = await api.get<PurchaseOrderSummary[]>("/api/purchase-orders", {
         params: { status: "open" },
       });
-      return data;
+      return data.filter((order) => !order.isBackOrder);
     },
   });
 

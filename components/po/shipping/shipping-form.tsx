@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import {
   CustomFieldsRenderer,
@@ -52,6 +52,18 @@ type OrderOption = {
   number: number;
   name: string;
   saleChannelLocation?: ShippingRow["saleChannelLocation"] | null;
+  shipToLocationName?: string | null;
+  shipToRecipientName?: string | null;
+  shipToCompanyName?: string | null;
+  shipToPhoneNumber?: string | null;
+  shipToEmail?: string | null;
+  shipToAddressLine1?: string | null;
+  shipToAddressLine2?: string | null;
+  shipToCity?: string | null;
+  shipToStateProvince?: string | null;
+  shipToPostalCode?: string | null;
+  shipToCountry?: string | null;
+  shipToNotes?: string | null;
   /** From linked POs / stock orders (manufacturing orders only). */
   linkedSaleChannels?: string[];
 };
@@ -78,6 +90,7 @@ interface ShippingFormProps {
 }
 
 const NO_PARTNER_VALUE = "__none__";
+const EMPTY_ID_LIST: string[] = [];
 const shippingTypeSelectItems = Object.entries(shippingTypeLabels).map(
   ([value, label]) => ({
     value,
@@ -142,6 +155,44 @@ function destinationValuesFromLocation(location: NonNullable<ShippingRow["saleCh
     shipToCountry: location.country,
     shipToNotes: location.shippingNotes ?? "",
   } satisfies Partial<ShippingFormValues>;
+}
+
+function destinationValuesFromOrder(order: OrderOption) {
+  if (order.saleChannelLocation) {
+    return destinationValuesFromLocation(order.saleChannelLocation);
+  }
+  if (
+    !order.shipToLocationName ||
+    !order.shipToRecipientName ||
+    !order.shipToAddressLine1 ||
+    !order.shipToCity ||
+    !order.shipToCountry
+  ) {
+    return null;
+  }
+
+  return {
+    saleChannelLocationId: null,
+    shipToLocationName: order.shipToLocationName,
+    shipToRecipientName: order.shipToRecipientName,
+    shipToCompanyName: order.shipToCompanyName ?? "",
+    shipToPhoneNumber: order.shipToPhoneNumber ?? "",
+    shipToEmail: order.shipToEmail ?? "",
+    shipToAddressLine1: order.shipToAddressLine1,
+    shipToAddressLine2: order.shipToAddressLine2 ?? "",
+    shipToCity: order.shipToCity,
+    shipToStateProvince: order.shipToStateProvince ?? "",
+    shipToPostalCode: order.shipToPostalCode ?? "",
+    shipToCountry: order.shipToCountry,
+    shipToNotes: order.shipToNotes ?? "",
+  } satisfies Partial<ShippingFormValues>;
+}
+
+function destinationSignature(values: Partial<ShippingFormValues>) {
+  return JSON.stringify({
+    saleChannelLocationId: values.saleChannelLocationId ?? null,
+    ...Object.fromEntries(destinationFieldNames.map((field) => [field, values[field] ?? ""])),
+  });
 }
 
 function emptyDestinationValues() {
@@ -244,11 +295,11 @@ export function ShippingForm({
   const shipToLocationName =
     useWatch({ control: form.control, name: "shipToLocationName" }) ?? "";
   const selectedManufacturingOrderIds =
-    useWatch({ control: form.control, name: "manufacturingOrderIds" }) ?? [];
+    useWatch({ control: form.control, name: "manufacturingOrderIds" }) ?? EMPTY_ID_LIST;
   const selectedPurchaseOrderIds =
-    useWatch({ control: form.control, name: "purchaseOrderIds" }) ?? [];
+    useWatch({ control: form.control, name: "purchaseOrderIds" }) ?? EMPTY_ID_LIST;
   const selectedWarehouseOrderIds =
-    useWatch({ control: form.control, name: "warehouseOrderIds" }) ?? [];
+    useWatch({ control: form.control, name: "warehouseOrderIds" }) ?? EMPTY_ID_LIST;
 
   const storedInvoiceDocumentKey =
     removeStoredInvoiceDocument || invoiceDocumentFile
@@ -269,17 +320,21 @@ export function ShippingForm({
     })),
   ];
   const showDestination = type === "purchase_order" || type === "stock_order";
-  const selectedPurchaseOrders = availablePurchaseOrders.filter((order) =>
-    selectedPurchaseOrderIds.includes(order.id),
+  const selectedPurchaseOrders = useMemo(
+    () => availablePurchaseOrders.filter((order) => selectedPurchaseOrderIds.includes(order.id)),
+    [availablePurchaseOrders, selectedPurchaseOrderIds],
   );
-  const selectedDestinationLocation = (() => {
+  const selectedDestination = useMemo(() => {
     if (selectedPurchaseOrders.length === 0) return null;
-    const locations = selectedPurchaseOrders.map((order) => order.saleChannelLocation ?? null);
-    if (locations.some((location) => !location)) return null;
-    const first = locations[0];
+    const destinations = selectedPurchaseOrders.map(destinationValuesFromOrder);
+    if (destinations.some((destination) => !destination)) return null;
+    const [first, ...rest] = destinations;
     if (!first) return null;
-    return locations.every((location) => location?.id === first.id) ? first : null;
-  })();
+    const firstSignature = destinationSignature(first);
+    return rest.every((destination) => destinationSignature(destination!) === firstSignature)
+      ? first
+      : null;
+  }, [selectedPurchaseOrders]);
 
   const setDestinationValues = useCallback((values: Partial<ShippingFormValues>) => {
     form.setValue("saleChannelLocationId", values.saleChannelLocationId ?? null, {
@@ -307,15 +362,15 @@ export function ShippingForm({
 
   useEffect(() => {
     if (editingId || destinationTouched || !showDestination) return;
-    if (selectedDestinationLocation) {
-      setDestinationValues(destinationValuesFromLocation(selectedDestinationLocation));
+    if (selectedDestination) {
+      setDestinationValues(selectedDestination);
     } else {
       setDestinationValues(emptyDestinationValues());
     }
   }, [
     destinationTouched,
     editingId,
-    selectedDestinationLocation,
+    selectedDestination,
     setDestinationValues,
     showDestination,
   ]);
@@ -780,9 +835,9 @@ export function ShippingForm({
             <div className="grid gap-4 rounded-lg border border-border/80 p-4 md:grid-cols-2">
               <div className="md:col-span-2">
                 <h3 className="text-sm font-medium">Destination</h3>
-                {saleChannelLocationId ? (
+                {saleChannelLocationId || shipToLocationName ? (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {shipToLocationName || selectedDestinationLocation?.name}
+                    {shipToLocationName || selectedDestination?.shipToLocationName}
                   </p>
                 ) : null}
               </div>

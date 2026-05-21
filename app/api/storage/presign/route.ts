@@ -17,21 +17,14 @@ const bodySchema = z.object({
     .optional(),
 });
 
+function distributorUploadAllowed(prefix: string | undefined) {
+  return prefix === "new-orders" || Boolean(prefix?.startsWith("new-orders/"));
+}
+
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-  if (session.user.type === "distributor") {
-    return NextResponse.json({ message: "Distributor accounts are read-only" }, { status: 403 });
-  }
-
-  let cfg;
-  try {
-    cfg = getObjectStorageConfig();
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Storage is not configured";
-    return NextResponse.json({ message }, { status: 503 });
   }
 
   let json: unknown;
@@ -54,6 +47,19 @@ export async function POST(request: Request) {
     rawPrefix !== undefined
       ? rawPrefix.trim().replace(/^\/+|\/+$/g, "") || undefined
       : undefined;
+
+  if (session.user.type === "distributor" && !distributorUploadAllowed(prefix)) {
+    return NextResponse.json({ message: "Distributor accounts can only upload New Order documents" }, { status: 403 });
+  }
+
+  let cfg;
+  try {
+    cfg = getObjectStorageConfig();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Storage is not configured";
+    return NextResponse.json({ message }, { status: 503 });
+  }
+
   const key = buildObjectKey(filename, prefix);
 
   let url: string;

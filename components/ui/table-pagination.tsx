@@ -24,24 +24,29 @@ export function TablePagination({
   page,
   pageCount,
   pageSize,
-  totalItems: _totalItems,
-  startIndex: _startIndex,
-  endIndex: _endIndex,
+  totalItems,
+  startIndex,
+  endIndex,
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
   className,
 }: Props) {
+  const hasItems = totalItems > 0;
+  const rangeLabel = hasItems
+    ? `${startIndex + 1}-${endIndex} of ${totalItems}`
+    : "0 items";
+
   return (
     <div
       className={cn(
-        "flex flex-col gap-4 px-2 py-4 sm:flex-row sm:items-center",
+        "flex min-w-max flex-col gap-3 px-1 py-3 sm:min-w-0 sm:flex-row sm:items-center",
         onPageSizeChange ? "sm:justify-between" : "sm:justify-end",
         className,
       )}
     >
       {onPageSizeChange ? (
-        <div className="flex shrink-0 justify-start sm:mr-auto">
+        <div className="flex shrink-0 items-center justify-between gap-3 sm:mr-auto sm:justify-start">
           <Select value={String(pageSize)} onValueChange={(value) => onPageSizeChange(Number(value))}>
             <SelectTrigger size="sm" className="h-8 w-[70px]" aria-label="Rows per page">
               <SelectValue placeholder={pageSize} />
@@ -54,11 +59,15 @@ export function TablePagination({
               ))}
             </SelectContent>
           </Select>
+          <div className="text-sm text-muted-foreground">{rangeLabel}</div>
         </div>
       ) : null}
 
-      <div className="flex items-center justify-end gap-2 sm:ml-auto">
-        <div className="flex w-[100px] items-center justify-center text-sm font-medium text-muted-foreground">
+      <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end">
+        {!onPageSizeChange ? (
+          <div className="text-sm text-muted-foreground">{rangeLabel}</div>
+        ) : null}
+        <div className="flex min-w-[5.75rem] items-center justify-center text-sm font-medium text-muted-foreground">
           Page {page} of {Math.max(1, pageCount)}
         </div>
         <div className="flex items-center gap-1">

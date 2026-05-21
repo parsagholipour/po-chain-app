@@ -21,7 +21,7 @@ export function DateRangePicker({
   onGranularityChange: (value: AnalyticsGranularity) => void;
 }) {
   return (
-    <div className="flex flex-wrap items-end gap-3">
+    <div className="grid w-full min-w-0 grid-cols-1 items-end gap-3 min-[520px]:grid-cols-3 sm:w-auto">
       <div className="space-y-1">
         <Label htmlFor="analytics-from">From</Label>
         <Input id="analytics-from" type="date" value={from} onChange={(e) => onFromChange(e.target.value)} />
@@ -33,7 +33,7 @@ export function DateRangePicker({
       <div className="space-y-1">
         <Label>Granularity</Label>
         <Select value={granularity} onValueChange={(v) => onGranularityChange(v as AnalyticsGranularity)}>
-          <SelectTrigger className="w-[140px]">
+          <SelectTrigger className="w-full min-[520px]:w-[140px]">
             <SelectValue placeholder="Granularity" />
           </SelectTrigger>
           <SelectContent>

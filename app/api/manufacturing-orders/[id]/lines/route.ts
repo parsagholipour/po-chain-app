@@ -68,9 +68,13 @@ export async function POST(
     where: { id: parsed.data.purchaseOrderLineId, storeId },
     include: {
       product: { select: { cost: true } },
+      purchaseOrder: { select: { isBackOrder: true } },
     },
   });
   if (!existingLine) return jsonError("Purchase order line not found", 404);
+  if (existingLine.purchaseOrder.isBackOrder) {
+    return jsonError("Back Order POs must be actualized before fulfillment", 400);
+  }
 
   try {
     const requestedQuantity =

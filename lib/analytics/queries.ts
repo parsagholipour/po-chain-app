@@ -152,7 +152,7 @@ export async function getBreakdownByChannel(storeId: string, range: AnalyticsRan
 export async function getOpenOrderCounts(storeId: string) {
   const [openPo, openSo, openMo, openWo] = await Promise.all([
     prisma.purchaseOrder.count({
-      where: { storeId, type: "distributor", status: { not: "closed" } },
+      where: { storeId, type: "distributor", isBackOrder: false, status: { not: "closed" } },
     }),
     prisma.purchaseOrder.count({
       where: { storeId, type: "stock", status: { not: "closed" } },
@@ -193,7 +193,7 @@ export async function getPipelineStatusCounts(storeId: string) {
   const [po, so, mo, wo, shipping] = await Promise.all([
     prisma.purchaseOrder.groupBy({
       by: ["status"],
-      where: { storeId, type: "distributor" },
+      where: { storeId, type: "distributor", isBackOrder: false },
       _count: { _all: true },
     }),
     prisma.purchaseOrder.groupBy({

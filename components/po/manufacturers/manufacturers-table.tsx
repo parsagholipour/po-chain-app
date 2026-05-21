@@ -59,8 +59,12 @@ export function ManufacturersTable({ rows, isPending, onEdit, onDelete }: Props)
                     objectFit="cover"
                   />
                 </TableCell>
-                <TableCell className="font-medium">{row.name}</TableCell>
-                <TableCell>{row.region}</TableCell>
+                <TableCell className="max-w-56 truncate font-medium" title={row.name}>
+                  {row.name}
+                </TableCell>
+                <TableCell className="max-w-44 truncate" title={row.region ?? undefined}>
+                  {row.region}
+                </TableCell>
                 <TableCell
                   className="max-w-[140px] truncate text-muted-foreground"
                   title={row.contactNumber ?? undefined}

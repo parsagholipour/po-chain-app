@@ -30,13 +30,14 @@ export function ManufacturersView() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Manufacturer | null>(null);
 
-  const { data = [], isPending } = useQuery({
+  const { data = [], isPending, isError, error } = useQuery({
     queryKey: manufacturersKey,
     queryFn: async () => {
       const { data: rows } = await api.get<Manufacturer[]>("/api/manufacturers");
       return rows;
     },
   });
+  const loadError = isError ? apiErrorMessage(error) : null;
   const pagination = usePagination({ totalItems: data.length });
   const pagedRows = pagination.sliceItems(data);
 
@@ -117,6 +118,12 @@ export function ManufacturersView() {
           Add manufacturer
         </Button>
       </div>
+
+      {loadError ? (
+        <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          Could not load manufacturers: {loadError}
+        </p>
+      ) : null}
 
       <TableContainer
         footer={

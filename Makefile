@@ -1,7 +1,8 @@
 .PHONY: db-reset up clear-next-image-cache
 
 db-reset:
-	npx prisma migrate reset
+	npx prisma migrate reset --force
+	node scripts/check-dev-seed.mjs
 
 db-migrate:
 	npx prisma migrate dev

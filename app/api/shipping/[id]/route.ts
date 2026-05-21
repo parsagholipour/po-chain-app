@@ -55,6 +55,7 @@ export async function GET(
                 purchaseOrder: {
                   storeId,
                   type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+                  isBackOrder: false,
                   saleChannelId: distributorSaleChannelId,
                 },
               },
@@ -184,6 +185,7 @@ export async function PATCH(
                 existing.type === "stock_order"
                   ? PURCHASE_ORDER_TYPE_STOCK
                   : PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+              ...(existing.type === "purchase_order" ? { isBackOrder: false } : {}),
             },
           });
           if (count !== purchaseOrderIds.length) {
@@ -220,6 +222,7 @@ export async function PATCH(
               id: { in: nextPurchaseOrderIds },
               storeId,
               saleChannelId: location.saleChannelId,
+              ...(existing.type === "purchase_order" ? { isBackOrder: false } : {}),
             },
           });
           if (linkedOrdersForLocation !== nextPurchaseOrderIds.length) {

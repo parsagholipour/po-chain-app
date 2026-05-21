@@ -68,6 +68,7 @@ export function ExpandableOrderSummaryRow({
   const href = detailHref(apiScope, row.id);
   const isStockList = apiScope === "stock-orders";
   const orderKindLabel = isStockList ? "stock order" : "purchase order";
+  const locationName = row.saleChannelLocation?.name ?? row.shipToLocationName ?? null;
 
   const { data: lines, isPending, isError } = useQuery({
     queryKey: ["order-lines", "list-expand", apiScope, row.id] as const,
@@ -78,7 +79,7 @@ export function ExpandableOrderSummaryRow({
     enabled: open,
   });
 
-  const baseColumnCount = isStockList ? 5 : 6;
+  const baseColumnCount = isStockList ? 5 : 7;
   const colSpan = baseColumnCount + (onDelete ? 1 : 0);
 
   return (
@@ -101,17 +102,40 @@ export function ExpandableOrderSummaryRow({
             )}
           </Button>
         </TableCell>
-        <TableCell>
-          <Link href={href} className="font-medium hover:underline">
-            {row.name}
-          </Link>
+        <TableCell className="min-w-56 max-w-80 whitespace-normal">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <Link href={href} className="font-medium hover:underline">
+                {row.name}
+              </Link>
+              {row.isBackOrder ? (
+                <Badge
+                  variant="outline"
+                  className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                >
+                  Back Order
+                </Badge>
+              ) : null}
+            </div>
+            {row.actualizedPo ? (
+              <Link
+                href={`/purchase-orders/${row.actualizedPo.id}`}
+                className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Actualized as PO #{row.actualizedPo.number}
+              </Link>
+            ) : null}
+          </div>
         </TableCell>
         {!isStockList ? (
           <>
-            <TableCell className="text-muted-foreground">
+            <TableCell className="max-w-48 truncate text-muted-foreground" title={row.saleChannel?.name ?? undefined}>
               {row.saleChannel?.name ?? "—"}
             </TableCell>
-            <TableCell>
+            <TableCell className="max-w-48 truncate text-muted-foreground" title={locationName ?? undefined}>
+              {locationName ?? "-"}
+            </TableCell>
+            <TableCell className="min-w-[12rem] whitespace-normal">
               {row.manufacturingOrders.length > 0 || row.warehouseOrders.length > 0 ? (
                 <div className="flex flex-col gap-2">
                   {row.manufacturingOrders.map((mo) => (
@@ -147,7 +171,7 @@ export function ExpandableOrderSummaryRow({
             </TableCell>
           </>
         ) : null}
-        <TableCell>
+        <TableCell className="min-w-[12rem] whitespace-normal">
           <div className="flex flex-col gap-1.5">
             <Badge variant="secondary" className={statusBadgeClassName(row.status)}>
               {distributorPoStatusLabels[row.status] ?? row.status}

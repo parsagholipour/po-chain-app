@@ -7,6 +7,14 @@ import { apiErrorMessage } from "@/lib/api-error-message";
 import type { CustomFieldDefinition } from "@/lib/types/api";
 import { Button } from "@/components/ui/button";
 import { TablePagination } from "@/components/ui/table-pagination";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Pencil, Plus, Trash2 } from "lucide-react";
@@ -132,7 +140,7 @@ function DefinitionsTable({
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">
           {definitions.length === 0
             ? "No custom fields defined yet."
@@ -152,36 +160,38 @@ function DefinitionsTable({
 
       {definitions.length > 0 && (
         <div className="overflow-hidden rounded-lg border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="px-4 py-2.5 text-left font-medium">Name</th>
-                <th className="px-4 py-2.5 text-left font-medium">Key</th>
-                <th className="px-4 py-2.5 text-left font-medium">Type</th>
-                <th className="px-4 py-2.5 text-left font-medium">Required</th>
-                <th className="px-4 py-2.5 text-left font-medium">Conditions</th>
-                <th className="px-4 py-2.5 text-left font-medium">Order</th>
-                <th className="px-4 py-2.5 text-right font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Key</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Required</TableHead>
+                <TableHead>Conditions</TableHead>
+                <TableHead>Order</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {pagedDefinitions.map((def) => (
-                <tr key={def.id} className="border-b last:border-0">
-                  <td className="px-4 py-2.5 font-medium">{def.name}</td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
+                <TableRow key={def.id}>
+                  <TableCell className="max-w-56 truncate font-medium" title={def.name}>
+                    {def.name}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {def.fieldKey}
-                  </td>
-                  <td className="px-4 py-2.5">
+                  </TableCell>
+                  <TableCell>
                     <FieldTypeLabel type={def.type} />
-                  </td>
-                  <td className="px-4 py-2.5">{def.required ? "Yes" : "No"}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  </TableCell>
+                  <TableCell>{def.required ? "Yes" : "No"}</TableCell>
+                  <TableCell className="text-muted-foreground">
                     {def.conditions?.length
                       ? `${def.conditions.length} (${def.conditionLogic.toUpperCase()})`
                       : "None"}
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{def.sortOrder}</td>
-                  <td className="px-4 py-2.5 text-right">
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{def.sortOrder}</TableCell>
+                  <TableCell className="text-right">
                     <div className="inline-flex gap-1">
                       <Button
                         variant="ghost"
@@ -202,11 +212,11 @@ function DefinitionsTable({
                         <Trash2 className="size-3.5" />
                       </Button>
                     </div>
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
           <div className="border-t px-3 py-2">
             <TablePagination
               {...pagination}
@@ -229,17 +239,23 @@ function DefinitionsTable({
   );
 }
 
-export function CustomFieldsSettingsView() {
+export function CustomFieldsSettingsView({
+  showHeader = true,
+}: {
+  showHeader?: boolean;
+}) {
   const [activeTab, setActiveTab] = useState<EntityTypeValue>("product");
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage custom fields that appear on your entity forms.
-        </p>
-      </div>
+      {showHeader ? (
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage custom fields that appear on your entity forms.
+          </p>
+        </div>
+      ) : null}
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as EntityTypeValue)}>
         <TabsList>

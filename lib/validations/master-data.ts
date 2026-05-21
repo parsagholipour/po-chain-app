@@ -68,6 +68,7 @@ const requiredTrimmedString = (message: string) =>
 
 export const saleChannelTypeSchema = z.enum([
   "distributor",
+  "store",
   "amazon",
   "cjdropshipping",
 ]);

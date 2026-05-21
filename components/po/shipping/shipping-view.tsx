@@ -140,8 +140,8 @@ export function ShippingView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Shipping</h1>
           <p className="text-muted-foreground">
             {isDistributor
@@ -173,14 +173,14 @@ export function ShippingView() {
         }
       >
         {isDistributor ? (
-          <div className="p-5 pt-4">
+          <div className="p-3 pt-4 sm:p-5 sm:pt-4">
             <ShippingTable shippings={pagedRows} isPending={isPending} readOnly />
           </div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0">
             <TabsList
               variant="line"
-              className="h-auto min-h-12 w-full justify-start gap-8 rounded-none border-0 border-b border-border bg-muted/30 px-4"
+            className="h-auto min-h-12 w-full justify-start gap-4 rounded-none border-0 border-b border-border bg-muted/30 px-3 sm:gap-8 sm:px-4"
             >
               {Object.entries(shippingTypeLabels).map(([value, label]) => (
                 <TabsTrigger
@@ -203,7 +203,7 @@ export function ShippingView() {
               ))}
             </TabsList>
             <TabsContent value={activeTab} className="mt-0 outline-none">
-              <div className="p-5 pt-4">
+              <div className="p-3 pt-4 sm:p-5 sm:pt-4">
                 <ShippingTable
                   shippings={pagedRows}
                   isPending={isPending}

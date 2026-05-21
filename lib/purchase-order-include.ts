@@ -36,6 +36,7 @@ export const purchaseOrderOsdListInclude = {
 /** Prisma `include` for purchase order detail API responses. */
 export const purchaseOrderDetailInclude = {
   invoice: true,
+  actualizedPo: { select: { id: true, number: true, name: true } },
   saleChannel: true,
   saleChannelLocation: true,
   lines: {

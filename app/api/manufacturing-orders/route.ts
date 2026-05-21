@@ -182,7 +182,7 @@ export async function POST(request: Request) {
     const result = await prisma.$transaction(async (tx) => {
       if (purchaseOrderIds.length > 0) {
         const n = await tx.purchaseOrder.count({
-          where: { id: { in: purchaseOrderIds }, storeId },
+          where: { id: { in: purchaseOrderIds }, storeId, isBackOrder: false },
         });
         if (n !== purchaseOrderIds.length) throw new Error("PO_NOT_FOUND");
       }

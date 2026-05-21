@@ -7,10 +7,14 @@ const { auth } = NextAuth(authConfig);
 
 const publicRoutes = new Set(["/", "/auth/error"]);
 
+function isPublicRoute(pathname: string) {
+  return publicRoutes.has(pathname) || pathname.startsWith("/magic/store/");
+}
+
 export default auth((req) => {
   const pathname = req.nextUrl.pathname;
 
-  if (!req.auth?.user && !publicRoutes.has(pathname)) {
+  if (!req.auth?.user && !isPublicRoute(pathname)) {
     const signInUrl = new URL("/api/auth/signin", req.url);
     signInUrl.searchParams.set("callbackUrl", req.nextUrl.href);
     return NextResponse.redirect(signInUrl);

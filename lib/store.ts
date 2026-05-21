@@ -1,7 +1,8 @@
 import "server-only";
 
 import { cookies } from "next/headers";
-import { unstable_cache } from "next/cache";
+import { updateTag } from "next/cache";
+import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   DEFAULT_STORE_THEME,
@@ -19,10 +20,12 @@ export type StoreOption = {
   id: string;
   slug: string;
   name: string;
+  logoKey: string | null;
   theme: StoreTheme;
 };
 
 export type AppUserType = "internal" | "distributor";
+export type AppSaleChannelType = "distributor" | "store" | "amazon" | "cjdropshipping";
 
 export type AppUserAuthFields = {
   id: string;
@@ -30,88 +33,121 @@ export type AppUserAuthFields = {
   realName: string | null;
   type: AppUserType;
   saleChannelId: string | null;
+  saleChannelType: AppSaleChannelType | null;
 };
 
 export type StoreContext = {
   userId: string;
   userType: AppUserType;
   saleChannelId: string | null;
+  saleChannelName: string | null;
+  saleChannelType: AppSaleChannelType | null;
   storeId: string;
   stores: StoreOption[];
   activeStore: StoreOption;
 };
 
+function userAuthFieldsFromPrisma(user: {
+  id: string;
+  realEmail: string | null;
+  realName: string | null;
+  type: AppUserType;
+  saleChannelId: string | null;
+  saleChannel: { type: AppSaleChannelType } | null;
+}): AppUserAuthFields {
+  return {
+    id: user.id,
+    realEmail: user.realEmail,
+    realName: user.realName,
+    type: user.type,
+    saleChannelId: user.saleChannelId,
+    saleChannelType: user.saleChannel?.type ?? null,
+  };
+}
+
 function toStoreOption(store: {
   id: string;
   slug: string;
   name: string;
+  logoKey: string | null;
   theme: unknown;
 }): StoreOption {
   return {
     id: store.id,
     slug: store.slug,
     name: store.name,
+    logoKey: store.logoKey,
     theme: normalizeStoreTheme(store.theme),
   };
 }
 
-const listUserStoresCached = unstable_cache(
-  async (userId: string): Promise<StoreOption[]> => {
-    const rows = await prisma.userStore.findMany({
-      where: { userId },
-      select: {
-        store: {
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            theme: true,
-          },
-        },
-      },
-      orderBy: [{ store: { name: "asc" } }],
-    });
-
-    return rows.map((row) => toStoreOption(row.store));
-  },
-  ["user-stores"],
+async function ensureDefaultStoreSaleChannel(
+  tx: Prisma.TransactionClient,
   {
-    tags: [STORE_CACHE_TAG],
-    revalidate: STORE_CACHE_REVALIDATE_SECONDS,
+    storeId,
+    createdById,
+  }: {
+    storeId: string;
+    createdById: string;
   },
-);
+) {
+  const existing = await tx.saleChannel.findFirst({
+    where: { storeId, type: "store" },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
 
-export async function listUserStores(userId: string): Promise<StoreOption[]> {
-  return listUserStoresCached(userId);
+  const row = await tx.saleChannel.create({
+    data: {
+      name: "Store by magic link",
+      type: "store",
+      notes: "Default storefront sale channel for magic-link orders.",
+      storeId,
+      createdById,
+    },
+    select: { id: true },
+  });
+  return row.id;
 }
 
-const canAccessStoreCached = unstable_cache(
-  async (userId: string, storeId: string): Promise<StoreOption | null> => {
-    const row = await prisma.userStore.findUnique({
-      where: { userId_storeId: { userId, storeId } },
-      select: {
-        store: {
-          select: {
-            id: true,
-            slug: true,
-            name: true,
-            theme: true,
-          },
+/** Always read from DB — cached store lists survived migrate reset and hid seeded data. */
+export async function listUserStores(userId: string): Promise<StoreOption[]> {
+  const rows = await prisma.userStore.findMany({
+    where: { userId },
+    select: {
+      store: {
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          logoKey: true,
+          theme: true,
         },
       },
-    });
+    },
+    orderBy: [{ store: { name: "asc" } }],
+  });
 
-    return row?.store ? toStoreOption(row.store) : null;
-  },
-  ["user-store-access"],
-  {
-    tags: [STORE_CACHE_TAG],
-    revalidate: STORE_CACHE_REVALIDATE_SECONDS,
-  },
-);
+  return rows.map((row) => toStoreOption(row.store));
+}
 
 export async function canAccessStore(userId: string, storeId: string) {
-  return canAccessStoreCached(userId, storeId);
+  const row = await prisma.userStore.findUnique({
+    where: { userId_storeId: { userId, storeId } },
+    select: {
+      store: {
+        select: {
+          id: true,
+          slug: true,
+          name: true,
+          logoKey: true,
+          theme: true,
+        },
+      },
+    },
+  });
+
+  return row?.store ? toStoreOption(row.store) : null;
 }
 
 export async function syncUserWithDefaultStore({
@@ -126,7 +162,7 @@ export async function syncUserWithDefaultStore({
   name: string | null;
   realEmail?: string | null;
   realName?: string | null;
-}) {
+}): Promise<AppUserAuthFields> {
   return prisma.$transaction(async (tx) => {
     await tx.store.createMany({
       data: [
@@ -141,7 +177,7 @@ export async function syncUserWithDefaultStore({
 
     const store = await tx.store.findUniqueOrThrow({
       where: { slug: DEFAULT_STORE_SLUG },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     const user = await tx.user.upsert({
@@ -172,12 +208,26 @@ export async function syncUserWithDefaultStore({
       skipDuplicates: true,
     });
 
-    return user;
+    await ensureDefaultStoreSaleChannel(tx, {
+      storeId: store.id,
+      createdById: user.id,
+    });
+
+    updateTag(STORE_CACHE_TAG);
+
+    return {
+      id: user.id,
+      realEmail: user.realEmail,
+      realName: user.realName,
+      type: user.type,
+      saleChannelId: user.saleChannelId,
+      saleChannelType: null,
+    };
   });
 }
 
 export async function findUserByKeycloakSub(keycloakSub: string) {
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { keycloakSub },
     select: {
       id: true,
@@ -185,12 +235,14 @@ export async function findUserByKeycloakSub(keycloakSub: string) {
       realName: true,
       type: true,
       saleChannelId: true,
+      saleChannel: { select: { type: true } },
     },
   });
+  return user ? userAuthFieldsFromPrisma(user) : null;
 }
 
 export async function findUserById(id: string) {
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id },
     select: {
       id: true,
@@ -198,8 +250,10 @@ export async function findUserById(id: string) {
       realName: true,
       type: true,
       saleChannelId: true,
+      saleChannel: { select: { type: true } },
     },
   });
+  return user ? userAuthFieldsFromPrisma(user) : null;
 }
 
 export async function ensureDefaultStoreForUser(userId: string): Promise<StoreOption | null> {
@@ -227,6 +281,7 @@ export async function ensureDefaultStoreForUser(userId: string): Promise<StoreOp
         id: true,
         slug: true,
         name: true,
+        logoKey: true,
         theme: true,
       },
     });
@@ -240,6 +295,13 @@ export async function ensureDefaultStoreForUser(userId: string): Promise<StoreOp
       ],
       skipDuplicates: true,
     });
+
+    await ensureDefaultStoreSaleChannel(tx, {
+      storeId: store.id,
+      createdById: userId,
+    });
+
+    updateTag(STORE_CACHE_TAG);
 
     return toStoreOption(store);
   });

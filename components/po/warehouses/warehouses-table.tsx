@@ -51,7 +51,9 @@ export function WarehousesTable({ rows, isPending, onEdit, onDelete }: Props) {
         ) : (
           rows.map((row) => (
             <TableRow key={row.id}>
-              <TableCell className="font-medium">{row.name}</TableCell>
+              <TableCell className="max-w-56 truncate font-medium" title={row.name}>
+                {row.name}
+              </TableCell>
               <TableCell
                 className="max-w-[180px] truncate text-muted-foreground"
                 title={row.saleChannel?.name ?? undefined}

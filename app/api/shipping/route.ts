@@ -38,7 +38,12 @@ type ShippingValidationDb = {
   };
   purchaseOrder: {
     count(args: {
-      where: { id: { in: string[] }; storeId: string; type: "distributor" | "stock" };
+      where: {
+        id: { in: string[] };
+        storeId: string;
+        type: "distributor" | "stock";
+        isBackOrder?: boolean;
+      };
     }): Promise<number>;
   };
   warehouseOrder: {
@@ -134,6 +139,57 @@ function shippingDestinationFromLocation(location: SaleChannelLocationDestinatio
   };
 }
 
+function shippingDestinationFromOrderSnapshot(order: {
+  saleChannelLocationId: string | null;
+  saleChannelLocation: SaleChannelLocationDestination | null;
+  shipToLocationName: string | null;
+  shipToRecipientName: string | null;
+  shipToCompanyName: string | null;
+  shipToPhoneNumber: string | null;
+  shipToEmail: string | null;
+  shipToAddressLine1: string | null;
+  shipToAddressLine2: string | null;
+  shipToCity: string | null;
+  shipToStateProvince: string | null;
+  shipToPostalCode: string | null;
+  shipToCountry: string | null;
+  shipToNotes: string | null;
+}) {
+  if (order.saleChannelLocationId && order.saleChannelLocation) {
+    return shippingDestinationFromLocation(order.saleChannelLocation);
+  }
+  if (
+    !order.shipToLocationName ||
+    !order.shipToRecipientName ||
+    !order.shipToAddressLine1 ||
+    !order.shipToCity ||
+    !order.shipToCountry
+  ) {
+    return null;
+  }
+  return {
+    saleChannelLocationId: null,
+    shipToLocationName: order.shipToLocationName,
+    shipToRecipientName: order.shipToRecipientName,
+    shipToCompanyName: order.shipToCompanyName,
+    shipToPhoneNumber: order.shipToPhoneNumber,
+    shipToEmail: order.shipToEmail,
+    shipToAddressLine1: order.shipToAddressLine1,
+    shipToAddressLine2: order.shipToAddressLine2,
+    shipToCity: order.shipToCity,
+    shipToStateProvince: order.shipToStateProvince,
+    shipToPostalCode: order.shipToPostalCode,
+    shipToCountry: order.shipToCountry,
+    shipToNotes: order.shipToNotes,
+  };
+}
+
+function destinationSignature(
+  destination: NonNullable<ReturnType<typeof shippingDestinationFromOrderSnapshot>>,
+) {
+  return JSON.stringify(destination);
+}
+
 async function validateShippingSaleChannelLocation(
   db: ShippingValidationDb,
   {
@@ -185,17 +241,28 @@ async function autoDestinationFromLinkedPurchaseOrders(
     select: {
       saleChannelLocationId: true,
       saleChannelLocation: true,
+      shipToLocationName: true,
+      shipToRecipientName: true,
+      shipToCompanyName: true,
+      shipToPhoneNumber: true,
+      shipToEmail: true,
+      shipToAddressLine1: true,
+      shipToAddressLine2: true,
+      shipToCity: true,
+      shipToStateProvince: true,
+      shipToPostalCode: true,
+      shipToCountry: true,
+      shipToNotes: true,
     },
   });
   if (orders.length !== purchaseOrderIds.length) return null;
-  if (orders.some((order) => !order.saleChannelLocationId || !order.saleChannelLocation)) {
-    return null;
-  }
-  const locationIds = new Set(orders.map((order) => order.saleChannelLocationId));
-  if (locationIds.size !== 1) return null;
-  return orders[0].saleChannelLocation
-    ? shippingDestinationFromLocation(orders[0].saleChannelLocation)
-    : null;
+  const destinations = orders.map(shippingDestinationFromOrderSnapshot);
+  if (destinations.some((destination) => !destination)) return null;
+  const signatures = new Set(
+    destinations.map((destination) => destinationSignature(destination!)),
+  );
+  if (signatures.size !== 1) return null;
+  return destinations[0];
 }
 
 async function validateShippingWrite(
@@ -290,6 +357,9 @@ async function validateShippingWrite(
         id: { in: normalizedPurchaseOrderIds },
         storeId,
         type: purchaseOrderType,
+        ...(purchaseOrderType === PURCHASE_ORDER_TYPE_DISTRIBUTOR
+          ? { isBackOrder: false }
+          : {}),
       },
     });
     if (count !== normalizedPurchaseOrderIds.length) {
@@ -327,6 +397,7 @@ export async function GET(request: Request) {
         purchaseOrder: {
           storeId,
           type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+          isBackOrder: false,
           saleChannelId: distributorSaleChannelId,
         },
       },
@@ -399,6 +470,7 @@ export async function POST(request: Request) {
             id: { in: purchaseOrderIds },
             storeId,
             saleChannelId: explicitLocation.saleChannelId,
+            ...(parsed.data.type === "purchase_order" ? { isBackOrder: false } : {}),
           },
         });
         if (linkedOrdersForLocation !== purchaseOrderIds.length) {

@@ -14,16 +14,46 @@ import { SaleChannelLocationUpsertDialog } from "@/components/po/sale-channels/s
 import { SaleChannelLocationsTable } from "@/components/po/sale-channels/sale-channel-locations-table";
 import type { SaleChannelLocationFormValues } from "@/components/po/sale-channels/sale-channel-location-form";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { TableContainer } from "@/components/ui/table-container";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Copy, Loader2, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { parseUuidParam, useClearIdSearchParam } from "@/lib/url-id-param";
 import { usePagination } from "@/hooks/use-pagination";
+import { Badge } from "@/components/ui/badge";
 
 export type { SaleChannel } from "@/lib/types/api";
 
 const saleChannelsKey = ["sale-channels"] as const;
+
+type SaleChannelMagicLink = {
+  id: string;
+  expiresAt: string;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  useCount: number;
+  createdAt: string;
+  active: boolean;
+};
+
+type SaleChannelMagicLinkCreateResponse = SaleChannelMagicLink & {
+  url: string;
+};
+
+function formatMagicLinkDate(value: string | null) {
+  if (!value) return "Never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown";
+  return date.toLocaleString();
+}
 
 function DistributorLocationsView() {
   const qc = useQueryClient();
@@ -190,9 +220,15 @@ function DistributorLocationsView() {
 
 export function SaleChannelsView({
   userType,
+  saleChannelType,
 }: {
   userType: "internal" | "distributor" | null;
+  saleChannelType: "distributor" | "store" | "amazon" | "cjdropshipping" | null;
 }) {
+  if (userType === "distributor" && saleChannelType === "store") {
+    return null;
+  }
+
   if (userType === "distributor") {
     return <DistributorLocationsView />;
   }
@@ -209,6 +245,7 @@ function InternalSaleChannelsView() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<SaleChannel | null>(null);
   const [locationsFor, setLocationsFor] = useState<SaleChannel | null>(null);
+  const [magicLinksFor, setMagicLinksFor] = useState<SaleChannel | null>(null);
 
   const { data = [], isPending } = useQuery({
     queryKey: saleChannelsKey,
@@ -311,6 +348,7 @@ function InternalSaleChannelsView() {
           rows={pagedRows}
           isPending={isPending}
           onLocations={(row) => setLocationsFor(row)}
+          onMagicLinks={(row) => setMagicLinksFor(row)}
           onEdit={(row) => {
             setEditing(row);
             setOpen(true);
@@ -338,6 +376,162 @@ function InternalSaleChannelsView() {
         }}
         saleChannel={locationsFor}
       />
+      <SaleChannelMagicLinksDialog
+        key={magicLinksFor?.id ?? "closed"}
+        open={!!magicLinksFor}
+        onOpenChange={(next) => {
+          if (!next) setMagicLinksFor(null);
+        }}
+        saleChannel={magicLinksFor}
+      />
     </div>
+  );
+}
+
+function SaleChannelMagicLinksDialog({
+  open,
+  onOpenChange,
+  saleChannel,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  saleChannel: SaleChannel | null;
+}) {
+  const qc = useQueryClient();
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+  const linksKey = ["sale-channel-magic-links", saleChannel?.id] as const;
+
+  const { data: links = [], isPending } = useQuery({
+    queryKey: linksKey,
+    enabled: open && Boolean(saleChannel?.id),
+    queryFn: async () => {
+      const { data } = await api.get<SaleChannelMagicLink[]>(
+        `/api/sale-channels/${saleChannel!.id}/magic-links`,
+      );
+      return data;
+    },
+  });
+
+  const generateMut = useMutation({
+    mutationFn: async () => {
+      if (!saleChannel) throw new Error("Select a store sale channel first");
+      const { data } = await api.post<SaleChannelMagicLinkCreateResponse>(
+        `/api/sale-channels/${saleChannel.id}/magic-links`,
+      );
+      return data;
+    },
+    onSuccess: (row) => {
+      setGeneratedUrl(row.url);
+      qc.invalidateQueries({ queryKey: linksKey });
+      toast.success("Magic link generated");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const revokeMut = useMutation({
+    mutationFn: async (linkId: string) => {
+      if (!saleChannel) throw new Error("Select a store sale channel first");
+      await api.delete(`/api/sale-channels/${saleChannel.id}/magic-links/${linkId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: linksKey });
+      toast.success("Magic link revoked");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  async function copyGeneratedLink() {
+    if (!generatedUrl) return;
+    try {
+      await navigator.clipboard.writeText(generatedUrl);
+      toast.success("Copied");
+    } catch {
+      toast.error("Could not copy link");
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="2xl">
+        <DialogHeader>
+          <DialogTitle>Magic links</DialogTitle>
+          <DialogDescription>{saleChannel?.name ?? "Store sale channel"}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm text-muted-foreground">
+              Generated links stay active for 7 days unless revoked.
+            </div>
+            <Button
+              type="button"
+              onClick={() => generateMut.mutate()}
+              disabled={!saleChannel || generateMut.isPending}
+            >
+              {generateMut.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+              Generate link
+            </Button>
+          </div>
+
+          {generatedUrl ? (
+            <div className="rounded-lg border border-border/80 bg-muted/30 p-3">
+              <div className="flex gap-2">
+                <Input value={generatedUrl} readOnly className="font-mono text-xs" />
+                <Button type="button" variant="outline" size="icon" onClick={copyGeneratedLink}>
+                  <Copy className="size-4" />
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="divide-y divide-border/70 rounded-lg border border-border/80">
+            {isPending ? (
+              <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+                Loading...
+              </div>
+            ) : links.length === 0 ? (
+              <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+                No magic links yet.
+              </div>
+            ) : (
+              links.map((link) => (
+                <div
+                  key={link.id}
+                  className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={link.active ? "default" : "secondary"}>
+                        {link.active ? "Active" : link.revokedAt ? "Revoked" : "Expired"}
+                      </Badge>
+                      <span className="text-sm font-medium">
+                        Expires {formatMagicLinkDate(link.expiresAt)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Used {link.useCount} times. Last used {formatMagicLinkDate(link.lastUsedAt)}.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="self-end text-destructive hover:text-destructive sm:self-auto"
+                    disabled={!link.active || revokeMut.isPending}
+                    onClick={() => revokeMut.mutate(link.id)}
+                    aria-label="Revoke magic link"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

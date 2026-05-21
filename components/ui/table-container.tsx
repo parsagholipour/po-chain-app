@@ -12,14 +12,14 @@ function TableContainer({
     <div
       data-slot="table-container"
       className={cn(
-        "overflow-hidden rounded-xl border border-border/80 bg-card",
+        "min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card",
         className
       )}
       {...props}
     >
       {children}
       {footer ? (
-        <div className="border-t border-border/80 bg-muted/20 px-3 py-2">
+        <div className="min-w-0 overflow-x-auto border-t border-border/80 bg-muted/20 px-2 py-2 sm:px-3">
           {footer}
         </div>
       ) : null}

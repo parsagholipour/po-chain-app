@@ -154,14 +154,20 @@ export async function POST(request: Request) {
               select: {
                 id: true,
                 purchaseOrderId: true,
-                purchaseOrder: { select: { type: true } },
+                purchaseOrder: { select: { type: true, isBackOrder: true } },
               },
             })
           : [];
       if (lineRows.length !== lineIds.length) {
         throw new Error("PURCHASE_ORDER_LINE_NOT_FOUND");
       }
-      if (lineRows.some((line) => line.purchaseOrder.type !== PURCHASE_ORDER_TYPE_DISTRIBUTOR)) {
+      if (
+        lineRows.some(
+          (line) =>
+            line.purchaseOrder.type !== PURCHASE_ORDER_TYPE_DISTRIBUTOR ||
+            line.purchaseOrder.isBackOrder,
+        )
+      ) {
         throw new Error("PURCHASE_ORDER_TYPE_MISMATCH");
       }
       linkedPurchaseOrderIds = uniqueIds([
@@ -174,6 +180,7 @@ export async function POST(request: Request) {
           id: { in: linkedPurchaseOrderIds },
           storeId,
           type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+          isBackOrder: false,
         },
       });
       if (linkedPurchaseOrderCount !== linkedPurchaseOrderIds.length) {

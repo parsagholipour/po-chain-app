@@ -1,5 +1,6 @@
 import NextAuth from "next-auth";
 import type { JWT } from "next-auth/jwt";
+import Credentials from "next-auth/providers/credentials";
 import authConfig from "@/auth.config";
 import {
   findUserById,
@@ -7,6 +8,10 @@ import {
   syncUserWithDefaultStore,
   type AppUserAuthFields,
 } from "@/lib/store";
+import {
+  redeemStoreMagicLinkToken,
+  STORE_MAGIC_LINK_PROVIDER_ID,
+} from "@/lib/sale-channel-magic-links";
 
 function emailFromProfile(sub: string, profile: Record<string, unknown>) {
   const raw = profile.email;
@@ -48,6 +53,7 @@ function applyUserToToken(token: JWT, user: AppUserAuthFields) {
   token.appUserId = user.id;
   token.userType = user.type;
   token.saleChannelId = user.saleChannelId;
+  token.saleChannelType = user.saleChannelType;
 
   if (token.realEmail === undefined) {
     token.realEmail = user.realEmail;
@@ -76,6 +82,32 @@ async function syncUserForToken(
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  providers: [
+    ...(authConfig.providers ?? []),
+    Credentials({
+      id: STORE_MAGIC_LINK_PROVIDER_ID,
+      name: "Store magic link",
+      credentials: {
+        token: { label: "Token", type: "text" },
+      },
+      async authorize(credentials) {
+        const rawToken = credentials.token;
+        if (typeof rawToken !== "string" || rawToken.trim().length === 0) {
+          return null;
+        }
+        const user = await redeemStoreMagicLinkToken(rawToken);
+        if (!user) return null;
+        return {
+          id: user.id,
+          name: user.realName,
+          email: user.realEmail,
+          type: user.type,
+          saleChannelId: user.saleChannelId,
+          saleChannelType: user.saleChannelType,
+        };
+      },
+    }),
+  ],
   callbacks: {
     ...authConfig.callbacks,
     async signIn({ account, profile }) {
@@ -100,7 +132,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
       return true;
     },
-    async jwt({ token, account, profile }): Promise<JWT> {
+    async jwt({ token, account, profile, user }): Promise<JWT> {
+      if (account?.provider === STORE_MAGIC_LINK_PROVIDER_ID) {
+        token.authProvider = STORE_MAGIC_LINK_PROVIDER_ID;
+        const appUserId = typeof user?.id === "string" ? user.id : null;
+        if (appUserId) {
+          const row = await findUserById(appUserId);
+          if (row) {
+            applyUserToToken(token, row);
+          }
+        }
+        return token;
+      }
+
+      if (
+        account?.provider !== "keycloak" &&
+        token.authProvider === STORE_MAGIC_LINK_PROVIDER_ID
+      ) {
+        const appUserId = typeof token.appUserId === "string" ? token.appUserId : null;
+        if (appUserId) {
+          const row = await findUserById(appUserId);
+          if (row) {
+            applyUserToToken(token, row);
+          }
+        }
+        return token;
+      }
+
       const sub =
         account?.provider === "keycloak" && profile && typeof profile.sub === "string"
           ? profile.sub
@@ -109,6 +167,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             : null;
 
       if (sub) {
+        if (account?.provider === "keycloak") {
+          token.authProvider = "keycloak";
+        }
         const profileRecord =
           profile && typeof profile === "object"
             ? (profile as Record<string, unknown>)
@@ -159,6 +220,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           session.user.id = existingTokenUser.id;
           session.user.type = existingTokenUser.type;
           session.user.saleChannelId = existingTokenUser.saleChannelId;
+          session.user.saleChannelType = existingTokenUser.saleChannelType;
           return session;
         }
 
@@ -173,6 +235,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           session.user.id = row.id;
           session.user.type = row.type;
           session.user.saleChannelId = row.saleChannelId;
+          session.user.saleChannelType = row.saleChannelType;
           return session;
         }
       } catch (err) {
@@ -188,6 +251,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       );
       session.user.type = "internal";
       session.user.saleChannelId = null;
+      session.user.saleChannelType = null;
       return session;
     },
   },

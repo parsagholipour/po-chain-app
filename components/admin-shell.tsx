@@ -20,7 +20,9 @@ import {
   Menu,
   Package,
   Radio,
+  Store,
   Settings,
+  ShoppingCart,
   Truck,
   Warehouse,
 } from "lucide-react";
@@ -33,6 +35,7 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { StoreSwitcher } from "@/components/store-switcher";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import {
   Sheet,
   SheetContent,
@@ -138,6 +141,7 @@ const nav: readonly NavItem[] = [
 
 const distributorNav: readonly NavItem[] = [
   { kind: "link", href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { kind: "link", href: "/new-order", label: "New Order", icon: ShoppingCart },
   {
     kind: "link",
     href: "/purchase-orders-overview",
@@ -146,7 +150,10 @@ const distributorNav: readonly NavItem[] = [
   },
   { kind: "link", href: "/products", label: "Products", icon: Boxes },
   { kind: "link", href: "/sale-channels", label: "Locations", icon: MapPinned },
-  { kind: "link", href: "/shipping", label: "Shipping", icon: Package },
+] as const;
+
+const storeNav: readonly NavItem[] = [
+  { kind: "link", href: "/new-order", label: "New Order", icon: ShoppingCart },
 ] as const;
 
 type StoreOption = {
@@ -164,37 +171,72 @@ function navGroupActive(pathname: string, item: NavGroup) {
   return navActive(pathname, item.href) || item.children.some((child) => navActive(pathname, child.href));
 }
 
+function DefaultBrandLogo({
+  isCollapsed,
+  logoHueRotateDeg,
+}: {
+  isCollapsed?: boolean;
+  logoHueRotateDeg: number;
+}) {
+  return (
+    <div
+      className="relative size-10 shrink-0 overflow-hidden"
+      style={logoHueRotateFilterStyle(logoHueRotateDeg)}
+    >
+      <Image
+        src="/logo.png"
+        alt={isCollapsed ? APP_NAME : ""}
+        width={60}
+        height={60}
+        className="size-10 object-cover h-full w-auto"
+        priority
+      />
+    </div>
+  );
+}
+
 function SidebarBrand({
   activeStoreName,
+  activeStoreLogoKey,
   isCollapsed,
   logoHueRotateDeg,
 }: {
   activeStoreName: string | null;
+  activeStoreLogoKey: string | null;
   isCollapsed?: boolean;
   logoHueRotateDeg: number;
 }) {
   return (
     <div className={cn("flex h-16 items-center border-b border-sidebar-border", isCollapsed ? "justify-center px-0" : "gap-2 px-5")}>
-      <div
-        className="relative size-10 shrink-0 overflow-hidden"
-        style={logoHueRotateFilterStyle(logoHueRotateDeg)}
-      >
-        <Image
-          src="/logo.png"
-          alt={isCollapsed ? APP_NAME : ""}
-          width={60}
-          height={60}
-          className="size-10 object-cover h-full w-auto"
-          priority
+      {activeStoreLogoKey ? (
+        <StorageObjectImage
+          reference={activeStoreLogoKey}
+          alt={isCollapsed ? (activeStoreName ?? APP_NAME) : ""}
+          className="size-10 shrink-0 rounded-md bg-sidebar-accent/40 ring-sidebar-border"
+          imgClassName="p-1"
+          objectFit="contain"
+          previewWidth={160}
+          previewQuality={90}
+          fallback={
+            <DefaultBrandLogo
+              isCollapsed={isCollapsed}
+              logoHueRotateDeg={logoHueRotateDeg}
+            />
+          }
         />
-      </div>
+      ) : (
+        <DefaultBrandLogo
+          isCollapsed={isCollapsed}
+          logoHueRotateDeg={logoHueRotateDeg}
+        />
+      )}
       {!isCollapsed && (
         <div className="min-w-0 flex-1 leading-tight">
           <p className="truncate font-semibold tracking-tight text-sidebar-foreground">
-            {APP_NAME}
+            {activeStoreName ?? "Operations"}
           </p>
           <p className="truncate text-xs text-muted-foreground">
-            {activeStoreName ?? "Operations"}
+            {APP_NAME}
           </p>
         </div>
       )}
@@ -475,14 +517,36 @@ function NavList({
 function SidebarFooter({
   stores,
   activeStoreId,
+  distributorName,
   isCollapsed,
 }: {
   stores: StoreOption[];
   activeStoreId: string | null;
+  distributorName?: string | null;
   isCollapsed?: boolean;
 }) {
   return (
     <div className={cn("mt-auto border-t border-sidebar-border bg-sidebar/80 p-4 backdrop-blur-sm", isCollapsed ? "flex flex-col items-center gap-4" : "space-y-3")}>
+      {distributorName ? (
+        <div
+          title={distributorName}
+          className={cn(
+            "rounded-lg border border-sidebar-border/80 bg-sidebar-accent/40 text-sidebar-foreground",
+            isCollapsed ? "flex size-10 items-center justify-center" : "px-3 py-2.5",
+          )}
+        >
+          {isCollapsed ? (
+            <Store className="size-4" />
+          ) : (
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                Distributor
+              </p>
+              <p className="truncate text-sm font-semibold">{distributorName}</p>
+            </div>
+          )}
+        </div>
+      ) : null}
       {activeStoreId ? (
         <StoreSwitcher stores={stores} activeStoreId={activeStoreId} isCollapsed={isCollapsed} />
       ) : (
@@ -510,7 +574,10 @@ export function AdminShell({
   stores,
   activeStoreId,
   activeStoreName,
+  activeStoreLogoKey,
   userType,
+  saleChannelName,
+  saleChannelType,
   logoHueRotateDeg,
   children,
 }: {
@@ -518,7 +585,10 @@ export function AdminShell({
   stores: StoreOption[];
   activeStoreId: string | null;
   activeStoreName: string | null;
+  activeStoreLogoKey: string | null;
   userType: "internal" | "distributor" | null;
+  saleChannelName: string | null;
+  saleChannelType: "distributor" | "store" | "amazon" | "cjdropshipping" | null;
   logoHueRotateDeg: number;
   children: React.ReactNode;
 }) {
@@ -537,13 +607,15 @@ export function AdminShell({
     });
   };
   const isDistributor = userType === "distributor";
-  const navItems = isDistributor ? distributorNav : nav;
+  const distributorName =
+    isDistributor && saleChannelType === "distributor" ? saleChannelName : null;
+  const navItems = isDistributor ? (saleChannelType === "store" ? storeNav : distributorNav) : nav;
 
   if (!authenticated) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <header className="sticky top-0 z-10 border-b border-border/80 bg-background/85 backdrop-blur-md">
-          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
+          <div className="mx-auto flex min-h-14 max-w-7xl items-center justify-between gap-3 px-3 sm:px-4">
             <Link
               href="/"
               className="flex shrink-0 items-center gap-2 font-semibold tracking-tight"
@@ -559,7 +631,7 @@ export function AdminShell({
             </div>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">
+        <main className="mx-auto w-full max-w-7xl flex-1 px-3 py-6 sm:px-4 sm:py-8">
           {children}
         </main>
       </div>
@@ -569,7 +641,7 @@ export function AdminShell({
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1">
       {/* Desktop sidebar — sticky so it stays in view when the page scrolls */}
-      <aside className={cn("relative z-20 hidden h-[100dvh] max-h-[100dvh] shrink-0 flex-col self-start border-r border-sidebar-border bg-sidebar shadow-[4px_0_24px_-12px_rgba(0,0,0,0.08)] dark:shadow-[4px_0_32px_-12px_rgba(0,0,0,0.45)] md:sticky md:top-0 md:flex transition-all duration-300", isCollapsed ? "w-[68px]" : "w-[272px]")}>
+      <aside className={cn("relative z-20 hidden h-[100dvh] max-h-[100dvh] shrink-0 flex-col self-start border-r border-sidebar-border bg-sidebar shadow-[4px_0_24px_-12px_rgba(0,0,0,0.08)] transition-all duration-300 dark:shadow-[4px_0_32px_-12px_rgba(0,0,0,0.45)] lg:sticky lg:top-0 lg:flex", isCollapsed ? "w-[68px]" : "w-[272px]")}>
         <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-linear-to-b from-sidebar-primary/8 to-transparent" />
         <button
           onClick={toggleCollapse}
@@ -581,13 +653,19 @@ export function AdminShell({
           <div className={cn("flex min-h-0 flex-1 flex-col", isCollapsed ? "w-[68px]" : "w-[272px]")}>
             <SidebarBrand
               activeStoreName={activeStoreName}
+              activeStoreLogoKey={activeStoreLogoKey}
               isCollapsed={isCollapsed}
               logoHueRotateDeg={logoHueRotateDeg}
             />
             <ScrollArea className="min-h-0 flex-1">
               <NavList isCollapsed={isCollapsed} navItems={navItems} />
             </ScrollArea>
-            <SidebarFooter stores={stores} activeStoreId={activeStoreId} isCollapsed={isCollapsed} />
+            <SidebarFooter
+              stores={stores}
+              activeStoreId={activeStoreId}
+              distributorName={distributorName}
+              isCollapsed={isCollapsed}
+            />
           </div>
         </div>
       </aside>
@@ -604,7 +682,7 @@ export function AdminShell({
         ) : null}
 
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-          <header className="sticky top-0 z-10 flex h-14 items-center gap-3 border-b border-border/70 bg-background/90 px-4 backdrop-blur-md md:hidden">
+          <header className="sticky top-0 z-10 flex min-h-14 items-center gap-2 border-b border-border/70 bg-background/90 px-2.5 py-2 backdrop-blur-md sm:gap-3 sm:px-4 lg:hidden">
             <SheetTrigger
               type="button"
               className={cn(
@@ -637,7 +715,7 @@ export function AdminShell({
               </Button>
             ) : null}
             <ModeToggle />
-            <div className="shrink-0">
+            <div className="hidden shrink-0 sm:block">
               <AuthControls />
             </div>
           </header>
@@ -656,12 +734,16 @@ export function AdminShell({
                 navItems={navItems}
               />
             </ScrollArea>
-            <SidebarFooter stores={stores} activeStoreId={activeStoreId} />
+            <SidebarFooter
+              stores={stores}
+              activeStoreId={activeStoreId}
+              distributorName={distributorName}
+            />
           </SheetContent>
         </Sheet>
 
-        <header className="sticky top-0 z-10 hidden shrink-0 border-b border-border/70 bg-background/90 backdrop-blur-md md:block">
-          <div className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-10 hidden shrink-0 border-b border-border/70 bg-background/90 backdrop-blur-md lg:block">
+          <div className="mx-auto flex h-14 max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8">
             <div className="min-w-0 flex-1">
               {!isDistributor ? (
                 <Suspense fallback={null}>
@@ -685,7 +767,7 @@ export function AdminShell({
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
+          <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
             {children}
           </div>
         </main>

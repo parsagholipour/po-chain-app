@@ -231,12 +231,12 @@ function PoListFiltersAndTable({
 
   return (
     <>
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <Input
           placeholder="Search…"
           value={q}
           onChange={(e) => onQChange(e.target.value)}
-          className="max-w-xs"
+          className="w-full sm:max-w-xs"
           disabled={!filterReady}
         />
         <Select
@@ -246,7 +246,7 @@ function PoListFiltersAndTable({
           }}
           disabled={!filterReady}
         >
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-full sm:w-[200px]">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -266,6 +266,7 @@ function PoListFiltersAndTable({
               <ExpandableOrderSummaryTableHead />
               <TableHead>Name</TableHead>
               <TableHead>Sale Channel</TableHead>
+              <TableHead>Location</TableHead>
               <TableHead className="min-w-[12rem]">Fulfillment</TableHead>
               <TableHead className="min-w-[12rem]">Status</TableHead>
               <TableHead className="w-40">Created</TableHead>
@@ -516,7 +517,7 @@ export function PurchaseOrdersListView() {
             />
           }
         >
-          <div className="space-y-5 p-5">
+          <div className="space-y-5 p-3 sm:p-5">
             <PoListFiltersAndTable
               q={q}
               onQChange={setQ}
@@ -550,7 +551,7 @@ export function PurchaseOrdersListView() {
         >
           <TabsList
             variant="line"
-            className="h-auto min-h-12 w-full justify-start gap-8 rounded-none border-0 border-b border-border bg-muted/30 px-4"
+            className="h-auto min-h-12 w-full justify-start gap-4 rounded-none border-0 border-b border-border bg-muted/30 px-3 sm:gap-8 sm:px-4"
           >
             <TabsTrigger
               value="sale_channels"
@@ -567,7 +568,7 @@ export function PurchaseOrdersListView() {
           </TabsList>
 
           <TabsContent value="sale_channels" className="mt-0 outline-none">
-            <div className="space-y-5 p-5 pt-4">
+            <div className="space-y-5 p-3 pt-4 sm:p-5 sm:pt-4">
               <EntityTabRow
                 items={saleChannelItems}
                 selectedId={selectedSaleChannelId}
@@ -599,7 +600,7 @@ export function PurchaseOrdersListView() {
           </TabsContent>
 
           <TabsContent value="manufacturers" className="mt-0 outline-none">
-            <div className="space-y-5 p-5 pt-4">
+            <div className="space-y-5 p-3 pt-4 sm:p-5 sm:pt-4">
               <EntityTabRow
                 items={manufacturerItems}
                 selectedId={selectedManufacturerId}

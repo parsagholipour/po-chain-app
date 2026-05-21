@@ -6,21 +6,14 @@ import { buildObjectKey, putObject } from "@/lib/storage/file-storage";
 
 export const runtime = "nodejs";
 
+function distributorUploadAllowed(prefix: string | undefined) {
+  return prefix === "new-orders" || Boolean(prefix?.startsWith("new-orders/"));
+}
+
 export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-  }
-  if (session.user.type === "distributor") {
-    return NextResponse.json({ message: "Distributor accounts are read-only" }, { status: 403 });
-  }
-
-  let cfg;
-  try {
-    cfg = getObjectStorageConfig();
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Storage is not configured";
-    return NextResponse.json({ message }, { status: 503 });
   }
 
   let form: FormData;
@@ -43,6 +36,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "Invalid prefix" }, { status: 400 });
     }
     prefix = t;
+  }
+
+  if (session.user.type === "distributor" && !distributorUploadAllowed(prefix)) {
+    return NextResponse.json({ message: "Distributor accounts can only upload New Order documents" }, { status: 403 });
+  }
+
+  let cfg;
+  try {
+    cfg = getObjectStorageConfig();
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Storage is not configured";
+    return NextResponse.json({ message }, { status: 503 });
   }
 
   if (file.size > cfg.maxUploadBytes) {

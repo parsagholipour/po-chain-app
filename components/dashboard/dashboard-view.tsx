@@ -113,8 +113,8 @@ export function DashboardView() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-2">
-          <h1 className="flex items-center gap-2 text-3xl font-bold tracking-tight">
-            <Package className="size-8 text-primary" />
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight sm:text-3xl">
+            <Package className="size-7 text-primary sm:size-8" />
             Operations dashboard
           </h1>
           <p className="max-w-2xl text-muted-foreground">

@@ -7,6 +7,7 @@ export function closedDistributorPoWhere(storeId: string, range: AnalyticsRange)
   return {
     storeId,
     type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+    isBackOrder: false,
     status: "closed",
     updatedAt: {
       gte: toStartOfDay(range.from),

@@ -27,7 +27,20 @@ type OrderOption = {
   id: string;
   number: number;
   name: string;
+  isBackOrder?: boolean;
   saleChannelLocation?: ShippingRow["saleChannelLocation"] | null;
+  shipToLocationName?: string | null;
+  shipToRecipientName?: string | null;
+  shipToCompanyName?: string | null;
+  shipToPhoneNumber?: string | null;
+  shipToEmail?: string | null;
+  shipToAddressLine1?: string | null;
+  shipToAddressLine2?: string | null;
+  shipToCity?: string | null;
+  shipToStateProvince?: string | null;
+  shipToPostalCode?: string | null;
+  shipToCountry?: string | null;
+  shipToNotes?: string | null;
   linkedSaleChannels?: string[];
 };
 
@@ -198,7 +211,9 @@ export function ShippingUpsertDialog({
   const isSubmitting = createMut.isPending || updateMut.isPending;
 
   const availablePurchaseOrders =
-    currentType === "stock_order" ? stockOrders ?? [] : purchaseOrders ?? [];
+    currentType === "stock_order"
+      ? stockOrders ?? []
+      : (purchaseOrders ?? []).filter((order) => !order.isBackOrder);
   const isOrderOptionsPending =
     currentType === "manufacturing_order"
       ? isManufacturingOrdersPending

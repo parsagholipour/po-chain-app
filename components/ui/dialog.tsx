@@ -75,7 +75,7 @@ function DialogOverlay({
 }
 
 const dialogContentVariants = cva(
-  "fixed top-1/2 left-1/2 z-50 flex flex-col max-h-[calc(100dvh-2rem)] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl bg-popover p-(--dialog-padding) text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+  "fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100dvh-1rem)] w-full max-w-[calc(100%-1rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg bg-popover p-(--dialog-padding) text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-h-[calc(100dvh-2rem)] sm:max-w-[calc(100%-2rem)] sm:rounded-xl data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
   {
     variants: {
       size: {
@@ -249,7 +249,7 @@ function DialogBody({
       <div
         data-slot="dialog-body"
         className={cn(
-          "mx-[calc(var(--dialog-padding)*-1)] min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-(--dialog-padding) [&_form>:has(+[data-slot=dialog-footer])]:pb-3",
+          "mx-[calc(var(--dialog-padding)*-1)] min-h-0 min-w-0 flex-1 overflow-x-auto overflow-y-auto px-(--dialog-padding) [&_form>:has(+[data-slot=dialog-footer])]:pb-3",
           hasHeader && "pt-(--dialog-padding)",
           hasFooter && "pb-3",
           extendsToBottom && "mb-[calc(var(--dialog-padding)*-1)]",
@@ -291,8 +291,8 @@ function DialogFooter({
         data-slot="dialog-footer"
         className={cn(
         isInDialogBody
-          ? "sticky bottom-0 z-10 mx-[calc(var(--dialog-padding)*-1)] flex shrink-0 flex-col-reverse gap-2 rounded-b-xl p-(--dialog-padding) sm:flex-row sm:justify-end"
-          : "z-10 mx-[calc(var(--dialog-padding)*-1)] mb-[calc(var(--dialog-padding)*-1)] flex shrink-0 flex-col-reverse gap-2 rounded-b-xl p-(--dialog-padding) sm:flex-row sm:justify-end",
+          ? "sticky bottom-0 z-10 mx-[calc(var(--dialog-padding)*-1)] flex shrink-0 flex-col-reverse gap-2 rounded-b-xl p-(--dialog-padding) sm:flex-row sm:justify-end [&_[data-slot=button]]:w-full sm:[&_[data-slot=button]]:w-auto"
+          : "z-10 mx-[calc(var(--dialog-padding)*-1)] mb-[calc(var(--dialog-padding)*-1)] flex shrink-0 flex-col-reverse gap-2 rounded-b-xl p-(--dialog-padding) sm:flex-row sm:justify-end [&_[data-slot=button]]:w-full sm:[&_[data-slot=button]]:w-auto",
         className,
         "mt-0 border-t bg-popover"
       )}

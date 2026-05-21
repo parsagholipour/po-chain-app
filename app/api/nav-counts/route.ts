@@ -21,6 +21,7 @@ export async function GET() {
       where: {
         storeId,
         type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+        isBackOrder: false,
         saleChannelId: distributorSaleChannelId,
         status: { not: "closed" },
       },
@@ -39,6 +40,7 @@ export async function GET() {
       where: {
         storeId,
         type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+        isBackOrder: false,
         status: { not: "closed" },
       },
     }),

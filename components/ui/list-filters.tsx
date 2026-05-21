@@ -65,12 +65,12 @@ export function ListFilters({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between",
+        "flex min-w-0 flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >
-      <div className="flex min-w-0 flex-1 flex-wrap gap-3">
-        <div className="relative min-w-52 flex-1 sm:max-w-xs">
+      <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <div className="relative min-w-0 flex-1 sm:min-w-52 sm:max-w-xs">
           <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             aria-label={searchAriaLabel}
@@ -97,7 +97,7 @@ export function ListFilters({
             >
               <SelectTrigger
                 aria-label={select.ariaLabel}
-                className={cn("w-full min-w-44 sm:w-[200px]", select.triggerClassName)}
+                className={cn("w-full min-w-0 sm:w-[200px]", select.triggerClassName)}
               >
                 <SelectValue placeholder={select.placeholder} />
               </SelectTrigger>
@@ -120,9 +120,9 @@ export function ListFilters({
         })}
       </div>
 
-      <div className="flex shrink-0 items-center justify-between gap-2 sm:justify-end">
+      <div className="flex min-w-0 shrink-0 items-center justify-between gap-2 sm:justify-end">
         {showCount ? (
-          <div className="text-sm text-muted-foreground">
+          <div className="min-w-0 truncate text-sm text-muted-foreground">
             {resultCount === totalCount ? `${totalCount} total` : `${resultCount} of ${totalCount}`}
           </div>
         ) : null}

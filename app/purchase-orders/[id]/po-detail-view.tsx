@@ -131,6 +131,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
     },
     onSuccess: (row) => {
       qc.setQueryData(poKey, row);
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
       void invalidateNavCounts(qc);
       toast.success("Updated");
     },
@@ -191,6 +192,24 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
       qc.removeQueries({ queryKey: poKey });
       toast.success("Purchase order deleted");
       router.push("/purchase-orders-overview");
+    },
+    onError: (e: unknown) => toast.error(apiErrorMessage(e)),
+  });
+
+  const actualizeBackOrder = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<Extract<PurchaseOrderDetail, { type: "distributor" }>>(
+        `/api/purchase-orders/${purchaseOrderId}/actualize`,
+      );
+      return data;
+    },
+    onSuccess: async (row) => {
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: poKey }),
+        qc.invalidateQueries({ queryKey: ["purchase-orders"] }),
+        invalidateNavCounts(qc),
+      ]);
+      toast.success(`Back Order actualized as PO #${row.number}`);
     },
     onError: (e: unknown) => toast.error(apiErrorMessage(e)),
   });
@@ -442,6 +461,14 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         po={po}
         statusLogs={po.statusLogs}
         saleChannelOptions={distributorSaleChannelOptions}
+        onNameChange={
+          !isDistributor
+            ? async (name) => {
+                await patchPo.mutateAsync({ name });
+                router.refresh();
+              }
+            : undefined
+        }
         onStatusChange={!isDistributor ? (s) => patchPo.mutate({ status: s }) : undefined}
         onSaveStatusLogNote={
           !isDistributor
@@ -463,6 +490,14 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         onDocumentUpload={!isDistributor ? uploadDocument : undefined}
         isSaving={patchPo.isPending}
         isDocumentSaving={isDocumentSaving}
+        onActualize={
+          !isDistributor && po.isBackOrder && !po.actualizedPoId
+            ? async () => {
+                await actualizeBackOrder.mutateAsync();
+              }
+            : undefined
+        }
+        isActualizing={actualizeBackOrder.isPending}
         onDelete={!isDistributor ? () => deletePo.mutateAsync() : undefined}
         isDeleting={deletePo.isPending}
       />
@@ -520,7 +555,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         shippings={po.shippings}
         orderType="purchase_order"
         orderId={purchaseOrderId}
-        readOnly={isDistributor}
+        readOnly={isDistributor || po.isBackOrder}
       />
 
       {!isDistributor ? (

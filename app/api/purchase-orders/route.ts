@@ -23,6 +23,36 @@ import {
 
 export const runtime = "nodejs";
 
+function purchaseOrderDestinationFromLocation(location: {
+  name: string;
+  recipientName: string;
+  companyName: string | null;
+  phoneNumber: string | null;
+  email: string | null;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  stateProvince: string | null;
+  postalCode: string | null;
+  country: string;
+  shippingNotes: string | null;
+}) {
+  return {
+    shipToLocationName: location.name,
+    shipToRecipientName: location.recipientName,
+    shipToCompanyName: location.companyName,
+    shipToPhoneNumber: location.phoneNumber,
+    shipToEmail: location.email,
+    shipToAddressLine1: location.addressLine1,
+    shipToAddressLine2: location.addressLine2,
+    shipToCity: location.city,
+    shipToStateProvince: location.stateProvince,
+    shipToPostalCode: location.postalCode,
+    shipToCountry: location.country,
+    shipToNotes: location.shippingNotes,
+  };
+}
+
 export async function GET(request: Request) {
   const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
@@ -79,6 +109,15 @@ export async function GET(request: Request) {
       number: true,
       name: true,
       status: true,
+      isBackOrder: true,
+      actualizedPoId: true,
+      actualizedPo: {
+        select: {
+          id: true,
+          number: true,
+          name: true,
+        },
+      },
       createdAt: true,
       updatedAt: true,
       lines: {
@@ -100,6 +139,18 @@ export async function GET(request: Request) {
         },
       },
       saleChannelLocation: true,
+      shipToLocationName: true,
+      shipToRecipientName: true,
+      shipToCompanyName: true,
+      shipToPhoneNumber: true,
+      shipToEmail: true,
+      shipToAddressLine1: true,
+      shipToAddressLine2: true,
+      shipToCity: true,
+      shipToStateProvince: true,
+      shipToPostalCode: true,
+      shipToCountry: true,
+      shipToNotes: true,
       manufacturingOrderPurchaseOrders: {
         select: {
           manufacturingOrder: {
@@ -145,9 +196,24 @@ export async function GET(request: Request) {
       number: r.number,
       name: r.name,
       status: r.status,
+      isBackOrder: r.isBackOrder,
+      actualizedPoId: r.actualizedPoId,
+      actualizedPo: r.actualizedPo,
       createdAt: r.createdAt,
       saleChannel: r.saleChannel,
       saleChannelLocation: r.saleChannelLocation,
+      shipToLocationName: r.shipToLocationName,
+      shipToRecipientName: r.shipToRecipientName,
+      shipToCompanyName: r.shipToCompanyName,
+      shipToPhoneNumber: r.shipToPhoneNumber,
+      shipToEmail: r.shipToEmail,
+      shipToAddressLine1: r.shipToAddressLine1,
+      shipToAddressLine2: r.shipToAddressLine2,
+      shipToCity: r.shipToCity,
+      shipToStateProvince: r.shipToStateProvince,
+      shipToPostalCode: r.shipToPostalCode,
+      shipToCountry: r.shipToCountry,
+      shipToNotes: r.shipToNotes,
       manufacturers: isDistributor
         ? []
         : Array.from(
@@ -214,6 +280,7 @@ export async function POST(request: Request) {
       if (!sc) {
         throw new Error("SALE_CHANNEL_NOT_FOUND");
       }
+      let locationSnapshot: ReturnType<typeof purchaseOrderDestinationFromLocation> | null = null;
       if (saleChannelLocationId) {
         const location = await tx.saleChannelLocation.findFirst({
           where: {
@@ -221,11 +288,11 @@ export async function POST(request: Request) {
             storeId,
             saleChannelId,
           },
-          select: { id: true },
         });
         if (!location) {
           throw new Error("SALE_CHANNEL_LOCATION_NOT_FOUND");
         }
+        locationSnapshot = purchaseOrderDestinationFromLocation(location);
       }
 
       const productPricingById = new Map<string, { cost: unknown; price: unknown }>();
@@ -271,6 +338,7 @@ export async function POST(request: Request) {
           storeId,
           saleChannelId,
           saleChannelLocationId: saleChannelLocationId ?? null,
+          ...(locationSnapshot ?? {}),
           createdById: userId,
         },
       });

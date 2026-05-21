@@ -61,6 +61,15 @@ export async function GET(request: Request) {
       number: true,
       name: true,
       status: true,
+      isBackOrder: true,
+      actualizedPoId: true,
+      actualizedPo: {
+        select: {
+          id: true,
+          number: true,
+          name: true,
+        },
+      },
       createdAt: true,
       updatedAt: true,
       lines: {
@@ -102,6 +111,9 @@ export async function GET(request: Request) {
       number: r.number,
       name: r.name,
       status: r.status,
+      isBackOrder: r.isBackOrder,
+      actualizedPoId: r.actualizedPoId,
+      actualizedPo: r.actualizedPo,
       createdAt: r.createdAt,
       saleChannel: r.saleChannel,
       saleChannelLocation: r.saleChannelLocation,

@@ -36,7 +36,7 @@ import {
 } from "@/components/po/custom-fields/custom-fields-renderer";
 
 const saleChannelTypeSelectItems = (
-  ["distributor", "amazon", "cjdropshipping"] as const
+  ["distributor", "store", "amazon", "cjdropshipping"] as const
 ).map((t) => ({ value: t, label: saleChannelTypeLabels[t] }));
 
 export type SaleChannelFormValues = z.infer<typeof saleChannelCreateSchema>;
@@ -139,6 +139,7 @@ export function SaleChannelForm({ defaultValues, editingId, onSubmit, onCancel }
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="distributor">Distributor</SelectItem>
+                      <SelectItem value="store">Store</SelectItem>
                       <SelectItem value="amazon">Amazon</SelectItem>
                       <SelectItem value="cjdropshipping">CJ Dropshipping</SelectItem>
                     </SelectContent>

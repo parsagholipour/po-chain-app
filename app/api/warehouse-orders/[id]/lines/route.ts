@@ -49,11 +49,14 @@ export async function POST(
         select: {
           id: true,
           purchaseOrderId: true,
-          purchaseOrder: { select: { type: true } },
+          purchaseOrder: { select: { type: true, isBackOrder: true } },
         },
       });
       if (!line) throw new Error("PURCHASE_ORDER_LINE_NOT_FOUND");
-      if (line.purchaseOrder.type !== PURCHASE_ORDER_TYPE_DISTRIBUTOR) {
+      if (
+        line.purchaseOrder.type !== PURCHASE_ORDER_TYPE_DISTRIBUTOR ||
+        line.purchaseOrder.isBackOrder
+      ) {
         throw new Error("PURCHASE_ORDER_TYPE_MISMATCH");
       }
 

@@ -18,7 +18,12 @@ export async function GET() {
   const [distributorPos, stockOrders, manufacturingOrders, warehouseOrders] =
     await Promise.all([
     prisma.purchaseOrder.findMany({
-      where: { storeId, type: PURCHASE_ORDER_TYPE_DISTRIBUTOR, status: notClosed },
+      where: {
+        storeId,
+        type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+        isBackOrder: false,
+        status: notClosed,
+      },
       orderBy: { updatedAt: "desc" },
       take: TAKE_EACH,
       select: { id: true, name: true, number: true, status: true, updatedAt: true },

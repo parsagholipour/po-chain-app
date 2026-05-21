@@ -10,6 +10,7 @@ import {
   ACTIVE_STORE_COOKIE,
   ensureDefaultStoreForUser,
   listUserStores,
+  setActiveStoreCookie,
   type StoreContext,
 } from "@/lib/store";
 import { prisma } from "@/lib/prisma";
@@ -22,7 +23,11 @@ export async function getStoreContextForUserId(
 ): Promise<StoreContext | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { type: true, saleChannelId: true },
+    select: {
+      type: true,
+      saleChannelId: true,
+      saleChannel: { select: { name: true, type: true } },
+    },
   });
   if (!user) return null;
 
@@ -37,12 +42,21 @@ export async function getStoreContextForUserId(
 
   const cookieStore = await cookies();
   const requestedStoreId = cookieStore.get(ACTIVE_STORE_COOKIE)?.value ?? null;
-  const activeStore = stores.find((store) => store.id === requestedStoreId) ?? stores[0];
+  const matchedStore = requestedStoreId
+    ? stores.find((store) => store.id === requestedStoreId)
+    : undefined;
+  const activeStore = matchedStore ?? stores[0];
+
+  if (requestedStoreId && !matchedStore) {
+    await setActiveStoreCookie(activeStore.id);
+  }
 
   return {
     userId,
     userType: user.type,
     saleChannelId: user.saleChannelId,
+    saleChannelName: user.saleChannel?.name ?? null,
+    saleChannelType: user.saleChannel?.type ?? null,
     storeId: activeStore.id,
     stores,
     activeStore,
@@ -104,6 +118,10 @@ export async function requireStoreContext(
 
 export function isDistributorContext(context: StoreContext) {
   return context.userType === USER_TYPE_DISTRIBUTOR;
+}
+
+export function isStoreSaleChannelContext(context: StoreContext) {
+  return context.userType === USER_TYPE_DISTRIBUTOR && context.saleChannelType === "store";
 }
 
 export function distributorWriteForbidden() {

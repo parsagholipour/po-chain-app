@@ -11,6 +11,23 @@ import type { Prisma } from "@/app/generated/prisma/client";
 
 export const runtime = "nodejs";
 
+const DEFAULT_PAGE = 1;
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
+
+const productInclude = {
+  defaultManufacturer: true,
+  category: true,
+  type: true,
+  collection: true,
+} satisfies Prisma.ProductInclude;
+
+function parsePositiveInt(value: string | null, fallback: number) {
+  if (!value) return fallback;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export async function GET(request: Request) {
   const authz = await requireStoreContext();
   if (!authz.ok) return authz.response;
@@ -21,6 +38,7 @@ export async function GET(request: Request) {
   const categoryIdRaw = searchParams.get("categoryId");
   const typeIdRaw = searchParams.get("typeId");
   const collectionIdRaw = searchParams.get("collectionId");
+  const hasPagination = searchParams.has("page") || searchParams.has("pageSize");
 
   const where: Prisma.ProductWhereInput = { storeId };
   if (q.length > 0) {
@@ -60,15 +78,30 @@ export async function GET(request: Request) {
     }
   }
 
+  const page = parsePositiveInt(searchParams.get("page"), DEFAULT_PAGE);
+  const pageSize = Math.min(
+    parsePositiveInt(searchParams.get("pageSize"), DEFAULT_PAGE_SIZE),
+    MAX_PAGE_SIZE,
+  );
+
+  if (hasPagination) {
+    const [total, rows] = await prisma.$transaction([
+      prisma.product.count({ where }),
+      prisma.product.findMany({
+        where,
+        orderBy: { name: "asc" },
+        include: productInclude,
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+    return NextResponse.json({ rows, total, page, pageSize });
+  }
+
   const rows = await prisma.product.findMany({
     where,
     orderBy: { name: "asc" },
-    include: {
-      defaultManufacturer: true,
-      category: true,
-      type: true,
-      collection: true,
-    },
+    include: productInclude,
   });
   return NextResponse.json(rows);
 }

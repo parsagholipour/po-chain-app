@@ -15,7 +15,11 @@ export default {
   },
   callbacks: {
     authorized({ auth, request }) {
-      if (request.nextUrl.pathname === "/" || request.nextUrl.pathname.startsWith("/auth/error")) {
+      if (
+        request.nextUrl.pathname === "/" ||
+        request.nextUrl.pathname.startsWith("/auth/error") ||
+        request.nextUrl.pathname.startsWith("/magic/store/")
+      ) {
         return true;
       }
       return !!auth?.user;

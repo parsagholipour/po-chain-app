@@ -174,7 +174,7 @@ export function PoLineGridCard({
               <div className="truncate text-sm font-medium">{line.product.name}</div>
               <div className="font-mono text-xs text-muted-foreground">{line.product.sku}</div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 pb-2">
               <div className="space-y-2">
                 <Label htmlFor={`po-line-cost-${line.id}`}>Cost</Label>
                 <PriceField

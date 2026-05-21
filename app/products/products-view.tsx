@@ -1,12 +1,13 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import type {
   Manufacturer,
+  PaginatedResponse,
   Product,
   ProductCategory,
   ProductCollection,
@@ -23,7 +24,6 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { parseUuidParam, useClearIdSearchParam } from "@/lib/url-id-param";
-import { usePagination } from "@/hooks/use-pagination";
 import {
   LIST_FILTER_ALL_VALUE,
   useDebouncedValue,
@@ -37,14 +37,58 @@ const manufacturersKey = ["manufacturers"] as const;
 const productCategoriesKey = ["product-categories"] as const;
 const productTypesKey = ["product-types"] as const;
 const productCollectionsKey = ["product-collections"] as const;
+const defaultPage = 1;
+const defaultPageSize = 25;
 const uncategorizedFilterValue = "__uncategorized__";
 const untypedFilterValue = "__untyped__";
 const uncollectedFilterValue = "__uncollected__";
-const productFilterDefaults: Record<"category" | "type" | "collection", string> = {
+type ProductFilterKey = "category" | "type" | "collection";
+type ProductFilters = Record<ProductFilterKey, string>;
+type ProductPageResponse = PaginatedResponse<Product>;
+
+const productFilterDefaults: ProductFilters = {
   category: LIST_FILTER_ALL_VALUE,
   type: LIST_FILTER_ALL_VALUE,
   collection: LIST_FILTER_ALL_VALUE,
 };
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function buildProductSearchParams({
+  search,
+  filters,
+  page,
+  pageSize,
+}: {
+  search: string;
+  filters: ProductFilters;
+  page: number;
+  pageSize: number;
+}) {
+  const params = new URLSearchParams();
+  const q = search.trim();
+  if (q) params.set("q", q);
+  if (filters.category !== LIST_FILTER_ALL_VALUE) {
+    params.set(
+      "categoryId",
+      filters.category === uncategorizedFilterValue ? "none" : filters.category,
+    );
+  }
+  if (filters.type !== LIST_FILTER_ALL_VALUE) {
+    params.set("typeId", filters.type === untypedFilterValue ? "none" : filters.type);
+  }
+  if (filters.collection !== LIST_FILTER_ALL_VALUE) {
+    params.set(
+      "collectionId",
+      filters.collection === uncollectedFilterValue ? "none" : filters.collection,
+    );
+  }
+  params.set("page", String(page));
+  params.set("pageSize", String(pageSize));
+  return params;
+}
 
 export function ProductsView() {
   const qc = useQueryClient();
@@ -58,6 +102,8 @@ export function ProductsView() {
     initialFilters: productFilterDefaults,
   });
   const debouncedSearch = useDebouncedValue(productFilters.search);
+  const [page, setPageState] = useState(defaultPage);
+  const [pageSize, setPageSizeState] = useState(defaultPageSize);
 
   const { data: manufacturers = [], isPending: manufacturersPending } = useQuery({
     queryKey: manufacturersKey,
@@ -67,46 +113,32 @@ export function ProductsView() {
     },
   });
 
-  const { data = [], isPending } = useQuery({
+  const {
+    data: productPage,
+    isPending,
+    isFetching,
+  } = useQuery({
     queryKey: [
       ...productsKey,
       debouncedSearch,
       productFilters.filters.category,
       productFilters.filters.type,
       productFilters.filters.collection,
+      page,
+      pageSize,
     ],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      const q = debouncedSearch.trim();
-      if (q) params.set("q", q);
-      if (productFilters.filters.category !== LIST_FILTER_ALL_VALUE) {
-        params.set(
-          "categoryId",
-          productFilters.filters.category === uncategorizedFilterValue
-            ? "none"
-            : productFilters.filters.category,
-        );
-      }
-      if (productFilters.filters.type !== LIST_FILTER_ALL_VALUE) {
-        params.set(
-          "typeId",
-          productFilters.filters.type === untypedFilterValue
-            ? "none"
-          : productFilters.filters.type,
-        );
-      }
-      if (productFilters.filters.collection !== LIST_FILTER_ALL_VALUE) {
-        params.set(
-          "collectionId",
-          productFilters.filters.collection === uncollectedFilterValue
-            ? "none"
-            : productFilters.filters.collection,
-        );
-      }
+      const params = buildProductSearchParams({
+        search: debouncedSearch,
+        filters: productFilters.filters,
+        page,
+        pageSize,
+      });
       const qs = params.toString();
-      const { data: rows } = await api.get<Product[]>(`/api/products${qs ? `?${qs}` : ""}`);
-      return rows;
+      const { data } = await api.get<ProductPageResponse>(`/api/products?${qs}`);
+      return data;
     },
+    placeholderData: keepPreviousData,
   });
 
   const { data: categories = [], isPending: categoriesPending } = useQuery({
@@ -133,6 +165,17 @@ export function ProductsView() {
     },
   });
 
+  const selectedProductQuery = useQuery({
+    queryKey: [...productsKey, "detail", idFromUrl],
+    queryFn: async () => {
+      if (!idFromUrl) throw new Error("Missing product id");
+      const { data: row } = await api.get<Product>(`/api/products/${idFromUrl}`);
+      return row;
+    },
+    enabled: Boolean(idFromUrl),
+    retry: false,
+  });
+
   const categoryFilterOptions = useMemo(
     () => [
       { value: uncategorizedFilterValue, label: "No category" },
@@ -157,30 +200,65 @@ export function ProductsView() {
     [productCollections],
   );
 
-  const pagination = usePagination({
-    totalItems: data.length,
-    resetDeps: [
-      debouncedSearch,
-      productFilters.filters.category,
-      productFilters.filters.type,
-      productFilters.filters.collection,
-    ],
-  });
-  const pagedRows = pagination.sliceItems(data);
+  const rows = productPage?.rows ?? [];
+  const totalItems = productPage?.total ?? 0;
+  const pageCount = Math.max(Math.ceil(totalItems / pageSize), 1);
+  const safePage = clamp(page, 1, pageCount);
+  const startIndex = totalItems === 0 ? 0 : (safePage - 1) * pageSize;
+  const endIndex = totalItems === 0 ? 0 : Math.min(startIndex + pageSize, totalItems);
+  const isTablePending = isPending || isFetching;
 
   useEffect(() => {
-    if (!idFromUrl || isPending) return;
-    const row = data.find((r) => r.id === idFromUrl);
-    queueMicrotask(() => {
-      if (row) {
-        setEditing(row);
+    if (page === safePage) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPageState(safePage);
+  }, [page, safePage]);
+
+  const setPage = useCallback(
+    (next: number) => {
+      setPageState(clamp(next, 1, pageCount));
+    },
+    [pageCount],
+  );
+
+  const setPageSize = useCallback((next: number) => {
+    setPageSizeState(Math.max(next, 1));
+    setPageState(defaultPage);
+  }, []);
+
+  const resetPage = useCallback(() => {
+    setPageState(defaultPage);
+  }, []);
+
+  const pagination = useMemo(
+    () => ({
+      page: safePage,
+      pageSize,
+      pageCount,
+      totalItems,
+      startIndex,
+      endIndex,
+      setPage,
+      setPageSize,
+    }),
+    [endIndex, pageCount, pageSize, safePage, setPage, setPageSize, startIndex, totalItems],
+  );
+
+  useEffect(() => {
+    if (!idFromUrl) return;
+    if (selectedProductQuery.data) {
+      queueMicrotask(() => {
+        setEditing(selectedProductQuery.data ?? null);
         setOpen(true);
-      } else {
-        toast.error("Product not found");
-        clearIdParam();
-      }
+      });
+      return;
+    }
+    if (!selectedProductQuery.isError) return;
+    queueMicrotask(() => {
+      toast.error("Product not found");
+      clearIdParam();
     });
-  }, [idFromUrl, isPending, data, clearIdParam]);
+  }, [idFromUrl, selectedProductQuery.data, selectedProductQuery.isError, clearIdParam]);
 
   const createMut = useMutation({
     mutationFn: async (values: ProductFormValues) => {
@@ -278,14 +356,20 @@ export function ProductsView() {
         <ListFilters
           className="border-b border-border/80 bg-muted/20"
           searchValue={productFilters.search}
-          onSearchChange={productFilters.setSearch}
+          onSearchChange={(value) => {
+            productFilters.setSearch(value);
+            resetPage();
+          }}
           searchAriaLabel="Search products"
           searchPlaceholder="Search products..."
           selects={[
             {
               key: "category",
               value: productFilters.filters.category,
-              onValueChange: (value) => productFilters.setFilter("category", value),
+              onValueChange: (value) => {
+                productFilters.setFilter("category", value);
+                resetPage();
+              },
               allLabel: "All categories",
               ariaLabel: "Filter by category",
               placeholder: "Category",
@@ -295,7 +379,10 @@ export function ProductsView() {
             {
               key: "type",
               value: productFilters.filters.type,
-              onValueChange: (value) => productFilters.setFilter("type", value),
+              onValueChange: (value) => {
+                productFilters.setFilter("type", value);
+                resetPage();
+              },
               allLabel: "All types",
               ariaLabel: "Filter by type",
               placeholder: "Type",
@@ -305,7 +392,10 @@ export function ProductsView() {
             {
               key: "collection",
               value: productFilters.filters.collection,
-              onValueChange: (value) => productFilters.setFilter("collection", value),
+              onValueChange: (value) => {
+                productFilters.setFilter("collection", value);
+                resetPage();
+              },
               allLabel: "All collections",
               ariaLabel: "Filter by collection",
               placeholder: "Collection",
@@ -314,13 +404,16 @@ export function ProductsView() {
             },
           ]}
           hasActiveFilters={productFilters.hasActiveFilters}
-          onClear={productFilters.resetFilters}
-          resultCount={data.length}
-          totalCount={data.length}
+          onClear={() => {
+            productFilters.resetFilters();
+            resetPage();
+          }}
+          resultCount={totalItems}
+          totalCount={totalItems}
         />
         <ProductsTable
-          rows={pagedRows}
-          isPending={isPending}
+          rows={rows}
+          isPending={isTablePending}
           emptyMessage={
             productFilters.hasActiveFilters
               ? "No products match your filters."

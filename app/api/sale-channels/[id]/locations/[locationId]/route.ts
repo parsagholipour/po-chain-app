@@ -4,7 +4,11 @@ import { prisma } from "@/lib/prisma";
 import type { StoreContext } from "@/lib/store";
 import { saleChannelLocationUpdateSchema } from "@/lib/validations/master-data";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
-import { isDistributorContext, requireStoreContext } from "@/lib/store-context";
+import {
+  isDistributorContext,
+  isStoreSaleChannelContext,
+  requireStoreContext,
+} from "@/lib/store-context";
 
 export const runtime = "nodejs";
 
@@ -24,6 +28,9 @@ export async function GET(
   const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
+  if (isStoreSaleChannelContext(authz.context)) {
+    return jsonError("Not found", 404);
+  }
 
   const params = await ctx.params;
   const pid = paramsSchema.safeParse(params);
@@ -50,6 +57,9 @@ export async function PATCH(
   const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
+  if (isStoreSaleChannelContext(authz.context)) {
+    return jsonError("Store magic-link accounts use temporary session locations", 403);
+  }
 
   const params = await ctx.params;
   const pid = paramsSchema.safeParse(params);
@@ -101,6 +111,9 @@ export async function DELETE(
   const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
+  if (isStoreSaleChannelContext(authz.context)) {
+    return jsonError("Store magic-link accounts use temporary session locations", 403);
+  }
 
   const params = await ctx.params;
   const pid = paramsSchema.safeParse(params);

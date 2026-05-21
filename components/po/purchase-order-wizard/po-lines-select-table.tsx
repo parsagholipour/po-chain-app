@@ -118,7 +118,7 @@ export function PoLinesSelectTable({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-x-auto rounded-lg border border-border/80">
+      <div className="overflow-hidden rounded-lg border border-border/80">
         <Table>
           <TableHeader>
             <TableRow>

@@ -106,7 +106,9 @@ export function ProductsTable({
                   objectFit="cover"
                 />
               </TableCell>
-              <TableCell className="font-medium">{row.name}</TableCell>
+              <TableCell className="min-w-56 max-w-72 whitespace-normal font-medium leading-snug">
+                {row.name}
+              </TableCell>
               <TableCell className="font-mono text-xs">{row.sku}</TableCell>
               <TableCell className="font-mono text-xs">{emptyValue(row.upcGtin)}</TableCell>
               <TableCell className="text-end text-muted-foreground">
@@ -159,10 +161,18 @@ export function ProductsTable({
               <TableCell>
                 <StorageObjectLink reference={row.packagingKey} label="Open file" />
               </TableCell>
-              <TableCell>{row.defaultManufacturer.name}</TableCell>
-              <TableCell>{row.category?.name ?? <span className="text-muted-foreground">None</span>}</TableCell>
-              <TableCell>{row.type?.name ?? <span className="text-muted-foreground">None</span>}</TableCell>
-              <TableCell>{row.collection?.name ?? <span className="text-muted-foreground">None</span>}</TableCell>
+              <TableCell className="max-w-48 truncate" title={row.defaultManufacturer.name}>
+                {row.defaultManufacturer.name}
+              </TableCell>
+              <TableCell className="max-w-44 truncate" title={row.category?.name ?? undefined}>
+                {row.category?.name ?? <span className="text-muted-foreground">None</span>}
+              </TableCell>
+              <TableCell className="max-w-44 truncate" title={row.type?.name ?? undefined}>
+                {row.type?.name ?? <span className="text-muted-foreground">None</span>}
+              </TableCell>
+              <TableCell className="max-w-44 truncate" title={row.collection?.name ?? undefined}>
+                {row.collection?.name ?? <span className="text-muted-foreground">None</span>}
+              </TableCell>
               <TableCell>
                 {row.verified ? (
                   <Badge variant="default">Yes</Badge>

@@ -25,7 +25,7 @@ function MetricCard({
         <Icon className="size-4 text-primary" />
       </CardHeader>
       <CardContent>
-        <p className="text-3xl font-semibold tracking-tight">{value}</p>
+        <p className="text-2xl font-semibold tracking-tight sm:text-3xl">{value}</p>
       </CardContent>
     </Card>
   );
@@ -53,7 +53,7 @@ export function DistributorDashboardView() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Distributor dashboard</h1>
+        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Distributor dashboard</h1>
         <p className="mt-2 max-w-2xl text-muted-foreground">
           Your purchase orders and related shipping updates.
         </p>
@@ -80,7 +80,7 @@ export function DistributorDashboardView() {
                 <Link
                   key={po.id}
                   href={`/purchase-orders/${po.id}`}
-                  className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm hover:bg-muted/40"
+                  className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm hover:bg-muted/40"
                 >
                   <span className="min-w-0 truncate font-medium">{po.name}</span>
                   <Badge variant="secondary">{po.status.replaceAll("_", " ")}</Badge>
@@ -104,7 +104,7 @@ export function DistributorDashboardView() {
                 <Link
                   key={row.id}
                   href={`/shipping?id=${row.id}`}
-                  className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm hover:bg-muted/40"
+                  className="flex min-w-0 items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-sm hover:bg-muted/40"
                 >
                   <span className="min-w-0 truncate font-mono">{row.trackingNumber}</span>
                   <Badge variant="secondary" className={statusBadgeClassName(row.status)}>

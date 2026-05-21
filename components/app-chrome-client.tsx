@@ -19,7 +19,10 @@ export function AppChromeClient({
   stores,
   activeStoreId,
   activeStoreName,
+  activeStoreLogoKey,
   userType,
+  saleChannelName,
+  saleChannelType,
   hasActiveStore,
   shellTheme,
   children,
@@ -28,7 +31,10 @@ export function AppChromeClient({
   stores: StoreOption[];
   activeStoreId: string | null;
   activeStoreName: string | null;
+  activeStoreLogoKey: string | null;
   userType: "internal" | "distributor" | null;
+  saleChannelName: string | null;
+  saleChannelType: "distributor" | "store" | "amazon" | "cjdropshipping" | null;
   hasActiveStore: boolean;
   shellTheme: StoreTheme;
   children: React.ReactNode;
@@ -36,15 +42,18 @@ export function AppChromeClient({
   const pathname = usePathname();
   const router = useRouter();
   const isDistributor = userType === "distributor";
+  const isStoreSaleChannel = saleChannelType === "store";
   const distributorAllowed =
     pathname === "/" ||
     pathname === "/account" ||
+    pathname === "/new-order" ||
+    pathname === "/new-order/success" ||
+    pathname === "/new-order/cancelled" ||
     pathname === "/products" ||
     pathname === "/purchase-orders" ||
     pathname === "/purchase-orders-overview" ||
     pathname.startsWith("/purchase-orders/") ||
-    pathname === "/sale-channels" ||
-    pathname === "/shipping" ||
+    (!isStoreSaleChannel && pathname === "/sale-channels") ||
     pathname.startsWith("/auth/error");
 
   useEffect(() => {
@@ -65,7 +74,10 @@ export function AppChromeClient({
           stores={stores}
           activeStoreId={activeStoreId}
           activeStoreName={activeStoreName}
+          activeStoreLogoKey={activeStoreLogoKey}
           userType={userType}
+          saleChannelName={saleChannelName}
+          saleChannelType={saleChannelType}
           logoHueRotateDeg={shellTheme.logoHueRotateDeg}
         >
           <div className="text-sm text-muted-foreground">Redirecting...</div>
@@ -93,7 +105,10 @@ export function AppChromeClient({
         stores={stores}
         activeStoreId={activeStoreId}
         activeStoreName={activeStoreName}
+        activeStoreLogoKey={activeStoreLogoKey}
         userType={userType}
+        saleChannelName={saleChannelName}
+        saleChannelType={saleChannelType}
         logoHueRotateDeg={shellTheme.logoHueRotateDeg}
       >
         {children}

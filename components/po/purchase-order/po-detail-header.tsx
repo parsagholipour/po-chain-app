@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -61,6 +61,7 @@ function poOrderStatusItemsForValue(currentStatus: string) {
 type Props = {
   po: PurchaseOrderDetail;
   statusLogs: PurchaseOrderDetail["statusLogs"];
+  onNameChange?: (name: string) => Promise<void> | void;
   onStatusChange?: (status: string) => void;
   onSaveStatusLogNote?: (logId: string, note: string | null) => Promise<void>;
   /** Distributor PO only — omit for stock orders */
@@ -72,6 +73,8 @@ type Props = {
   onDocumentUpload?: (file: File) => Promise<void>;
   isSaving?: boolean;
   isDocumentSaving?: boolean;
+  onActualize?: () => Promise<void>;
+  isActualizing?: boolean;
   onDelete?: () => Promise<void>;
   isDeleting?: boolean;
 };
@@ -79,6 +82,7 @@ type Props = {
 export function PoDetailHeader({
   po,
   statusLogs,
+  onNameChange,
   saleChannelOptions = [],
   onSaleChannelChange,
   saleChannelLocations = [],
@@ -89,10 +93,14 @@ export function PoDetailHeader({
   onSaveStatusLogNote,
   isSaving = false,
   isDocumentSaving = false,
+  onActualize,
+  isActualizing = false,
   onDelete,
   isDeleting = false,
 }: Props) {
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [draftName, setDraftName] = useState(po.name);
   const [isEditingDocument, setIsEditingDocument] = useState(false);
   const [pendingDocumentName, setPendingDocumentName] = useState<string | null>(null);
   const isStock = po.type === "stock";
@@ -128,13 +136,18 @@ export function PoDetailHeader({
   const lineCount = po.lines.length;
   const moCount = po.manufacturingOrderPurchaseOrders.length;
   const showSaleChannel = po.saleChannel != null && onSaleChannelChange != null;
-  const showLocation = po.saleChannel != null && onLocationChange != null;
+  const locationDisplayName = po.saleChannelLocation?.name ?? po.shipToLocationName ?? null;
+  const hasSnapshotOnlyLocation = !po.saleChannelLocationId && po.shipToLocationName != null;
+  const showLocation = po.saleChannel != null && onLocationChange != null && !hasSnapshotOnlyLocation;
   const documentInputId = isStock ? "stock-order-document" : "po-document";
+  const nameInputId = isStock ? "stock-order-name" : "po-name";
   const currentDocumentName = storageObjectDisplayName(po.documentKey);
   const visibleDocumentName = pendingDocumentName ?? currentDocumentName;
   const isDocumentBusy = isSaving || isDocumentSaving || isDeleting;
   const shipCount = po.shippings.length;
   const canEditStatus = onStatusChange != null;
+  const canEditName = onNameChange != null;
+  const canActualize = po.isBackOrder && !po.actualizedPoId && onActualize != null;
   const locationItems = useMemo(
     () => [
       { value: NO_LOCATION_ID, label: "No location" },
@@ -145,6 +158,29 @@ export function PoDetailHeader({
     ],
     [saleChannelLocations],
   );
+
+  function startEditingName() {
+    setDraftName(po.name);
+    setIsEditingName(true);
+  }
+
+  function cancelEditingName() {
+    setDraftName(po.name);
+    setIsEditingName(false);
+  }
+
+  async function handleNameSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!onNameChange) return;
+    const nextName = draftName.trim();
+    if (!nextName) return;
+    if (nextName === po.name) {
+      setIsEditingName(false);
+      return;
+    }
+    await onNameChange(nextName);
+    setIsEditingName(false);
+  }
 
   function handleDocumentChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
@@ -175,14 +211,97 @@ export function PoDetailHeader({
           <ChevronLeft className="size-4" aria-hidden />
           {backLabel}
         </Link>
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
           <div className="min-w-0 space-y-1">
             <p className="font-mono text-sm text-muted-foreground">
               {orderMonoLabel} #{po.number}
             </p>
-            <h1 className="text-2xl font-semibold tracking-tight">{po.name}</h1>
+            <div className="flex min-w-0 flex-wrap items-start gap-2">
+              {canEditName && isEditingName ? (
+                <form
+                  className="flex min-w-0 max-w-full flex-1 flex-wrap items-center gap-2"
+                  onSubmit={(event) => {
+                    void handleNameSubmit(event).catch(() => undefined);
+                  }}
+                >
+                  <Label htmlFor={nameInputId} className="sr-only">
+                    {isStock ? "Stock order name" : "PO name"}
+                  </Label>
+                  <Input
+                    id={nameInputId}
+                    value={draftName}
+                    autoFocus
+                    required
+                    disabled={isSaving || isDeleting}
+                    className="h-9 min-w-0 flex-1 text-lg font-semibold sm:min-w-[260px] sm:max-w-lg"
+                    aria-busy={isSaving}
+                    onChange={(event) => setDraftName(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        cancelEditingName();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="submit"
+                    variant="default"
+                    size="icon-sm"
+                    disabled={isSaving || isDeleting || draftName.trim().length === 0}
+                    aria-label="Save PO name"
+                  >
+                    {isSaving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    disabled={isSaving || isDeleting}
+                    aria-label="Cancel PO name edit"
+                    onClick={cancelEditingName}
+                  >
+                    <X className="size-3.5" />
+                  </Button>
+                </form>
+              ) : (
+                <>
+                  {canEditName ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      className="mt-0.5 text-muted-foreground"
+                      disabled={isSaving || isDeleting}
+                      aria-label="Edit PO name"
+                      onClick={startEditingName}
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                  ) : null}
+                  <h1 className="min-w-0 max-w-full break-words text-2xl font-semibold leading-tight tracking-tight">
+                    {po.name}
+                  </h1>
+                </>
+              )}
+              {po.isBackOrder ? (
+                <Badge
+                  variant="outline"
+                  className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                >
+                  Back Order
+                </Badge>
+              ) : null}
+            </div>
+            {po.actualizedPo ? (
+              <Link
+                href={`/purchase-orders/${po.actualizedPo.id}`}
+                className="inline-flex w-fit text-xs font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Actualized as PO #{po.actualizedPo.number}
+              </Link>
+            ) : null}
             <div
-              className="flex flex-wrap gap-x-4 gap-y-2 pt-2 text-xs text-muted-foreground"
+              className="grid gap-2 pt-2 text-xs text-muted-foreground sm:flex sm:flex-wrap sm:gap-x-4 sm:gap-y-2"
               aria-label={summaryAria}
             >
               <span className="inline-flex items-center gap-1.5">
@@ -220,11 +339,11 @@ export function PoDetailHeader({
               </div>
             ) : null}
           </div>
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:items-end">
+          <div className="flex w-full flex-col gap-2 lg:w-auto lg:min-w-[260px] lg:items-end">
             <Label htmlFor={statusId} className="text-xs text-muted-foreground">
               {statusFieldLabel}
             </Label>
-            <div className="flex w-full items-center gap-2 sm:w-auto">
+            <div className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-2 lg:w-auto">
               {canEditStatus ? (
                 <Select
                   value={po.status}
@@ -234,7 +353,7 @@ export function PoDetailHeader({
                     if (v) onStatusChange(v);
                   }}
                 >
-                  <SelectTrigger id={statusId} className="w-full sm:w-[220px]" aria-busy={isSaving}>
+                  <SelectTrigger id={statusId} className="w-full lg:w-[220px]" aria-busy={isSaving}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -249,7 +368,7 @@ export function PoDetailHeader({
                 <Badge
                   id={statusId}
                   variant="secondary"
-                  className={`${statusBadgeClassName(po.status)} min-h-9 px-3 text-sm font-medium`}
+                  className={`${statusBadgeClassName(po.status)} min-h-9 max-w-full justify-start truncate px-3 text-sm font-medium`}
                 >
                   {distributorPoStatusLabels[po.status] ?? po.status}
                 </Badge>
@@ -262,6 +381,20 @@ export function PoDetailHeader({
                 onSaveNote={onSaveStatusLogNote}
               />
             </div>
+            {canActualize ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="w-full sm:w-auto"
+                disabled={isActualizing}
+                onClick={() => {
+                  void onActualize();
+                }}
+              >
+                {isActualizing ? "Actualizing..." : "Actualize Back Order"}
+              </Button>
+            ) : null}
             {onDelete ? (
               <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
                 <AlertDialogTrigger
@@ -410,6 +543,14 @@ export function PoDetailHeader({
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+          ) : null}
+          {po.saleChannel && locationDisplayName && (!showLocation || hasSnapshotOnlyLocation) ? (
+            <div className="flex min-w-0 flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+              <span className="text-muted-foreground sm:shrink-0">Location</span>
+              <Badge variant="secondary" className="w-fit max-w-[280px] truncate">
+                {locationDisplayName}
+              </Badge>
             </div>
           ) : null}
           {showLocation ? (

@@ -124,9 +124,11 @@ export function SaleChannelProductsTable({
           rows.map((row) => (
             <TableRow key={row.id}>
               <TableCell className="font-mono text-xs">{row.sku}</TableCell>
-              <TableCell className="min-w-48 font-medium">{row.name}</TableCell>
+              <TableCell className="min-w-56 max-w-72 whitespace-normal font-medium leading-snug">
+                {row.name}
+              </TableCell>
               <TableCell className="font-mono text-xs">{emptyValue(row.upcGtin)}</TableCell>
-              <TableCell>
+              <TableCell className="max-w-44 truncate" title={row.collection?.name ?? undefined}>
                 {row.collection?.name ?? <span className="text-muted-foreground">None</span>}
               </TableCell>
               <TableCell className="text-end text-muted-foreground">
