@@ -39,6 +39,7 @@ import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
   SheetHeader,
   SheetTitle,
   SheetTrigger,
@@ -200,14 +201,24 @@ function SidebarBrand({
   activeStoreLogoKey,
   isCollapsed,
   logoHueRotateDeg,
+  className,
+  variant = "sidebar",
 }: {
   activeStoreName: string | null;
   activeStoreLogoKey: string | null;
   isCollapsed?: boolean;
   logoHueRotateDeg: number;
+  className?: string;
+  variant?: "sidebar" | "header";
 }) {
   return (
-    <div className={cn("flex h-16 items-center border-b border-sidebar-border", isCollapsed ? "justify-center px-0" : "gap-2 px-5")}>
+    <div
+      className={cn(
+        "flex h-16 items-center border-b border-sidebar-border",
+        isCollapsed ? "justify-center px-0" : "gap-1 px-5",
+        className,
+      )}
+    >
       {activeStoreLogoKey ? (
         <StorageObjectImage
           reference={activeStoreLogoKey}
@@ -232,12 +243,17 @@ function SidebarBrand({
       )}
       {!isCollapsed && (
         <div className="min-w-0 flex-1 leading-tight">
-          <p className="truncate font-semibold tracking-tight text-sidebar-foreground">
+          <p
+            className={cn(
+              "truncate font-semibold tracking-tight",
+              variant === "header" ? "text-foreground" : "text-sidebar-foreground",
+            )}
+          >
             {activeStoreName ?? "Operations"}
           </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {APP_NAME}
-          </p>
+          {variant !== "header" ? (
+            <p className="truncate text-xs text-muted-foreground">{APP_NAME}</p>
+          ) : null}
         </div>
       )}
     </div>
@@ -693,14 +709,14 @@ export function AdminShell({
             >
               <Menu className="size-4" />
             </SheetTrigger>
-            <Link
-              href="/"
-              className="flex min-w-0 flex-1 items-center gap-2 font-semibold tracking-tight"
-            >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Package className="size-4" />
-              </span>
-              <span className="truncate">{APP_NAME}</span>
+            <Link href="/" className="flex min-w-0 flex-1 items-center">
+              <SidebarBrand
+                variant="header"
+                activeStoreName={activeStoreName}
+                activeStoreLogoKey={activeStoreLogoKey}
+                logoHueRotateDeg={logoHueRotateDeg}
+                className="h-auto min-h-0 flex-1 border-0 px-0 py-0"
+              />
             </Link>
             {!isDistributor ? (
               <Button
@@ -726,6 +742,9 @@ export function AdminShell({
           >
             <SheetHeader className="border-b border-sidebar-border px-4 py-3 text-left">
               <SheetTitle className="font-heading text-base">Navigation</SheetTitle>
+              <SheetDescription className="text-xs text-muted-foreground">
+                {APP_NAME}
+              </SheetDescription>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1">
               <NavList

@@ -1,7 +1,6 @@
 import "server-only";
 
 import { cookies } from "next/headers";
-import { updateTag } from "next/cache";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
@@ -213,8 +212,6 @@ export async function syncUserWithDefaultStore({
       createdById: user.id,
     });
 
-    updateTag(STORE_CACHE_TAG);
-
     return {
       id: user.id,
       realEmail: user.realEmail,
@@ -300,8 +297,6 @@ export async function ensureDefaultStoreForUser(userId: string): Promise<StoreOp
       storeId: store.id,
       createdById: userId,
     });
-
-    updateTag(STORE_CACHE_TAG);
 
     return toStoreOption(store);
   });
