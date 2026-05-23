@@ -54,12 +54,14 @@ export function ExpandableOrderSummaryRow({
   row,
   apiScope,
   onEditProduct,
+  viewOnly = false,
   onDelete,
   isDeleting = false,
 }: {
   row: PurchaseOrderSummary;
   apiScope: OrderListLinesApiScope;
   onEditProduct?: (product: Product) => void;
+  viewOnly?: boolean;
   onDelete?: (id: string) => Promise<void>;
   isDeleting?: boolean;
 }) {
@@ -277,6 +279,7 @@ export function ExpandableOrderSummaryRow({
                           : `Qty ${line.quantity} · ${line.product.defaultManufacturer.name}`
                       }
                       onEditProduct={onEditProduct ? () => onEditProduct(line.product) : undefined}
+                      viewOnly={viewOnly}
                       footer={
                         <p className="text-start font-mono text-[10px] leading-tight text-muted-foreground">
                           {line.product.sku}

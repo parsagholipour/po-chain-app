@@ -283,6 +283,86 @@ export function purchaseOrderLineFromPrisma(line: PurchaseOrderLineApiPayload) {
   };
 }
 
+type ProductCostRedactable = Record<string, unknown> & {
+  cost?: unknown;
+};
+
+type PurchaseOrderLineRedactable = Record<string, unknown> & {
+  unitCost?: unknown;
+  product?: ProductCostRedactable | null;
+  allocations?: unknown[];
+  warehouseAllocations?: unknown[];
+};
+
+type PurchaseOrderOsdLineRedactable = Record<string, unknown> & {
+  purchaseOrderLine?: PurchaseOrderLineRedactable | null;
+};
+
+type PurchaseOrderOsdRedactable = Record<string, unknown> & {
+  manufacturingOrderId?: unknown;
+  manufacturingOrder?: unknown;
+  lines?: PurchaseOrderOsdLineRedactable[];
+};
+
+type PurchaseOrderDetailRedactable = {
+  lines: PurchaseOrderLineRedactable[];
+  osds: PurchaseOrderOsdRedactable[];
+  statusLogs: unknown[];
+  manufacturingOrderPurchaseOrders: unknown[];
+  warehouseOrderPurchaseOrders: unknown[];
+};
+
+function redactProductCost<T extends ProductCostRedactable | null | undefined>(
+  product: T,
+): T {
+  if (!product) return product;
+  return {
+    ...product,
+    cost: null,
+  } as T;
+}
+
+export function redactDistributorPurchaseOrderLine<T extends PurchaseOrderLineRedactable>(
+  line: T,
+): T {
+  return {
+    ...line,
+    unitCost: null,
+    product: redactProductCost(line.product),
+    allocations: [],
+    warehouseAllocations: [],
+  } as T;
+}
+
+function redactDistributorPurchaseOrderOsd<T extends PurchaseOrderOsdRedactable>(
+  osd: T,
+): T {
+  return {
+    ...osd,
+    manufacturingOrderId: null,
+    manufacturingOrder: null,
+    lines: osd.lines?.map((line) => ({
+      ...line,
+      purchaseOrderLine: line.purchaseOrderLine
+        ? redactDistributorPurchaseOrderLine(line.purchaseOrderLine)
+        : line.purchaseOrderLine,
+    })),
+  } as T;
+}
+
+export function redactDistributorPurchaseOrderDetail<T extends PurchaseOrderDetailRedactable>(
+  row: T,
+): T {
+  return {
+    ...row,
+    lines: row.lines.map((line) => redactDistributorPurchaseOrderLine(line)),
+    osds: row.osds.map((osd) => redactDistributorPurchaseOrderOsd(osd)),
+    statusLogs: [],
+    manufacturingOrderPurchaseOrders: [],
+    warehouseOrderPurchaseOrders: [],
+  } as T;
+}
+
 function mapPurchaseOrderOsd(osd: PurchaseOrderOsdDetailPayload) {
   return {
     id: osd.id,

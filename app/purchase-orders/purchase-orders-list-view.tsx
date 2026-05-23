@@ -210,6 +210,7 @@ function PoListFiltersAndTable({
   emptyNoScopeMessage,
   emptyFilteredMessage,
   onEditProduct,
+  viewOnly = false,
   onDeleteOrder,
   deletingOrderId,
 }: {
@@ -223,6 +224,7 @@ function PoListFiltersAndTable({
   emptyNoScopeMessage: string;
   emptyFilteredMessage: string;
   onEditProduct?: (product: Product) => void;
+  viewOnly?: boolean;
   onDeleteOrder?: (id: string) => Promise<void>;
   deletingOrderId?: string | undefined;
 }) {
@@ -303,6 +305,7 @@ function PoListFiltersAndTable({
                   row={row}
                   apiScope="purchase-orders"
                   onEditProduct={onEditProduct}
+                  viewOnly={viewOnly}
                   onDelete={onDeleteOrder}
                   isDeleting={deletingOrderId === row.id}
                 />
@@ -479,7 +482,7 @@ export function PurchaseOrdersListView() {
   }
 
   const onEditProduct =
-    !isDistributor && !manufacturersPending && manufacturers.length > 0
+    isDistributor || (!manufacturersPending && manufacturers.length > 0)
       ? (product: Product) => {
           setEditingProduct(product);
           setProductEditOpen(true);
@@ -528,6 +531,8 @@ export function PurchaseOrdersListView() {
               data={pagedRows}
               emptyNoScopeMessage="Loading..."
               emptyFilteredMessage="No purchase orders match your filters."
+              onEditProduct={onEditProduct}
+              viewOnly
             />
           </div>
         </TableContainer>
@@ -633,18 +638,21 @@ export function PurchaseOrdersListView() {
       </TableContainer>
       )}
 
-      {!isDistributor ? (
-        <ProductUpsertDialog
-          open={productEditOpen}
-          onOpenChange={(o) => {
-            setProductEditOpen(o);
-            if (!o) setEditingProduct(null);
-          }}
-          editing={editingProduct}
-          manufacturers={manufacturers}
-          onSave={saveProduct}
-        />
-      ) : null}
+      <ProductUpsertDialog
+        open={productEditOpen}
+        onOpenChange={(o) => {
+          setProductEditOpen(o);
+          if (!o) setEditingProduct(null);
+        }}
+        editing={editingProduct}
+        manufacturers={
+          isDistributor && editingProduct
+            ? [editingProduct.defaultManufacturer]
+            : manufacturers
+        }
+        readOnly={isDistributor}
+        onSave={isDistributor ? undefined : saveProduct}
+      />
     </div>
   );
 }

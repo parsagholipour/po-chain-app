@@ -1,6 +1,7 @@
 "use client";
 
-import { ImageOff, Pencil } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Eye, ImageOff, Pencil } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { cn } from "@/lib/utils";
@@ -35,8 +36,10 @@ export type LineItemCardProps = {
   subtitle: string;
   footer?: React.ReactNode;
   className?: string;
-  /** Edit control over the image; visible on hover (always on coarse pointers / small screens). */
+  /** Opens product details from the image overlay; visible on hover (always on coarse pointers / small screens). */
   onEditProduct?: () => void;
+  /** Eye icon and view affordance instead of edit (e.g. distributor read-only). */
+  viewOnly?: boolean;
   /** Smaller image and typography for dense grids. */
   compact?: boolean;
 };
@@ -54,6 +57,33 @@ const lineItemImageFallback = (
   </div>
 );
 
+/** Native `title` tooltip only when line-clamped content overflows. */
+function useOverflowTitle<E extends HTMLElement>(text: string, enabled: boolean) {
+  const ref = useRef<E>(null);
+  const [overflowTitle, setOverflowTitle] = useState<string | undefined>();
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const el = ref.current;
+    if (!el) return;
+
+    const update = () => {
+      setOverflowTitle(el.scrollHeight > el.clientHeight ? text : undefined);
+    };
+
+    const frame = window.requestAnimationFrame(update);
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [text, enabled]);
+
+  return { ref, title: enabled ? overflowTitle : undefined };
+}
+
 const lineItemImageFallbackCompact = (
   <div
     className="flex aspect-square w-full items-center justify-center rounded-md bg-muted text-muted-foreground"
@@ -70,8 +100,16 @@ export function LineItemCard({
   footer,
   className,
   onEditProduct,
+  viewOnly = false,
   compact = false,
 }: LineItemCardProps) {
+  const { ref: titleRef, title: titleTooltip } = useOverflowTitle<HTMLHeadingElement>(
+    title,
+    compact,
+  );
+  const { ref: subtitleRef, title: subtitleTooltip } =
+    useOverflowTitle<HTMLParagraphElement>(subtitle, compact);
+
   return (
     <article
       className={cn(
@@ -113,15 +151,17 @@ export function LineItemCard({
                 e.stopPropagation();
                 onEditProduct();
               }}
-              aria-label="Edit product"
+              aria-label={viewOnly ? "View product" : "Edit product"}
             >
-              <Pencil className="size-4" />
+              {viewOnly ? <Eye className="size-4" /> : <Pencil className="size-4" />}
             </Button>
           </div>
         ) : null}
       </div>
       <div className="flex w-full min-w-0 flex-col gap-0.5">
         <h3
+          ref={titleRef}
+          title={titleTooltip}
           className={cn(
             "font-medium leading-snug text-foreground",
             compact ? "line-clamp-2 text-xs" : "text-sm",
@@ -130,6 +170,8 @@ export function LineItemCard({
           {title}
         </h3>
         <p
+          ref={subtitleRef}
+          title={subtitleTooltip}
           className={cn(
             compact
               ? "line-clamp-2 text-[11px] leading-snug text-muted-foreground"

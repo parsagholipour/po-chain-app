@@ -126,7 +126,7 @@ type Props = {
   defaultValues: ProductFormValues;
   stockCount?: number | null;
   editingId?: string | null;
-  onSubmit: (
+  onSubmit?: (
     values: ProductFormValues,
     meta: {
       imageChanged: boolean;
@@ -135,6 +135,7 @@ type Props = {
     },
   ) => Promise<string>;
   onCancel: () => void;
+  readOnly?: boolean;
 };
 
 export function ProductForm({
@@ -147,6 +148,7 @@ export function ProductForm({
   editingId,
   onSubmit,
   onCancel,
+  readOnly = false,
 }: Props) {
   const confirm = useConfirm();
   const customFieldsRef = useRef<CustomFieldsHandle>(null);
@@ -182,6 +184,7 @@ export function ProductForm({
     packagingFile?.name ?? storageObjectDisplayName(storedPackagingKey);
 
   async function handleSubmit(values: ProductFormValues) {
+    if (readOnly || !onSubmit) return;
     let imageKey: string | null;
     if (imageFile) {
       try {
@@ -258,7 +261,8 @@ export function ProductForm({
   }
 
   return (
-    <form onSubmit={handleFormSubmit}>
+    <form onSubmit={readOnly ? (e) => e.preventDefault() : handleFormSubmit}>
+      <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
       <FieldSet className="gap-4">
         <FieldGroup className="grid gap-4 md:grid-cols-2">
           <Field data-invalid={!!form.formState.errors.name} className="gap-1.5 md:col-span-2">
@@ -275,17 +279,19 @@ export function ProductForm({
               <FieldError errors={[form.formState.errors.sku]} />
             </FieldContent>
           </Field>
-          <Field data-invalid={!!form.formState.errors.cost} className="gap-1.5">
-            <FieldLabel htmlFor="pf-cost">Cost</FieldLabel>
-            <FieldContent>
-              <PriceField
-                id="pf-cost"
-                placeholder="Optional"
-                {...form.register("cost", { valueAsNumber: true })}
-              />
-              <FieldError errors={[form.formState.errors.cost]} />
-            </FieldContent>
-          </Field>
+          {!readOnly ? (
+            <Field data-invalid={!!form.formState.errors.cost} className="gap-1.5">
+              <FieldLabel htmlFor="pf-cost">Cost</FieldLabel>
+              <FieldContent>
+                <PriceField
+                  id="pf-cost"
+                  placeholder="Optional"
+                  {...form.register("cost", { valueAsNumber: true })}
+                />
+                <FieldError errors={[form.formState.errors.cost]} />
+              </FieldContent>
+            </Field>
+          ) : null}
           <Field data-invalid={!!form.formState.errors.price} className="gap-1.5">
             <FieldLabel htmlFor="pf-price">Price</FieldLabel>
             <FieldContent>
@@ -716,18 +722,27 @@ export function ProductForm({
             ref={customFieldsRef}
             entityType="product"
             entityId={editingId}
-            disabled={isSubmitting}
+            disabled={isSubmitting || readOnly}
             nativeValues={nativeValues}
           />
         </FieldGroup>
       </FieldSet>
+      </fieldset>
       <DialogFooter className="mt-4 border-0 bg-transparent">
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "Save"}
-        </Button>
+        {readOnly ? (
+          <Button type="button" onClick={onCancel}>
+            Close
+          </Button>
+        ) : (
+          <>
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="size-4 animate-spin" /> : "Save"}
+            </Button>
+          </>
+        )}
       </DialogFooter>
     </form>
   );

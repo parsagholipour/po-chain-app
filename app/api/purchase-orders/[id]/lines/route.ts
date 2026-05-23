@@ -11,7 +11,10 @@ import {
 } from "@/lib/store-context";
 import { productPricingSnapshot } from "@/lib/purchase-order-line-pricing";
 import { purchaseOrderLineApiInclude } from "@/lib/purchase-order-include";
-import { purchaseOrderLineFromPrisma } from "@/lib/shipping-api";
+import {
+  purchaseOrderLineFromPrisma,
+  redactDistributorPurchaseOrderLine,
+} from "@/lib/shipping-api";
 import { recomputeLineQuantities } from "@/lib/po/osd-recompute";
 import {
   findLinesMissingProductAssets,
@@ -62,14 +65,7 @@ export async function GET(
   });
   const payload = lines.map((l) => purchaseOrderLineFromPrisma(l));
   return NextResponse.json(
-    isDistributor
-      ? payload.map((line) => ({
-          ...line,
-          unitCost: null,
-          allocations: [],
-          warehouseAllocations: [],
-        }))
-      : payload,
+    isDistributor ? payload.map((line) => redactDistributorPurchaseOrderLine(line)) : payload,
   );
 }
 

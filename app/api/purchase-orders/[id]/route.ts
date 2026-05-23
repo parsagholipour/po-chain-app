@@ -9,7 +9,10 @@ import { z } from "zod";
 import { createOrderStatusLog } from "@/lib/order-status-log";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
-import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
+import {
+  purchaseOrderDetailFromPrisma,
+  redactDistributorPurchaseOrderDetail,
+} from "@/lib/shipping-api";
 import {
   distributorWriteForbidden,
   isDistributorContext,
@@ -65,47 +68,6 @@ function purchaseOrderDestinationFromLocation(location: {
   };
 }
 
-type DistributorSanitizablePurchaseOrderDetail = {
-  lines: Array<
-    Record<string, unknown> & {
-      allocations?: unknown[];
-      warehouseAllocations?: unknown[];
-      unitCost?: unknown;
-    }
-  >;
-  osds: Array<
-    Record<string, unknown> & {
-      manufacturingOrderId?: unknown;
-      manufacturingOrder?: unknown;
-    }
-  >;
-  statusLogs: unknown[];
-  manufacturingOrderPurchaseOrders: unknown[];
-  warehouseOrderPurchaseOrders: unknown[];
-};
-
-function distributorPurchaseOrderDetail<T extends DistributorSanitizablePurchaseOrderDetail>(
-  row: T,
-): T {
-  return {
-    ...row,
-    lines: row.lines.map((line) => ({
-      ...line,
-      unitCost: null,
-      allocations: [],
-      warehouseAllocations: [],
-    })),
-    osds: row.osds.map((osd) => ({
-      ...osd,
-      manufacturingOrderId: null,
-      manufacturingOrder: null,
-    })),
-    statusLogs: [],
-    manufacturingOrderPurchaseOrders: [],
-    warehouseOrderPurchaseOrders: [],
-  } as T;
-}
-
 export async function GET(
   _request: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -134,7 +96,7 @@ export async function GET(
   });
   if (!row) return jsonError("Not found", 404);
   const payload = purchaseOrderDetailFromPrisma(row);
-  return NextResponse.json(isDistributor ? distributorPurchaseOrderDetail(payload) : payload);
+  return NextResponse.json(isDistributor ? redactDistributorPurchaseOrderDetail(payload) : payload);
 }
 
 export async function PATCH(

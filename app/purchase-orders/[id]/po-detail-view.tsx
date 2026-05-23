@@ -517,7 +517,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         onDeleteLine={!isDistributor ? (lineId) => deleteLine.mutate(lineId) : undefined}
         lineMutationPending={patchLine.isPending}
         onEditProduct={
-          !isDistributor && !manufacturersPending && manufacturers.length > 0
+          isDistributor || (!manufacturersPending && manufacturers.length > 0)
             ? (product) => {
                 setEditingProduct(product);
                 setProductEditOpen(true);
@@ -526,6 +526,21 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         }
         readOnly={isDistributor}
       />
+
+      {isDistributor ? (
+        <ProductUpsertDialog
+          open={productEditOpen}
+          onOpenChange={(o) => {
+            setProductEditOpen(o);
+            if (!o) setEditingProduct(null);
+          }}
+          editing={editingProduct}
+          manufacturers={
+            editingProduct ? [editingProduct.defaultManufacturer] : []
+          }
+          readOnly
+        />
+      ) : null}
 
       {!isDistributor ? (
         <PoOsdSection

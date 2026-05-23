@@ -36,13 +36,14 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   editing: Product | null;
   manufacturers: Manufacturer[];
-  onSave: (payload: {
+  onSave?: (payload: {
     id?: string;
     values: ProductFormValues;
     patchImageKey: boolean;
     patchBarcodeKey: boolean;
     patchPackagingKey: boolean;
   }) => Promise<string>;
+  readOnly?: boolean;
 };
 
 export function ProductUpsertDialog({
@@ -51,6 +52,7 @@ export function ProductUpsertDialog({
   editing,
   manufacturers,
   onSave,
+  readOnly = false,
 }: Props) {
   const { data: categories = [] } = useQuery({
     queryKey: ["product-categories"],
@@ -58,7 +60,7 @@ export function ProductUpsertDialog({
       const { data } = await api.get<ProductCategory[]>("/api/product-categories");
       return data;
     },
-    enabled: open,
+    enabled: open && !readOnly,
   });
 
   const { data: productTypes = [] } = useQuery({
@@ -67,7 +69,7 @@ export function ProductUpsertDialog({
       const { data } = await api.get<ProductType[]>("/api/product-types");
       return data;
     },
-    enabled: open,
+    enabled: open && !readOnly,
   });
 
   const { data: productCollections = [] } = useQuery({
@@ -76,7 +78,7 @@ export function ProductUpsertDialog({
       const { data } = await api.get<ProductCollection[]>("/api/product-collections");
       return data;
     },
-    enabled: open,
+    enabled: open && !readOnly,
   });
 
   const resetKey = editing?.id ?? "new";
@@ -133,37 +135,46 @@ export function ProductUpsertDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent size="3xl">
         <DialogHeader>
-          <DialogTitle>{editing ? "Edit product" : "New product"}</DialogTitle>
+          <DialogTitle>
+            {readOnly ? "View product" : editing ? "Edit product" : "New product"}
+          </DialogTitle>
         </DialogHeader>
         <ProductForm
           key={open ? resetKey : "idle"}
           manufacturers={manufacturers}
-          categories={categories}
-          productTypes={productTypes}
-          productCollections={productCollections}
+          categories={readOnly && editing?.category ? [editing.category] : categories}
+          productTypes={readOnly && editing?.type ? [editing.type] : productTypes}
+          productCollections={
+            readOnly && editing?.collection ? [editing.collection] : productCollections
+          }
           defaultValues={defaultValues}
           stockCount={editing?.stockCount ?? null}
           editingId={editing?.id}
+          readOnly={readOnly}
           onCancel={() => onOpenChange(false)}
-          onSubmit={async (values, meta) => {
-            const patchImageKey =
-              !editing || meta.imageChanged || values.imageKey !== editing.imageKey;
-            const patchBarcodeKey =
-              !editing || meta.barcodeChanged || values.barcodeKey !== editing.barcodeKey;
-            const patchPackagingKey =
-              !editing ||
-              meta.packagingChanged ||
-              values.packagingKey !== editing.packagingKey;
-            const entityId = await onSave({
-              id: editing?.id,
-              values,
-              patchImageKey,
-              patchBarcodeKey,
-              patchPackagingKey,
-            });
-            onOpenChange(false);
-            return entityId;
-          }}
+          onSubmit={
+            readOnly || !onSave
+              ? undefined
+              : async (values, meta) => {
+                  const patchImageKey =
+                    !editing || meta.imageChanged || values.imageKey !== editing.imageKey;
+                  const patchBarcodeKey =
+                    !editing || meta.barcodeChanged || values.barcodeKey !== editing.barcodeKey;
+                  const patchPackagingKey =
+                    !editing ||
+                    meta.packagingChanged ||
+                    values.packagingKey !== editing.packagingKey;
+                  const entityId = await onSave({
+                    id: editing?.id,
+                    values,
+                    patchImageKey,
+                    patchBarcodeKey,
+                    patchPackagingKey,
+                  });
+                  onOpenChange(false);
+                  return entityId;
+                }
+          }
         />
       </DialogContent>
     </Dialog>

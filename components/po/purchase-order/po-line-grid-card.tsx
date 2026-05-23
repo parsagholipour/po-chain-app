@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type KeyboardEvent, useEffect, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,10 +50,6 @@ export function PoLineGridCard({
 }: Props) {
   const [orderedQty, setOrderedQty] = useState(line.orderedQuantity);
   const [pricingOpen, setPricingOpen] = useState(false);
-
-  useEffect(() => {
-    setOrderedQty(line.orderedQuantity);
-  }, [line.orderedQuantity]);
   const [costValue, setCostValue] = useState("");
   const [priceValue, setPriceValue] = useState("");
   const [pricingError, setPricingError] = useState<string | null>(null);
@@ -63,6 +59,7 @@ export function PoLineGridCard({
   const warehouseQuantity = line.warehouseAllocations.reduce((sum, row) => sum + row.quantity, 0);
   const fulfilledQuantity = manufacturingQuantity + warehouseQuantity;
   const remainingQuantity = Math.max(0, line.quantity - fulfilledQuantity);
+  const showCost = !readOnly;
   const subtitle = `${line.product.defaultManufacturer.name} - Ordered: ${orderedQty}${
     qtyMismatch ? ` - Effective: ${line.quantity}` : ""
   }`;
@@ -110,6 +107,7 @@ export function PoLineGridCard({
         title={line.product.name}
         subtitle={subtitle}
         onEditProduct={onEditProduct ? () => onEditProduct(line.product) : undefined}
+        viewOnly={readOnly}
         footer={
           <div className="flex flex-col gap-2 text-start">
             <p className="text-xs text-muted-foreground font-mono">{line.product.sku}</p>
@@ -138,16 +136,22 @@ export function PoLineGridCard({
               </Badge>
             </div>
             <div className="rounded-md border border-border/60 bg-muted/20 p-2">
-              <div className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 text-xs">
-                <div className="min-w-0">
-                  <div className="text-muted-foreground">Cost</div>
-                  <PriceView value={line.unitCost} />
-                </div>
+              <div
+                className={`grid ${
+                  showCost ? "grid-cols-[1fr_1fr_auto]" : "grid-cols-1"
+                } items-center gap-2 text-xs`}
+              >
+                {showCost ? (
+                  <div className="min-w-0">
+                    <div className="text-muted-foreground">Cost</div>
+                    <PriceView value={line.unitCost} />
+                  </div>
+                ) : null}
                 <div className="min-w-0">
                   <div className="text-muted-foreground">Price</div>
                   <PriceView value={line.unitPrice} />
                 </div>
-                {!readOnly && onPatch ? (
+                {showCost && onPatch ? (
                   <Button
                     type="button"
                     variant="ghost"
