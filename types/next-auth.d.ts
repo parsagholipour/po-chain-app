@@ -5,6 +5,8 @@ declare module "next-auth" {
   type AppSaleChannelType = "distributor" | "store" | "amazon" | "cjdropshipping";
 
   interface Session {
+    /** Set when the app database is unreachable or the account cannot be synced. */
+    forceSignOut?: boolean;
     user: DefaultSession["user"] & {
       id: string;
       type: AppUserType;
@@ -32,5 +34,7 @@ declare module "next-auth/jwt" {
     authProvider?: "keycloak" | "store-magic-link";
     realEmail?: string | null;
     realName?: string | null;
+    /** Clears app session on next request; middleware redirects to sign-out. */
+    forceSignOut?: boolean;
   }
 }

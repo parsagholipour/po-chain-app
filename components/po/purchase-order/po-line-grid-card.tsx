@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -50,6 +50,10 @@ export function PoLineGridCard({
 }: Props) {
   const [orderedQty, setOrderedQty] = useState(line.orderedQuantity);
   const [pricingOpen, setPricingOpen] = useState(false);
+
+  useEffect(() => {
+    setOrderedQty(line.orderedQuantity);
+  }, [line.orderedQuantity]);
   const [costValue, setCostValue] = useState("");
   const [priceValue, setPriceValue] = useState("");
   const [pricingError, setPricingError] = useState<string | null>(null);
@@ -68,6 +72,22 @@ export function PoLineGridCard({
     setPriceValue(moneyInputValue(line.unitPrice));
     setPricingError(null);
     setPricingOpen(true);
+  }
+
+  function commitOrderedQty(next: number) {
+    const qty = Math.max(1, next);
+    setOrderedQty(qty);
+    if (qty !== line.orderedQuantity) onPatch?.({ quantity: qty });
+  }
+
+  function handleOrderedQtyKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      commitOrderedQty(orderedQty + 1);
+    } else if (event.key === "ArrowDown" && orderedQty > 1) {
+      event.preventDefault();
+      commitOrderedQty(orderedQty - 1);
+    }
   }
 
   function submitPricing(event: FormEvent<HTMLFormElement>) {
@@ -147,12 +167,13 @@ export function PoLineGridCard({
                 <Input
                   type="number"
                   min={1}
-                  className="min-w-0 flex-1"
+                  className="min-w-0 flex-1 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   value={orderedQty}
                   onChange={(e) => setOrderedQty(Math.max(1, Number(e.target.value) || 1))}
                   onBlur={() => {
                     if (orderedQty !== line.orderedQuantity) onPatch({ quantity: orderedQty });
                   }}
+                  onKeyDown={handleOrderedQtyKeyDown}
                   disabled={busy}
                 />
                 <Button type="button" variant="ghost" size="icon-sm" onClick={onDelete}>

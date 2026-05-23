@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import { Combobox } from "@base-ui/react/combobox"
+import { useVirtualizer } from "@tanstack/react-virtual"
 import { CheckIcon, ChevronDownIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -13,13 +14,19 @@ export type SearchableSelectItem = {
   keywords?: string
 }
 
+const VIRTUALIZE_THRESHOLD = 50
+const ESTIMATED_ITEM_HEIGHT = 32
+
 const inputGroupClassName =
   "flex w-full min-w-0 items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent py-2 pr-2 pl-2.5 text-sm transition-colors outline-none select-none focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-placeholder:text-muted-foreground h-8 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
 
 const popupClassName =
-  "relative isolate z-50 min-h-0 max-h-[min(var(--available-height),18rem)] w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+  "relative isolate z-50 min-h-0 max-h-[min(var(--available-height),18rem)] w-(--anchor-width) min-w-36 origin-(--transform-origin) overflow-x-hidden rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10 duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
 
 const listClassName = "min-h-0 scroll-my-1 p-1"
+
+const virtualListClassName =
+  "min-h-0 max-h-[min(var(--available-height),18rem)] scroll-my-1 overflow-y-auto p-1"
 
 const itemClassName =
   "relative flex w-full cursor-default items-center gap-1.5 rounded-md py-1 pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2"
@@ -34,6 +41,106 @@ function defaultFilter(item: SearchableSelectItem, query: string) {
   if (item.value.toLowerCase().includes(q)) return true
   if (item.keywords?.toLowerCase().includes(q)) return true
   return false
+}
+
+function SearchableSelectItemRow({ item }: { item: SearchableSelectItem }) {
+  return (
+    <>
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      <Combobox.ItemIndicator className="pointer-events-none absolute right-2 flex size-4 items-center justify-center">
+        <CheckIcon className="pointer-events-none size-4" />
+      </Combobox.ItemIndicator>
+    </>
+  )
+}
+
+type VirtualListHandle = {
+  filteredItems: SearchableSelectItem[]
+  scrollToIndex: (index: number, align: "start" | "end") => void
+}
+
+function SearchableSelectVirtualList({
+  open,
+  listRef,
+}: {
+  open: boolean
+  listRef: React.RefObject<VirtualListHandle | null>
+}) {
+  const filteredItems = Combobox.useFilteredItems<SearchableSelectItem>()
+  const scrollElementRef = React.useRef<HTMLDivElement | null>(null)
+
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    enabled: open,
+    count: filteredItems.length,
+    getScrollElement: () => scrollElementRef.current,
+    estimateSize: () => ESTIMATED_ITEM_HEIGHT,
+    overscan: 12,
+    getItemKey: (index) => filteredItems[index]?.value ?? index,
+  })
+
+  const scrollToIndex = React.useCallback(
+    (index: number, align: "start" | "end") => {
+      virtualizer.scrollToIndex(index, { align })
+    },
+    [virtualizer],
+  )
+
+  React.useEffect(() => {
+    listRef.current = { filteredItems, scrollToIndex }
+    return () => {
+      listRef.current = null
+    }
+  }, [filteredItems, listRef, scrollToIndex])
+
+  const handleListRef = React.useCallback(
+    (element: HTMLDivElement | null) => {
+      scrollElementRef.current = element
+      if (element) {
+        virtualizer.measure()
+      }
+    },
+    [virtualizer],
+  )
+
+  React.useEffect(() => {
+    virtualizer.scrollToOffset(0)
+  }, [virtualizer, filteredItems.length])
+
+  return (
+    <Combobox.List ref={handleListRef} className={virtualListClassName}>
+      {filteredItems.length > 0 && (
+        <div
+          className="relative w-full"
+          style={{ height: virtualizer.getTotalSize() }}
+        >
+          {virtualizer.getVirtualItems().map((virtualRow) => {
+            const item = filteredItems[virtualRow.index]
+            if (!item) return null
+
+            return (
+              <div
+                key={virtualRow.key}
+                className="absolute top-0 left-0 w-full"
+                style={{
+                  height: virtualRow.size,
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <Combobox.Item
+                  value={item}
+                  index={virtualRow.index}
+                  className={itemClassName}
+                >
+                  <SearchableSelectItemRow item={item} />
+                </Combobox.Item>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Combobox.List>
+  )
 }
 
 export type SearchableSelectProps = {
@@ -63,25 +170,58 @@ export function SearchableSelect({
   id,
   name,
 }: SearchableSelectProps) {
+  const [open, setOpen] = React.useState(false)
+  const virtualListRef = React.useRef<VirtualListHandle | null>(null)
+  const shouldVirtualize = items.length >= VIRTUALIZE_THRESHOLD
+
   const selected = React.useMemo(
     () => items.find((i) => i.value === value) ?? null,
     [items, value],
   )
 
+  const handleItemHighlighted = React.useCallback(
+    (
+      highlighted: SearchableSelectItem | undefined,
+      details: Combobox.Root.HighlightEventDetails,
+    ) => {
+      if (!shouldVirtualize || !highlighted || !virtualListRef.current) return
+
+      const { filteredItems, scrollToIndex } = virtualListRef.current
+      const index = filteredItems.findIndex((item) => item.value === highlighted.value)
+      if (index === -1) return
+
+      const isStart = index === 0
+      const isEnd = index === filteredItems.length - 1
+      const shouldScroll =
+        details.reason === "none" ||
+        (details.reason === "keyboard" && (isStart || isEnd))
+
+      if (shouldScroll) {
+        queueMicrotask(() => {
+          scrollToIndex(index, isEnd ? "start" : "end")
+        })
+      }
+    },
+    [shouldVirtualize],
+  )
+
   return (
     <Combobox.Root
-      items={[...items]}
+      items={items}
       value={selected}
       onValueChange={(next: SearchableSelectItem | null) => {
         onValueChange(next?.value ?? "")
       }}
       disabled={disabled}
       filter={filter}
+      virtualized={shouldVirtualize}
       isItemEqualToValue={(a: SearchableSelectItem, b: SearchableSelectItem) =>
         a.value === b.value
       }
       id={id}
       name={name}
+      onOpenChange={setOpen}
+      onItemHighlighted={shouldVirtualize ? handleItemHighlighted : undefined}
     >
       <Combobox.InputGroup
         data-slot="searchable-select-trigger"
@@ -104,19 +244,24 @@ export function SearchableSelect({
           sideOffset={4}
           align="center"
         >
-          <Combobox.Popup data-slot="searchable-select-content" className={popupClassName}>
-            <Combobox.List className={listClassName}>
-              {(item: SearchableSelectItem) => (
-                <Combobox.Item key={item.value} value={item} className={itemClassName}>
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  <Combobox.ItemIndicator
-                    className="pointer-events-none absolute right-2 flex size-4 items-center justify-center"
-                  >
-                    <CheckIcon className="pointer-events-none size-4" />
-                  </Combobox.ItemIndicator>
-                </Combobox.Item>
-              )}
-            </Combobox.List>
+          <Combobox.Popup
+            data-slot="searchable-select-content"
+            className={cn(
+              popupClassName,
+              shouldVirtualize ? "overflow-hidden" : "overflow-y-auto",
+            )}
+          >
+            {shouldVirtualize ? (
+              <SearchableSelectVirtualList open={open} listRef={virtualListRef} />
+            ) : (
+              <Combobox.List className={listClassName}>
+                {(item: SearchableSelectItem) => (
+                  <Combobox.Item key={item.value} value={item} className={itemClassName}>
+                    <SearchableSelectItemRow item={item} />
+                  </Combobox.Item>
+                )}
+              </Combobox.List>
+            )}
             <Combobox.Empty className="empty:hidden px-2 py-2 text-center text-sm text-muted-foreground">
               {emptyMessage}
             </Combobox.Empty>

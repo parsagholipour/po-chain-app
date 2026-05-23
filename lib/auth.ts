@@ -3,6 +3,12 @@ import type { JWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import authConfig from "@/auth.config";
 import {
+  clearAuthForceSignOut,
+  markAuthForceSignOut,
+  tokenRequiresSignOut,
+} from "@/lib/auth-session";
+import { isPrismaUnavailableError, runIfPrismaAvailable } from "@/lib/prisma-unavailable";
+import {
   findUserById,
   findUserByKeycloakSub,
   syncUserWithDefaultStore,
@@ -63,21 +69,68 @@ function applyUserToToken(token: JWT, user: AppUserAuthFields) {
   }
 }
 
-async function syncUserForToken(
+function applyUserToSessionUser(
+  sessionUser: NonNullable<import("next-auth").Session["user"]>,
+  user: AppUserAuthFields,
+) {
+  sessionUser.id = user.id;
+  sessionUser.type = user.type;
+  sessionUser.saleChannelId = user.saleChannelId;
+  sessionUser.saleChannelType = user.saleChannelType;
+}
+
+async function lookupAppUserById(
+  appUserId: string,
+): Promise<"unavailable" | AppUserAuthFields | null> {
+  const lookup = await findUserById(appUserId);
+  if (!lookup.ok) return "unavailable";
+  return lookup.value;
+}
+
+async function resolveKeycloakAppUser(
   sub: string,
   token: JWT,
   profileRecord?: Record<string, unknown>,
-) {
-  const existingUser = await findUserByKeycloakSub(sub);
-  if (existingUser) return existingUser;
+): Promise<"unavailable" | AppUserAuthFields> {
+  const appUserId = typeof token.appUserId === "string" ? token.appUserId : null;
 
-  return syncUserWithDefaultStore({
-    keycloakSub: sub,
-    email: profileRecord ? emailFromProfile(sub, profileRecord) : emailFromToken(sub, token),
-    name: profileRecord ? nameFromProfile(profileRecord) : nameFromToken(token),
-    realEmail: token.realEmail ?? null,
-    realName: token.realName ?? null,
-  });
+  if (appUserId) {
+    const byId = await lookupAppUserById(appUserId);
+    if (byId === "unavailable") return "unavailable";
+    if (byId) return byId;
+    delete token.appUserId;
+    console.warn("[auth] jwt appUserId was stale; resyncing user for keycloakSub", sub);
+  }
+
+  const bySub = await findUserByKeycloakSub(sub);
+  if (!bySub.ok) return "unavailable";
+  if (bySub.value) return bySub.value;
+
+  const synced = await runIfPrismaAvailable(() =>
+    syncUserWithDefaultStore({
+      keycloakSub: sub,
+      email: profileRecord ? emailFromProfile(sub, profileRecord) : emailFromToken(sub, token),
+      name: profileRecord ? nameFromProfile(profileRecord) : nameFromToken(token),
+      realEmail: token.realEmail ?? null,
+      realName: token.realName ?? null,
+    }),
+  );
+  if (!synced.ok) return "unavailable";
+  return synced.value;
+}
+
+async function applyMagicLinkUserToToken(token: JWT, appUserId: string) {
+  const row = await lookupAppUserById(appUserId);
+  if (row === "unavailable") {
+    markAuthForceSignOut(token);
+    return;
+  }
+  if (row) {
+    clearAuthForceSignOut(token);
+    applyUserToToken(token, row);
+    return;
+  }
+  markAuthForceSignOut(token);
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -119,28 +172,47 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const email = emailFromProfile(sub, profileRecord);
       const name = nameFromProfile(profileRecord);
 
-      const existingUser = await findUserByKeycloakSub(sub);
-      if (!existingUser) {
-        await syncUserWithDefaultStore({
-          keycloakSub: sub,
-          email,
-          name,
-          realEmail: realEmailFromProfile(profileRecord),
-          realName: realNameFromProfile(profileRecord),
-        });
+      try {
+        const existingUser = await findUserByKeycloakSub(sub);
+        if (!existingUser.ok) {
+          console.warn(
+            "[auth] signIn: database unavailable; Keycloak sign-in will complete without app user sync",
+          );
+          return true;
+        }
+        if (!existingUser.value) {
+          const synced = await runIfPrismaAvailable(() =>
+            syncUserWithDefaultStore({
+              keycloakSub: sub,
+              email,
+              name,
+              realEmail: realEmailFromProfile(profileRecord),
+              realName: realNameFromProfile(profileRecord),
+            }),
+          );
+          if (!synced.ok) {
+            console.warn(
+              "[auth] signIn: database unavailable; user will be signed out on first app request",
+            );
+          }
+        }
+        return true;
+      } catch (err) {
+        if (isPrismaUnavailableError(err)) {
+          console.warn(
+            "[auth] signIn: database unavailable; Keycloak sign-in will complete without app user sync",
+          );
+          return true;
+        }
+        throw err;
       }
-
-      return true;
     },
     async jwt({ token, account, profile, user }): Promise<JWT> {
       if (account?.provider === STORE_MAGIC_LINK_PROVIDER_ID) {
         token.authProvider = STORE_MAGIC_LINK_PROVIDER_ID;
         const appUserId = typeof user?.id === "string" ? user.id : null;
         if (appUserId) {
-          const row = await findUserById(appUserId);
-          if (row) {
-            applyUserToToken(token, row);
-          }
+          await applyMagicLinkUserToToken(token, appUserId);
         }
         return token;
       }
@@ -151,10 +223,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       ) {
         const appUserId = typeof token.appUserId === "string" ? token.appUserId : null;
         if (appUserId) {
-          const row = await findUserById(appUserId);
-          if (row) {
-            applyUserToToken(token, row);
-          }
+          await applyMagicLinkUserToToken(token, appUserId);
         }
         return token;
       }
@@ -179,30 +248,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.realEmail = realEmailFromProfile(profileRecord);
           token.realName = realNameFromProfile(profileRecord);
         } else {
-          if (token.realEmail === undefined && typeof token.email === "string" && token.email.length > 0) {
+          if (
+            token.realEmail === undefined &&
+            typeof token.email === "string" &&
+            token.email.length > 0
+          ) {
             token.realEmail = token.email;
           }
-          if (token.realName === undefined && typeof token.name === "string" && token.name.length > 0) {
+          if (
+            token.realName === undefined &&
+            typeof token.name === "string" &&
+            token.name.length > 0
+          ) {
             token.realName = token.name;
           }
         }
 
         try {
-          const appUserId = typeof token.appUserId === "string" ? token.appUserId : null;
-          const existingTokenUser = appUserId ? await findUserById(appUserId) : null;
-
-        if (existingTokenUser) {
-          applyUserToToken(token, existingTokenUser);
-        } else {
-            if (appUserId) {
-              delete token.appUserId;
-              console.warn("[auth] jwt appUserId was stale; resyncing user for keycloakSub", sub);
-            }
-          const row = await syncUserForToken(sub, token, profileRecord);
-          applyUserToToken(token, row);
-        }
-      } catch (err) {
+          const resolved = await resolveKeycloakAppUser(sub, token, profileRecord);
+          if (resolved === "unavailable") {
+            console.warn(
+              "[auth] database unavailable during jwt refresh; forcing sign-out for keycloakSub",
+              sub,
+            );
+            markAuthForceSignOut(token);
+          } else {
+            clearAuthForceSignOut(token);
+            applyUserToToken(token, resolved);
+          }
+        } catch (err) {
           console.error("[auth] jwt user lookup failed for keycloakSub", sub, err);
+          markAuthForceSignOut(token);
         }
       }
       return token;
@@ -210,32 +286,44 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (!session.user) return session;
 
+      if (tokenRequiresSignOut(token)) {
+        session.forceSignOut = true;
+        return session;
+      }
+
       const appUserId = typeof token.appUserId === "string" ? token.appUserId : null;
       const sub = typeof token.sub === "string" ? token.sub : null;
 
       try {
-        const existingTokenUser = appUserId ? await findUserById(appUserId) : null;
-        if (existingTokenUser) {
-          applyUserToToken(token, existingTokenUser);
-          session.user.id = existingTokenUser.id;
-          session.user.type = existingTokenUser.type;
-          session.user.saleChannelId = existingTokenUser.saleChannelId;
-          session.user.saleChannelType = existingTokenUser.saleChannelType;
-          return session;
-        }
-
         if (appUserId) {
+          const byId = await lookupAppUserById(appUserId);
+          if (byId === "unavailable") {
+            markAuthForceSignOut(token);
+            session.forceSignOut = true;
+            return session;
+          }
+          if (byId) {
+            applyUserToSessionUser(session.user, byId);
+            return session;
+          }
           delete token.appUserId;
           console.warn("[auth] session appUserId was stale; resyncing user for keycloakSub", sub);
         }
 
         if (sub) {
-          const row = await syncUserForToken(sub, token);
-          applyUserToToken(token, row);
-          session.user.id = row.id;
-          session.user.type = row.type;
-          session.user.saleChannelId = row.saleChannelId;
-          session.user.saleChannelType = row.saleChannelType;
+          const resolved = await resolveKeycloakAppUser(sub, token);
+          if (resolved === "unavailable") {
+            console.warn(
+              "[auth] database unavailable during session refresh; forcing sign-out for keycloakSub",
+              sub,
+            );
+            markAuthForceSignOut(token);
+            session.forceSignOut = true;
+            return session;
+          }
+          clearAuthForceSignOut(token);
+          applyUserToToken(token, resolved);
+          applyUserToSessionUser(session.user, resolved);
           return session;
         }
       } catch (err) {
@@ -244,6 +332,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         } else {
           console.error("[auth] session user lookup failed", err);
         }
+        markAuthForceSignOut(token);
+        session.forceSignOut = true;
+        return session;
       }
 
       console.warn(

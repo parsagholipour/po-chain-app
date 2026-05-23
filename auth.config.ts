@@ -1,5 +1,6 @@
 import type { NextAuthConfig } from "next-auth";
 import Keycloak from "next-auth/providers/keycloak";
+import { NextResponse } from "next/server";
 
 export default {
   providers: [
@@ -14,7 +15,18 @@ export default {
     error: "/auth/error",
   },
   callbacks: {
+    session({ session, token }) {
+      if (token.forceSignOut) {
+        session.forceSignOut = true;
+      }
+      return session;
+    },
     authorized({ auth, request }) {
+      if (auth?.forceSignOut) {
+        const signOutUrl = new URL("/api/auth/signout", request.nextUrl.origin);
+        signOutUrl.searchParams.set("callbackUrl", new URL("/", request.nextUrl.origin).toString());
+        return NextResponse.redirect(signOutUrl);
+      }
       if (
         request.nextUrl.pathname === "/" ||
         request.nextUrl.pathname.startsWith("/auth/error") ||

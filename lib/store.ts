@@ -3,6 +3,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { runIfPrismaAvailable, type PrismaAvailabilityResult } from "@/lib/prisma-unavailable";
 import {
   DEFAULT_STORE_THEME,
   normalizeStoreTheme,
@@ -223,34 +224,42 @@ export async function syncUserWithDefaultStore({
   });
 }
 
-export async function findUserByKeycloakSub(keycloakSub: string) {
-  const user = await prisma.user.findUnique({
-    where: { keycloakSub },
-    select: {
-      id: true,
-      realEmail: true,
-      realName: true,
-      type: true,
-      saleChannelId: true,
-      saleChannel: { select: { type: true } },
-    },
+export type AppUserLookupResult = PrismaAvailabilityResult<AppUserAuthFields | null>;
+
+export async function findUserByKeycloakSub(
+  keycloakSub: string,
+): Promise<AppUserLookupResult> {
+  return runIfPrismaAvailable(async () => {
+    const user = await prisma.user.findUnique({
+      where: { keycloakSub },
+      select: {
+        id: true,
+        realEmail: true,
+        realName: true,
+        type: true,
+        saleChannelId: true,
+        saleChannel: { select: { type: true } },
+      },
+    });
+    return user ? userAuthFieldsFromPrisma(user) : null;
   });
-  return user ? userAuthFieldsFromPrisma(user) : null;
 }
 
-export async function findUserById(id: string) {
-  const user = await prisma.user.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      realEmail: true,
-      realName: true,
-      type: true,
-      saleChannelId: true,
-      saleChannel: { select: { type: true } },
-    },
+export async function findUserById(id: string): Promise<AppUserLookupResult> {
+  return runIfPrismaAvailable(async () => {
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        realEmail: true,
+        realName: true,
+        type: true,
+        saleChannelId: true,
+        saleChannel: { select: { type: true } },
+      },
+    });
+    return user ? userAuthFieldsFromPrisma(user) : null;
   });
-  return user ? userAuthFieldsFromPrisma(user) : null;
 }
 
 export async function ensureDefaultStoreForUser(userId: string): Promise<StoreOption | null> {

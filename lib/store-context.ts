@@ -14,6 +14,7 @@ import {
   type StoreContext,
 } from "@/lib/store";
 import { prisma } from "@/lib/prisma";
+import { runIfPrismaAvailable } from "@/lib/prisma-unavailable";
 
 export const USER_TYPE_INTERNAL = "internal" as const;
 export const USER_TYPE_DISTRIBUTOR = "distributor" as const;
@@ -21,46 +22,51 @@ export const USER_TYPE_DISTRIBUTOR = "distributor" as const;
 export async function getStoreContextForUserId(
   userId: string,
 ): Promise<StoreContext | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: {
-      type: true,
-      saleChannelId: true,
-      saleChannel: { select: { name: true, type: true } },
-    },
+  const resolved = await runIfPrismaAvailable(async () => {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        type: true,
+        saleChannelId: true,
+        saleChannel: { select: { name: true, type: true } },
+      },
+    });
+    if (!user) return null;
+
+    let stores = await listUserStores(userId);
+    if (stores.length === 0) {
+      if (user.type === USER_TYPE_DISTRIBUTOR) return null;
+
+      const defaultStore = await ensureDefaultStoreForUser(userId);
+      if (!defaultStore) return null;
+      stores = [defaultStore];
+    }
+
+    const cookieStore = await cookies();
+    const requestedStoreId = cookieStore.get(ACTIVE_STORE_COOKIE)?.value ?? null;
+    const matchedStore = requestedStoreId
+      ? stores.find((store) => store.id === requestedStoreId)
+      : undefined;
+    const activeStore = matchedStore ?? stores[0];
+
+    if (requestedStoreId && !matchedStore) {
+      await setActiveStoreCookie(activeStore.id);
+    }
+
+    return {
+      userId,
+      userType: user.type,
+      saleChannelId: user.saleChannelId,
+      saleChannelName: user.saleChannel?.name ?? null,
+      saleChannelType: user.saleChannel?.type ?? null,
+      storeId: activeStore.id,
+      stores,
+      activeStore,
+    } satisfies StoreContext;
   });
-  if (!user) return null;
 
-  let stores = await listUserStores(userId);
-  if (stores.length === 0) {
-    if (user.type === USER_TYPE_DISTRIBUTOR) return null;
-
-    const defaultStore = await ensureDefaultStoreForUser(userId);
-    if (!defaultStore) return null;
-    stores = [defaultStore];
-  }
-
-  const cookieStore = await cookies();
-  const requestedStoreId = cookieStore.get(ACTIVE_STORE_COOKIE)?.value ?? null;
-  const matchedStore = requestedStoreId
-    ? stores.find((store) => store.id === requestedStoreId)
-    : undefined;
-  const activeStore = matchedStore ?? stores[0];
-
-  if (requestedStoreId && !matchedStore) {
-    await setActiveStoreCookie(activeStore.id);
-  }
-
-  return {
-    userId,
-    userType: user.type,
-    saleChannelId: user.saleChannelId,
-    saleChannelName: user.saleChannel?.name ?? null,
-    saleChannelType: user.saleChannel?.type ?? null,
-    storeId: activeStore.id,
-    stores,
-    activeStore,
-  };
+  if (!resolved.ok) return null;
+  return resolved.value;
 }
 
 export type SessionStoreContextBundle = {
@@ -72,6 +78,9 @@ export type SessionStoreContextBundle = {
 export const getSessionStoreContextBundle = cache(
   async (): Promise<SessionStoreContextBundle> => {
     const session = await auth();
+    if (session?.forceSignOut) {
+      return { session, storeContext: null };
+    }
     const userId = session?.user?.id ?? null;
     if (!userId) {
       return { session, storeContext: null };

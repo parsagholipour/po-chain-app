@@ -145,5 +145,8 @@ export async function redeemStoreMagicLinkToken(
     return loginUserId;
   });
 
-  return userId ? findUserById(userId) : null;
+  if (!userId) return null;
+  const lookup = await findUserById(userId);
+  if (!lookup.ok) return null;
+  return lookup.value;
 }

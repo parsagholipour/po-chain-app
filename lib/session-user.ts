@@ -2,10 +2,12 @@ import type { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { jsonError } from "@/lib/json-error";
+import { runIfPrismaAvailable } from "@/lib/prisma-unavailable";
 
 /** Resolves the Prisma `User.id` for the current session, or `null`. */
 export async function getSessionUserId(): Promise<string | null> {
   const session = await auth();
+  if (session?.forceSignOut) return null;
   return session?.user?.id ?? null;
 }
 
@@ -19,11 +21,16 @@ export async function requireAppUserId(): Promise<
   if (!userId) {
     return { ok: false, response: jsonError("Unauthorized", 401) };
   }
-  const row = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true },
-  });
-  if (!row) {
+  const lookup = await runIfPrismaAvailable(() =>
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
+    }),
+  );
+  if (!lookup.ok) {
+    return { ok: false, response: jsonError("Unauthorized", 401) };
+  }
+  if (!lookup.value) {
     console.error(
       "[session] Session user id has no matching User row (sign in again to refresh JWT). id=",
       userId,
