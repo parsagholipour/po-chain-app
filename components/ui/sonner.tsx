@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect } from "react"
 import { useTheme } from "@teispace/next-themes"
-import { Toaster as Sonner, toast, type ToasterProps } from "sonner"
+import { Toaster as Sonner, toast, type ToastT, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
 const Toaster = ({ position = "top-right", ...props }: ToasterProps) => {
@@ -23,7 +23,9 @@ const Toaster = ({ position = "top-right", ...props }: ToasterProps) => {
       if (Number.isNaN(index)) return
 
       const toastPosition = `${toastEl.dataset.yPosition}-${toastEl.dataset.xPosition}`
-      const matching = toast.getToasts().filter((t) => (t.position ?? toasterPosition) === toastPosition)
+      const matching = toast.getToasts().filter(
+        (t): t is ToastT => "position" in t && (t.position ?? toasterPosition) === toastPosition,
+      )
       const match = matching[index]
       if (match) toast.dismiss(match.id)
     },

@@ -731,7 +731,7 @@ export function NewOrderView() {
     for (const line of lines) {
       for (const quantity of line.quantities) {
         if (quantity.quantity <= 0 && quantity.backOrderQuantity <= 0) continue;
-        if ("sessionLocation" in quantity) {
+        if ("sessionLocation" in quantity && quantity.sessionLocation) {
           activeIds.add(quantity.sessionLocation.id);
         } else {
           activeIds.add(quantity.saleChannelLocationId);

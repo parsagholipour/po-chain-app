@@ -118,10 +118,11 @@ export async function POST(request: Request) {
     return jsonError("Only distributor accounts can create distributor order drafts", 403);
   }
 
-  const { userId, storeId, saleChannelId } = authz.context;
-  if (!saleChannelId) {
+  const { userId, storeId, saleChannelId: saleChannelIdFromContext } = authz.context;
+  if (!saleChannelIdFromContext) {
     return jsonError("Distributor account is not linked to a sale channel", 403);
   }
+  const saleChannelId = saleChannelIdFromContext;
 
   let body: unknown;
   try {

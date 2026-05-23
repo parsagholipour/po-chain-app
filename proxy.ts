@@ -1,22 +1,24 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
 import authConfig from "./auth.config";
+import { keycloakSignInPath } from "./lib/auth-sign-in";
 import { isSuperAdminEmail } from "./lib/super-admin-constants";
 
 const { auth } = NextAuth(authConfig);
 
-const publicRoutes = new Set(["/", "/auth/error"]);
-
 function isPublicRoute(pathname: string) {
-  return publicRoutes.has(pathname) || pathname.startsWith("/magic/store/");
+  return (
+    pathname === "/auth/error" ||
+    pathname === "/auth/keycloak" ||
+    pathname.startsWith("/magic/store/")
+  );
 }
 
 export default auth((req) => {
   const pathname = req.nextUrl.pathname;
 
   if (!req.auth?.user && !isPublicRoute(pathname)) {
-    const signInUrl = new URL("/api/auth/signin", req.url);
-    signInUrl.searchParams.set("callbackUrl", req.nextUrl.href);
+    const signInUrl = new URL(keycloakSignInPath(req.nextUrl.href), req.url);
     return NextResponse.redirect(signInUrl);
   }
 

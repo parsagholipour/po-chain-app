@@ -2,6 +2,7 @@ import "server-only";
 
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { keycloakSignInPath } from "@/lib/auth-sign-in";
 import { prisma } from "@/lib/prisma";
 import { isSuperAdminEmail } from "@/lib/super-admin-constants";
 
@@ -9,9 +10,7 @@ import { isSuperAdminEmail } from "@/lib/super-admin-constants";
 export async function requireSuperAdmin(): Promise<{ userId: string }> {
   const session = await auth();
   if (!session?.user?.id) {
-    redirect(
-      `/api/auth/signin?callbackUrl=${encodeURIComponent("/super-admin")}`,
-    );
+    redirect(keycloakSignInPath("/super-admin"));
   }
 
   const row = await prisma.user.findUnique({

@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { KEYCLOAK_PROVIDER_ID } from "@/lib/auth-sign-in";
 import { signIn, signOut, useSession } from "next-auth/react";
 import Link from "next/link";
 import type { ComponentProps } from "react";
@@ -31,7 +32,7 @@ export function AuthControls({
         variant={signInVariant}
         size={signInSize}
         className={signInClassName}
-        onClick={() => signIn("keycloak")}
+        onClick={() => signIn(KEYCLOAK_PROVIDER_ID)}
       >
         Sign in
       </Button>

@@ -28,8 +28,8 @@ export default {
         return NextResponse.redirect(signOutUrl);
       }
       if (
-        request.nextUrl.pathname === "/" ||
         request.nextUrl.pathname.startsWith("/auth/error") ||
+        request.nextUrl.pathname === "/auth/keycloak" ||
         request.nextUrl.pathname.startsWith("/magic/store/")
       ) {
         return true;

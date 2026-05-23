@@ -129,7 +129,7 @@ export default async function AuthErrorPage({
               Back to home
             </Link>
             <p className="text-xs text-muted-foreground">
-              Retry sign-in from the toolbar on the home page. If this persists,
+              Use &ldquo;Back to home&rdquo; to retry sign-in. If this persists,
               confirm Keycloak client redirect URIs and that the database is
               reachable for user sync.
             </p>
