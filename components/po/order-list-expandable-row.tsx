@@ -252,7 +252,10 @@ export function ExpandableOrderSummaryRow({
       </TableRow>
       {open ? (
         <TableRow className="hover:bg-transparent">
-          <TableCell colSpan={colSpan} className="border-t border-border/60 bg-muted/15 p-3 pt-2">
+          <TableCell
+            colSpan={colSpan}
+            className="max-w-0 w-full min-w-0 whitespace-normal border-t border-border/60 bg-muted/15 p-3 pt-2"
+          >
             {isPending ? (
               <p className="text-sm text-muted-foreground">Loading line items…</p>
             ) : isError ? (
@@ -260,8 +263,8 @@ export function ExpandableOrderSummaryRow({
             ) : !lines?.length ? (
               <p className="text-sm text-muted-foreground">No line items.</p>
             ) : (
-              <div className="rounded-lg border border-border/60 bg-background p-3">
-                <LineItemsGrid dense>
+              <div className="min-w-0 max-w-full overflow-x-auto rounded-lg border border-border/60 bg-background p-3">
+                <LineItemsGrid dense className="min-w-0 [&>*]:min-w-0">
                   {lines.map((line) => (
                     <LineItemCard
                       key={line.id}
