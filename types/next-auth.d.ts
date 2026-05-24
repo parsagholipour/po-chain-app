@@ -7,6 +7,9 @@ declare module "next-auth" {
   interface Session {
     /** Set when the app database is unreachable or the account cannot be synced. */
     forceSignOut?: boolean;
+    authProvider?: "keycloak" | "store-magic-link";
+    keycloakSessionId?: string | null;
+    appSessionId?: string | null;
     user: DefaultSession["user"] & {
       id: string;
       type: AppUserType;
@@ -32,6 +35,8 @@ declare module "next-auth/jwt" {
     saleChannelId?: string | null;
     saleChannelType?: AppSaleChannelType | null;
     authProvider?: "keycloak" | "store-magic-link";
+    keycloakSessionId?: string | null;
+    appSessionId?: string | null;
     realEmail?: string | null;
     realName?: string | null;
     /** Clears app session on next request; middleware redirects to sign-out. */

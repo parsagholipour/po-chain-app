@@ -18,6 +18,7 @@ export default {
     session({ session, token }) {
       if (token.forceSignOut) {
         session.forceSignOut = true;
+        delete (session as { user?: unknown }).user;
       }
       return session;
     },

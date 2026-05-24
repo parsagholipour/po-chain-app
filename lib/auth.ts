@@ -1,6 +1,8 @@
 import NextAuth from "next-auth";
 import type { JWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
+import { randomUUID } from "crypto";
+import { headers } from "next/headers";
 import authConfig from "@/auth.config";
 import {
   clearAuthForceSignOut,
@@ -18,6 +20,104 @@ import {
   redeemStoreMagicLinkToken,
   STORE_MAGIC_LINK_PROVIDER_ID,
 } from "@/lib/sale-channel-magic-links";
+import { touchKeycloakAppSession } from "@/lib/app-sessions";
+
+function recordFromUnknown(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function stringClaim(record: Record<string, unknown> | null, keys: string[]) {
+  if (!record) return null;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return null;
+}
+
+function decodeJwtPayload(token: unknown): Record<string, unknown> | null {
+  if (typeof token !== "string") return null;
+  const [, payload] = token.split(".");
+  if (!payload) return null;
+
+  try {
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    return null;
+  }
+}
+
+function keycloakSessionIdFromAuthPayload(profile: unknown, account: unknown) {
+  const profileRecord = recordFromUnknown(profile);
+  const accountRecord = recordFromUnknown(account);
+
+  return (
+    stringClaim(profileRecord, ["sid", "session_state"]) ??
+    stringClaim(accountRecord, ["session_state"]) ??
+    stringClaim(decodeJwtPayload(accountRecord?.id_token), ["sid", "session_state"]) ??
+    stringClaim(decodeJwtPayload(accountRecord?.access_token), ["sid", "session_state"])
+  );
+}
+
+async function currentRequestSessionMetadata() {
+  try {
+    const headerStore = await headers();
+    const forwardedFor = headerStore.get("x-forwarded-for");
+    const ipAddress =
+      forwardedFor?.split(",")[0]?.trim() ||
+      headerStore.get("x-real-ip")?.trim() ||
+      null;
+    return {
+      ipAddress,
+      userAgent: headerStore.get("user-agent"),
+    };
+  } catch {
+    return { ipAddress: null, userAgent: null };
+  }
+}
+
+function applyAuthMetadataToSession(
+  session: import("next-auth").Session,
+  token: JWT,
+) {
+  session.authProvider = token.authProvider;
+  session.keycloakSessionId =
+    typeof token.keycloakSessionId === "string" ? token.keycloakSessionId : null;
+  session.appSessionId = typeof token.appSessionId === "string" ? token.appSessionId : null;
+}
+
+function clearSessionUser(session: import("next-auth").Session) {
+  delete (session as { user?: unknown }).user;
+}
+
+async function syncKeycloakAppSession(token: JWT, user: AppUserAuthFields, keycloakSub: string) {
+  if (token.authProvider !== "keycloak") return;
+  if (typeof token.appSessionId !== "string") {
+    token.appSessionId = randomUUID();
+  }
+
+  const metadata = await currentRequestSessionMetadata();
+  const result = await touchKeycloakAppSession({
+    id: token.appSessionId,
+    userId: user.id,
+    keycloakSub,
+    keycloakSessionId:
+      typeof token.keycloakSessionId === "string" ? token.keycloakSessionId : null,
+    ipAddress: metadata.ipAddress,
+    userAgent: metadata.userAgent,
+  });
+
+  if (result === "revoked") {
+    markAuthForceSignOut(token);
+  } else if (result === "unavailable") {
+    console.warn("[auth] app session registry is unavailable; session revocation is skipped");
+  }
+}
 
 function emailFromProfile(sub: string, profile: Record<string, unknown>) {
   const raw = profile.email;
@@ -238,6 +338,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (sub) {
         if (account?.provider === "keycloak") {
           token.authProvider = "keycloak";
+          token.appSessionId = randomUUID();
+          const keycloakSessionId = keycloakSessionIdFromAuthPayload(profile, account);
+          if (keycloakSessionId) {
+            token.keycloakSessionId = keycloakSessionId;
+          } else {
+            delete token.keycloakSessionId;
+          }
         }
         const profileRecord =
           profile && typeof profile === "object"
@@ -275,6 +382,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           } else {
             clearAuthForceSignOut(token);
             applyUserToToken(token, resolved);
+            await syncKeycloakAppSession(token, resolved, sub);
           }
         } catch (err) {
           console.error("[auth] jwt user lookup failed for keycloakSub", sub, err);
@@ -284,10 +392,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
     async session({ session, token }) {
+      applyAuthMetadataToSession(session, token);
       if (!session.user) return session;
 
       if (tokenRequiresSignOut(token)) {
         session.forceSignOut = true;
+        clearSessionUser(session);
         return session;
       }
 

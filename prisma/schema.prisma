@@ -356,6 +356,25 @@ model User {
   orderStatusLogsCreated                      OrderStatusLog[]
   notificationsCreated                        Notification[]                        @relation("NotificationCreatedBy")
   notificationReads                           NotificationRead[]
+  appSessions                                 AppSession[]
+}
+
+model AppSession {
+  id                String    @id @default(uuid()) @db.Uuid
+  userId            String    @db.Uuid
+  keycloakSub       String    @db.Uuid
+  keycloakSessionId String?
+  ipAddress         String?
+  userAgent         String?
+  createdAt         DateTime  @default(now())
+  lastSeenAt        DateTime  @default(now())
+  revokedAt         DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt, lastSeenAt])
+  @@index([keycloakSub])
+  @@index([keycloakSessionId])
 }
 
 model Manufacturer {

@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { AdminShell } from "@/components/admin-shell";
 import { SuperAdminShell } from "@/components/super-admin-shell";
 import { StoreThemeVariables } from "@/components/store-theme-variables";
+import { keycloakSignInPath } from "@/lib/auth-sign-in";
 import { getStoreThemeStyle, type StoreTheme } from "@/lib/store-theme";
 
 type StoreOption = {
@@ -41,6 +42,10 @@ export function AppChromeClient({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const isPublicPath =
+    pathname.startsWith("/auth/error") ||
+    pathname === "/auth/keycloak" ||
+    pathname.startsWith("/magic/store/");
   const isDistributor = userType === "distributor";
   const isStoreSaleChannel = saleChannelType === "store";
   const distributorAllowed =
@@ -61,6 +66,20 @@ export function AppChromeClient({
       router.replace("/");
     }
   }, [distributorAllowed, isDistributor, router]);
+
+  useEffect(() => {
+    if (!authenticated && !isPublicPath) {
+      router.replace(keycloakSignInPath(window.location.href));
+    }
+  }, [authenticated, isPublicPath, router]);
+
+  if (!authenticated && !isPublicPath) {
+    return (
+      <div className="flex min-h-[100dvh] flex-1 items-center justify-center text-sm text-muted-foreground">
+        Redirecting...
+      </div>
+    );
+  }
 
   if (isDistributor && !distributorAllowed) {
     return (

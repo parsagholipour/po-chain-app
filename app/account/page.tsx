@@ -7,9 +7,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { keycloakSignInPath } from "@/lib/auth-sign-in";
+import { DistributorChangePasswordForm } from "./distributor-change-password-form";
+import { KeycloakSessionsPanel } from "./keycloak-sessions-panel";
 
 export default async function AccountPage() {
   const session = await auth();
+  if (!session?.user) {
+    redirect(keycloakSignInPath("/account"));
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -23,7 +30,7 @@ export default async function AccountPage() {
           </Link>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-10">
+      <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 px-4 py-10">
         <Card>
           <CardHeader>
             <CardTitle>Account</CardTitle>
@@ -47,6 +54,18 @@ export default async function AccountPage() {
             </div>
           </CardContent>
         </Card>
+        {session.authProvider === "keycloak" ? <KeycloakSessionsPanel /> : null}
+        {session?.user?.type === "distributor" &&
+        session.user.saleChannelType === "distributor" ? (
+          <Card>
+            <CardHeader>
+              <CardTitle>Change password</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DistributorChangePasswordForm />
+            </CardContent>
+          </Card>
+        ) : null}
       </main>
     </div>
   );

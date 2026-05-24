@@ -6,12 +6,33 @@ type KeycloakUserRepresentation = {
   email?: string;
 };
 
+type KeycloakUserSessionRepresentation = {
+  id?: string;
+  username?: string;
+  userId?: string;
+  ipAddress?: string;
+  start?: number;
+  lastAccess?: number;
+  rememberMe?: boolean;
+  clients?: Record<string, string>;
+};
+
+export type KeycloakUserSession = {
+  id: string;
+  ipAddress: string | null;
+  startedAt: Date | null;
+  lastAccessedAt: Date | null;
+  rememberMe: boolean;
+  clients: string[];
+};
+
 const DISTRIBUTOR_KEYCLOAK_LAST_NAME = "distributor";
 
 type KeycloakAdminLocation = {
   baseUrl: string;
   realm: string;
   tokenUrl: string;
+  adminRealmUrl: string;
   usersUrl: string;
 };
 
@@ -35,9 +56,17 @@ export class KeycloakAdminError extends Error {
 function requiredEnv(name: string) {
   const value = process.env[name]?.trim();
   if (!value) {
-    throw new KeycloakAdminConfigError(`${name} is required to provision distributor users`);
+    throw new KeycloakAdminConfigError(`${name} is required for Keycloak admin API access`);
   }
   return value;
+}
+
+export function isKeycloakAdminConfigured() {
+  return Boolean(
+    process.env.AUTH_KEYCLOAK_ISSUER?.trim() &&
+      process.env.AUTH_KEYCLOAK_ADMIN_CLIENT_ID?.trim() &&
+      process.env.AUTH_KEYCLOAK_ADMIN_CLIENT_SECRET?.trim(),
+  );
 }
 
 function adminLocationFromIssuer(issuer: string): KeycloakAdminLocation {
@@ -60,13 +89,20 @@ function adminLocationFromIssuer(issuer: string): KeycloakAdminLocation {
   const basePath = parts.slice(0, realmsIndex).join("/");
   const baseUrl = `${url.origin}${basePath ? `/${basePath}` : ""}`;
   const realmPath = `${baseUrl}/realms/${encodeURIComponent(realm)}`;
+  const adminRealmUrl = `${baseUrl}/admin/realms/${encodeURIComponent(realm)}`;
 
   return {
     baseUrl,
     realm,
     tokenUrl: `${realmPath}/protocol/openid-connect/token`,
-    usersUrl: `${baseUrl}/admin/realms/${encodeURIComponent(realm)}/users`,
+    adminRealmUrl,
+    usersUrl: `${adminRealmUrl}/users`,
   };
+}
+
+function keycloakAdminLocationFromEnv() {
+  const issuer = requiredEnv("AUTH_KEYCLOAK_ISSUER");
+  return adminLocationFromIssuer(issuer);
 }
 
 async function getAdminAccessToken(location: KeycloakAdminLocation) {
@@ -137,6 +173,37 @@ async function findKeycloakUserByEmail(
   return users.find((user) => user.email?.toLowerCase() === email.toLowerCase()) ?? null;
 }
 
+function keycloakTimestampToDate(value: unknown): Date | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  const ms = value > 10_000_000_000 ? value : value * 1000;
+  const date = new Date(ms);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function uniqueClientNames(clients: Record<string, string> | undefined) {
+  if (!clients) return [];
+  const values = Object.values(clients).filter((value) => value.trim().length > 0);
+  const names = values.length > 0 ? values : Object.keys(clients);
+  return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+}
+
+function keycloakSessionFromRepresentation(
+  row: KeycloakUserSessionRepresentation,
+): KeycloakUserSession | null {
+  if (!row.id) return null;
+  return {
+    id: row.id,
+    ipAddress: row.ipAddress ?? null,
+    startedAt: keycloakTimestampToDate(row.start),
+    lastAccessedAt: keycloakTimestampToDate(row.lastAccess),
+    rememberMe: row.rememberMe === true,
+    clients: uniqueClientNames(row.clients),
+  };
+}
+
 async function updateKeycloakUser(
   location: KeycloakAdminLocation,
   userId: string,
@@ -188,8 +255,7 @@ export async function provisionDistributorKeycloakUser(input: {
   password?: string | null;
   existingUserId?: string | null;
 }) {
-  const issuer = requiredEnv("AUTH_KEYCLOAK_ISSUER");
-  const location = adminLocationFromIssuer(issuer);
+  const location = keycloakAdminLocationFromEnv();
   const email = input.email.trim().toLowerCase();
 
   const existingUserId = input.existingUserId;
@@ -257,4 +323,54 @@ export async function provisionDistributorKeycloakUser(input: {
     throw new KeycloakAdminError("Keycloak user was created but its id could not be resolved");
   }
   return { id: created.id, created: true };
+}
+
+export async function resetDistributorKeycloakPassword(
+  keycloakUserId: string,
+  password: string,
+) {
+  const location = keycloakAdminLocationFromEnv();
+  await resetKeycloakPassword(location, keycloakUserId, password);
+}
+
+export async function listKeycloakUserSessions(
+  keycloakUserId: string,
+): Promise<KeycloakUserSession[]> {
+  const location = keycloakAdminLocationFromEnv();
+  const response = await keycloakFetch(
+    location,
+    `/${encodeURIComponent(keycloakUserId)}/sessions`,
+  );
+  const json = (await response.json().catch(() => null)) as
+    | KeycloakUserSessionRepresentation[]
+    | null;
+
+  if (!response.ok || !Array.isArray(json)) {
+    throw new KeycloakAdminError("Could not list Keycloak user sessions", response.status);
+  }
+
+  return json
+    .map((row) => keycloakSessionFromRepresentation(row))
+    .filter((row): row is KeycloakUserSession => row !== null);
+}
+
+export async function deleteKeycloakSession(sessionId: string) {
+  const location = keycloakAdminLocationFromEnv();
+  const response = await keycloakFetch(
+    location,
+    `${location.adminRealmUrl}/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" },
+  );
+
+  if (!response.ok && response.status !== 404) {
+    throw new KeycloakAdminError("Could not delete Keycloak session", response.status);
+  }
+}
+
+export async function keycloakUserSessionExists(
+  keycloakUserId: string,
+  sessionId: string,
+) {
+  const sessions = await listKeycloakUserSessions(keycloakUserId);
+  return sessions.some((session) => session.id === sessionId);
 }
