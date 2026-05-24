@@ -21,6 +21,7 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PhoneNumberInput } from "@/components/ui/phone-number-input";
 import { Textarea } from "@/components/ui/textarea";
 import type { SaleChannelLocation } from "@/lib/types/api";
 import { saleChannelLocationCreateSchema } from "@/lib/validations/master-data";
@@ -88,7 +89,7 @@ export function SaleChannelLocationForm({ defaultValues, onSubmit, onCancel }: P
       <FieldSet>
         <FieldGroup className="grid gap-4 md:grid-cols-2">
           <Field data-invalid={!!form.formState.errors.name}>
-            <FieldLabel htmlFor="scl-name" required>Name</FieldLabel>
+            <FieldLabel htmlFor="scl-name" required>Location Name</FieldLabel>
             <FieldContent>
               <Input id="scl-name" {...form.register("name")} />
               <FieldError errors={[form.formState.errors.name]} />
@@ -111,7 +112,19 @@ export function SaleChannelLocationForm({ defaultValues, onSubmit, onCancel }: P
           <Field data-invalid={!!form.formState.errors.phoneNumber}>
             <FieldLabel htmlFor="scl-phone">Phone</FieldLabel>
             <FieldContent>
-              <Input id="scl-phone" {...form.register("phoneNumber")} />
+              <Controller
+                control={form.control}
+                name="phoneNumber"
+                render={({ field }) => (
+                  <PhoneNumberInput
+                    id="scl-phone"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    aria-invalid={!!form.formState.errors.phoneNumber}
+                  />
+                )}
+              />
               <FieldError errors={[form.formState.errors.phoneNumber]} />
             </FieldContent>
           </Field>

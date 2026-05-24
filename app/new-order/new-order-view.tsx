@@ -15,6 +15,7 @@ import { SaleChannelLocationUpsertDialog } from "@/components/po/sale-channels/s
 import type { SaleChannelLocationFormValues } from "@/components/po/sale-channels/sale-channel-location-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DocumentDownloadLink } from "@/components/ui/document-download-link";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -87,14 +88,30 @@ type OrderSubmitResponse =
     };
 
 type BackOrderSubmitMode = {
-  overflow: "split" | "cut";
+  lines: BackOrderDraftLine[];
 };
 
 type BackOrderReview = {
-  unavailableUnits: number;
-  overflowUnits: number;
-  unavailableProducts: string[];
-  overflowProducts: string[];
+  lines: BackOrderDraftLine[];
+  visibleLineKeys: string[];
+};
+
+type BackOrderDraftLine = {
+  rowId: string;
+  productId: string;
+  locationId: string;
+  quantity: number;
+  backOrder: boolean;
+};
+
+type BackOrderReviewLine = BackOrderDraftLine & {
+  key: string;
+  product: SaleChannelProduct;
+  location: SaleChannelLocation;
+  availableQuantity: number;
+  unavailableQuantity: number;
+  stockCount: number;
+  isShort: boolean;
 };
 
 function newRow(id: string): OrderRow {
@@ -185,8 +202,8 @@ function rowQuantityTotal(row: OrderRow) {
   return Object.values(row.quantities).reduce((sum, qty) => sum + Math.max(0, qty), 0);
 }
 
-function uniqueLabels(labels: string[]) {
-  return Array.from(new Set(labels));
+function backOrderLineKey(rowId: string, locationId: string) {
+  return `${rowId}:${locationId}`;
 }
 
 function productMoq(product: SaleChannelProduct | undefined) {
@@ -457,6 +474,10 @@ export function NewOrderView() {
     () => new Map(products.map((product) => [product.id, product])),
     [products],
   );
+  const locationById = useMemo(
+    () => new Map(locations.map((location) => [location.id, location])),
+    [locations],
+  );
 
   const activeLocationIds = useMemo(() => {
     return locations
@@ -690,59 +711,138 @@ export function NewOrderView() {
     });
   }
 
+  function getBackOrderReviewLines(draftLines: BackOrderDraftLine[]) {
+    const remainingStockByProductId = new Map<string, number>();
+
+    return draftLines.flatMap((line): BackOrderReviewLine[] => {
+      const product = productById.get(line.productId);
+      const location = locationById.get(line.locationId);
+      if (!product || !location || product.stockCount == null) return [];
+
+      const remainingStock =
+        remainingStockByProductId.get(product.id) ?? Math.max(0, product.stockCount);
+      const requestedQuantity = Math.max(0, line.quantity);
+      const availableQuantity = Math.min(requestedQuantity, remainingStock);
+      remainingStockByProductId.set(product.id, remainingStock - availableQuantity);
+
+      return [
+        {
+          ...line,
+          key: backOrderLineKey(line.rowId, line.locationId),
+          product,
+          location,
+          quantity: requestedQuantity,
+          availableQuantity,
+          unavailableQuantity: requestedQuantity - availableQuantity,
+          stockCount: product.stockCount,
+          isShort: requestedQuantity > availableQuantity,
+        },
+      ];
+    });
+  }
+
   function getBackOrderReview(): BackOrderReview | null {
-    const review: BackOrderReview = {
-      unavailableUnits: 0,
-      overflowUnits: 0,
-      unavailableProducts: [],
-      overflowProducts: [],
-    };
-
-    for (const row of rowsWithActiveQuantity) {
+    const lines = rowsWithActiveQuantity.flatMap((row): BackOrderDraftLine[] => {
       const product = productById.get(row.productId);
-      if (!product || product.stockCount == null) continue;
-      const total = rowQuantityTotal(row);
-      const label = `${product.sku} - ${product.name}`;
+      if (!product || product.stockCount == null) return [];
 
-      if (product.stockCount <= 0) {
-        review.unavailableUnits += total;
-        review.unavailableProducts.push(label);
-      } else if (total > product.stockCount) {
-        review.overflowUnits += total - product.stockCount;
-        review.overflowProducts.push(label);
-      }
-    }
+      return locations.flatMap((location): BackOrderDraftLine[] => {
+        const quantity = quantityValue(row, location.id);
+        if (quantity <= 0) return [];
 
-    if (review.unavailableUnits === 0 && review.overflowUnits === 0) return null;
+        return [
+          {
+            rowId: row.id,
+            productId: row.productId,
+            locationId: location.id,
+            quantity,
+            backOrder: true,
+          },
+        ];
+      });
+    });
+
+    const visibleLineKeys = getBackOrderReviewLines(lines)
+      .filter((line) => line.isShort)
+      .map((line) => line.key);
+
+    if (visibleLineKeys.length === 0) return null;
     return {
-      ...review,
-      unavailableProducts: uniqueLabels(review.unavailableProducts),
-      overflowProducts: uniqueLabels(review.overflowProducts),
+      lines,
+      visibleLineKeys,
     };
+  }
+
+  function updateBackOrderDraftLine(
+    rowId: string,
+    locationId: string,
+    values: Partial<Pick<BackOrderDraftLine, "quantity" | "backOrder">>,
+  ) {
+    setBackOrderReview((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        lines: current.lines.map((line) =>
+          line.rowId === rowId && line.locationId === locationId
+            ? {
+                ...line,
+                ...values,
+              }
+            : line,
+        ),
+      };
+    });
+  }
+
+  function applyBackOrderDraftToRows(lines: BackOrderDraftLine[]) {
+    const quantityByLineKey = new Map(
+      lines.map((line) => [backOrderLineKey(line.rowId, line.locationId), line.quantity]),
+    );
+
+    setRows((current) =>
+      current.map((row) => {
+        let nextRow = row;
+        for (const location of locations) {
+          const quantity = quantityByLineKey.get(backOrderLineKey(row.id, location.id));
+          if (quantity == null) continue;
+          nextRow = setQuantity(nextRow, location.id, quantity);
+        }
+        return nextRow;
+      }),
+    );
   }
 
   function distributorOrderLines(mode: BackOrderSubmitMode) {
     const remainingStockByProductId = new Map<string, number>();
+    const backOrderDraftByLineKey = new Map(
+      mode.lines.map((line) => [backOrderLineKey(line.rowId, line.locationId), line]),
+    );
 
     return rowsWithActiveQuantity
       .map((row) => {
         const product = productById.get(row.productId);
         const quantities = locations.map((location) => {
-          const requestedQuantity = quantityValue(row, location.id);
+          const backOrderDraft = backOrderDraftByLineKey.get(
+            backOrderLineKey(row.id, location.id),
+          );
+          const requestedQuantity = Math.max(
+            0,
+            backOrderDraft?.quantity ?? quantityValue(row, location.id),
+          );
           let quantity = requestedQuantity;
           let backOrderQuantity = 0;
 
           if (product?.stockCount != null) {
             if (product.stockCount <= 0) {
               quantity = 0;
-              backOrderQuantity = requestedQuantity;
+              backOrderQuantity = backOrderDraft?.backOrder ? requestedQuantity : 0;
             } else {
               const remaining =
                 remainingStockByProductId.get(product.id) ?? product.stockCount;
               quantity = Math.min(requestedQuantity, Math.max(0, remaining));
               remainingStockByProductId.set(product.id, remaining - quantity);
               const overflowQuantity = requestedQuantity - quantity;
-              backOrderQuantity = mode.overflow === "split" ? overflowQuantity : 0;
+              backOrderQuantity = backOrderDraft?.backOrder ? overflowQuantity : 0;
             }
           }
 
@@ -794,12 +894,13 @@ export function NewOrderView() {
       setBackOrderReview(review);
       return;
     }
-    submitOrder.mutate({ overflow: "split" });
+    submitOrder.mutate({ lines: [] });
   }
 
-  function submitBackOrderChoice(mode: BackOrderSubmitMode) {
+  function submitBackOrderResolution(review: BackOrderReview) {
+    applyBackOrderDraftToRows(review.lines);
     setBackOrderReview(null);
-    submitOrder.mutate(mode);
+    submitOrder.mutate({ lines: review.lines });
   }
 
   const submitOrder = useMutation<OrderSubmitResponse, unknown, BackOrderSubmitMode>({
@@ -894,6 +995,17 @@ export function NewOrderView() {
     !productsPending;
 
   const activeLocations = locations.filter((location) => activeLocationIdSet.has(location.id));
+  const backOrderReviewLines = backOrderReview
+    ? getBackOrderReviewLines(backOrderReview.lines)
+    : [];
+  const backOrderVisibleLineKeys = new Set(backOrderReview?.visibleLineKeys ?? []);
+  const backOrderDisplayLines = backOrderReviewLines.filter(
+    (line) => line.isShort || backOrderVisibleLineKeys.has(line.key),
+  );
+  const backOrderShortageUnits = backOrderReviewLines.reduce(
+    (sum, line) => sum + line.unavailableQuantity,
+    0,
+  );
 
   const productDetailRow = productDetailRowId
     ? rows.find((row) => row.id === productDetailRowId)
@@ -1318,38 +1430,139 @@ export function NewOrderView() {
           if (!open) setBackOrderReview(null);
         }}
       >
-        <DialogContent size="lg">
+        <DialogContent size="7xl" showCloseButton={false}>
           <DialogHeader>
             <DialogTitle>Back Order needed</DialogTitle>
             <DialogDescription>
-              Some requested quantities are not currently available in stock.
+              Review the lines that are not fully available before placing the order.
             </DialogDescription>
           </DialogHeader>
           {backOrderReview ? (
-            <div className="space-y-4 text-sm">
-              {backOrderReview.unavailableUnits > 0 ? (
-                <div className="space-y-1">
-                  <p className="font-medium">
-                    {backOrderReview.unavailableUnits} unavailable unit
-                    {backOrderReview.unavailableUnits === 1 ? "" : "s"} will become Back Order
-                    quantity.
-                  </p>
-                  <p className="text-muted-foreground">
-                    {backOrderReview.unavailableProducts.join(", ")}
-                  </p>
-                </div>
-              ) : null}
-              {backOrderReview.overflowUnits > 0 ? (
-                <div className="space-y-1">
-                  <p className="font-medium">
-                    {backOrderReview.overflowUnits} unit
-                    {backOrderReview.overflowUnits === 1 ? "" : "s"} exceed current stock.
-                  </p>
-                  <p className="text-muted-foreground">
-                    {backOrderReview.overflowProducts.join(", ")}
-                  </p>
-                </div>
-              ) : null}
+            <div className="space-y-3 text-sm">
+              <div className="rounded-lg border border-border/80">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-64">Line</TableHead>
+                      <TableHead className="min-w-40">Location</TableHead>
+                      <TableHead className="w-32 text-end">Quantity</TableHead>
+                      <TableHead className="w-32 text-end">Available</TableHead>
+                      <TableHead className="w-32 text-end">Short</TableHead>
+                      <TableHead className="w-48">Action</TableHead>
+                      <TableHead className="w-36">Back Order</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {backOrderDisplayLines.length > 0 ? (
+                      backOrderDisplayLines.map((line) => {
+                        const checkboxId = `back-order-${line.key}`;
+
+                        return (
+                          <TableRow key={line.key}>
+                            <TableCell>
+                              <div className="flex min-w-64 items-center gap-3">
+                                <OrderProductImage product={line.product} />
+                                <div className="min-w-0">
+                                  <div className="font-medium leading-tight">
+                                    {line.product.name}
+                                  </div>
+                                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                    <span className="font-mono text-foreground">
+                                      {line.product.sku}
+                                    </span>
+                                    <span>Stock {line.stockCount}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="min-w-0">
+                                <p className="font-medium">{line.location.name}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                type="number"
+                                min={0}
+                                className="ml-auto w-24 text-end tabular-nums"
+                                value={line.quantity > 0 ? line.quantity : ""}
+                                placeholder="0"
+                                onChange={(event) =>
+                                  updateBackOrderDraftLine(line.rowId, line.locationId, {
+                                    quantity: Math.max(0, Number(event.target.value) || 0),
+                                  })
+                                }
+                              />
+                            </TableCell>
+                            <TableCell className="text-end tabular-nums">
+                              {line.availableQuantity}
+                            </TableCell>
+                            <TableCell
+                              className={cn(
+                                "text-end tabular-nums",
+                                line.isShort ? "text-destructive" : "text-muted-foreground",
+                              )}
+                            >
+                              {line.unavailableQuantity}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={!line.isShort}
+                                onClick={() =>
+                                  updateBackOrderDraftLine(line.rowId, line.locationId, {
+                                    quantity: line.availableQuantity,
+                                    backOrder: false,
+                                  })
+                                }
+                              >
+                                Reduce to available stock
+                              </Button>
+                            </TableCell>
+                            <TableCell>
+                              {line.quantity > line.availableQuantity ? (
+                                <Checkbox
+                                  id={checkboxId}
+                                  checked={line.backOrder}
+                                  label="Back Order"
+                                  onCheckedChange={(value) =>
+                                    updateBackOrderDraftLine(line.rowId, line.locationId, {
+                                      backOrder: value === true,
+                                    })
+                                  }
+                                />
+                              ) : (
+                                <span className="text-muted-foreground">Resolved</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={7}
+                          className="h-24 text-center text-muted-foreground"
+                        >
+                          All lines are within available stock.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+              {backOrderShortageUnits > 0 ? (
+                <p className="text-muted-foreground">
+                  {backOrderShortageUnits} unit
+                  {backOrderShortageUnits === 1 ? "" : "s"} are currently short.
+                </p>
+              ) : (
+                <p className="text-muted-foreground">
+                  Resolve will place the order with the quantities shown above.
+                </p>
+              )}
             </div>
           ) : null}
           <DialogFooter>
@@ -1361,24 +1574,16 @@ export function NewOrderView() {
             >
               Cancel
             </Button>
-            {backOrderReview?.overflowUnits ? (
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={submitOrder.isPending}
-                onClick={() => submitBackOrderChoice({ overflow: "cut" })}
-              >
-                Cut to stock
-              </Button>
-            ) : null}
             <Button
               type="button"
-              disabled={submitOrder.isPending}
-              onClick={() => submitBackOrderChoice({ overflow: "split" })}
+              disabled={submitOrder.isPending || !backOrderReview}
+              onClick={() => {
+                if (!backOrderReview) return;
+                submitBackOrderResolution(backOrderReview);
+              }}
             >
-              {backOrderReview?.overflowUnits
-                ? "Split into Back Order"
-                : "Create Back Order"}
+              {submitOrder.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+              Resolve
             </Button>
           </DialogFooter>
         </DialogContent>

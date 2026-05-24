@@ -33,6 +33,7 @@
     "clsx": "^2.1.1",
     "country-region-data": "^4.1.0",
     "image-size": "^2.0.2",
+    "libphonenumber-js": "^1.13.3",
     "lucide-react": "^1.7.0",
     "motion": "^12.38.0",
     "next": "16.2.2",

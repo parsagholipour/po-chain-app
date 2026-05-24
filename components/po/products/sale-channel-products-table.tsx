@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import type { SaleChannelProduct } from "@/lib/types/api";
 import { productEditingStatusLabels } from "@/lib/product-editing-status";
+import { cn } from "@/lib/utils";
 
 type Props = {
   rows: SaleChannelProduct[];
@@ -22,6 +23,11 @@ type Props = {
 };
 
 const columnCount = 17;
+const stickySkuClassName =
+  "sticky left-0 z-20 w-36 min-w-36 max-w-36 bg-card";
+const stickyProductNameClassName =
+  "sticky left-36 z-20 w-72 min-w-72 max-w-72 bg-card shadow-[inset_-1px_0_0_var(--border)]";
+const stickyBodyClassName = "group-hover:bg-muted/50";
 
 function emptyValue(value: string | number | null | undefined) {
   return value == null || value === "" ? (
@@ -88,8 +94,10 @@ export function SaleChannelProductsTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>SKU</TableHead>
-          <TableHead>Product Name</TableHead>
+          <TableHead className={cn(stickySkuClassName, "z-30")}>SKU</TableHead>
+          <TableHead className={cn(stickyProductNameClassName, "z-30")}>
+            Product Name
+          </TableHead>
           <TableHead>UPC/GTIN</TableHead>
           <TableHead>Collection</TableHead>
           <TableHead className="text-end">MSRP</TableHead>
@@ -122,9 +130,24 @@ export function SaleChannelProductsTable({
           </TableRow>
         ) : (
           rows.map((row) => (
-            <TableRow key={row.id}>
-              <TableCell className="font-mono text-xs">{row.sku}</TableCell>
-              <TableCell className="min-w-56 max-w-72 whitespace-normal font-medium leading-snug">
+            <TableRow key={row.id} className="group">
+              <TableCell
+                className={cn(
+                  stickySkuClassName,
+                  stickyBodyClassName,
+                  "truncate font-mono text-xs",
+                )}
+                title={row.sku}
+              >
+                {row.sku}
+              </TableCell>
+              <TableCell
+                className={cn(
+                  stickyProductNameClassName,
+                  stickyBodyClassName,
+                  "whitespace-normal font-medium leading-snug",
+                )}
+              >
                 {row.name}
               </TableCell>
               <TableCell className="font-mono text-xs">{emptyValue(row.upcGtin)}</TableCell>

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ClipboardList, Package, Truck } from "lucide-react";
+import { ClipboardList, Package, ShoppingCart, Truck } from "lucide-react";
 import { api } from "@/lib/axios";
 import type { PurchaseOrderSummary, ShippingRow } from "@/lib/types/api";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { shippingStatusLabels, statusBadgeClassName } from "@/lib/po/status-labels";
@@ -52,11 +53,17 @@ export function DistributorDashboardView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Distributor dashboard</h1>
-        <p className="mt-2 max-w-2xl text-muted-foreground">
-          Your purchase orders and related shipping updates.
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Distributor dashboard</h1>
+          <p className="mt-2 max-w-2xl text-muted-foreground">
+            Your purchase orders and related shipping updates.
+          </p>
+        </div>
+        <Link href="/new-order" className={buttonVariants({ size: "lg" })}>
+          <ShoppingCart className="size-4" />
+          New order
+        </Link>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">

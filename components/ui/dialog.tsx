@@ -86,6 +86,9 @@ const dialogContentVariants = cva(
         "2xl": "sm:max-w-2xl [--dialog-padding:1rem] sm:[--dialog-padding:1.5rem]",
         "3xl": "sm:max-w-3xl [--dialog-padding:1rem] sm:[--dialog-padding:1.5rem]",
         "4xl": "sm:max-w-4xl [--dialog-padding:1rem] sm:[--dialog-padding:1.5rem]",
+        "5xl": "sm:max-w-5xl [--dialog-padding:1rem] sm:[--dialog-padding:1.5rem]",
+        "6xl": "sm:max-w-6xl [--dialog-padding:1rem] sm:[--dialog-padding:1.5rem]",
+        "7xl": "sm:max-w-7xl [--dialog-padding:1rem] sm:[--dialog-padding:1.5rem]",
       },
     },
     defaultVariants: {

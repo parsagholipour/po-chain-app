@@ -173,7 +173,7 @@ export function SaleChannelLocationsDialog({ open, onOpenChange, saleChannel }: 
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
+                  <TableHead>Location Name</TableHead>
                   <TableHead>Recipient</TableHead>
                   <TableHead>Address</TableHead>
                   <TableHead className="max-w-[140px]">Phone</TableHead>
