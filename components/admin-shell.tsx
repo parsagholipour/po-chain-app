@@ -204,6 +204,7 @@ function SidebarBrand({
   logoHueRotateDeg,
   className,
   variant = "sidebar",
+  subtitle = APP_NAME,
 }: {
   activeStoreName: string | null;
   activeStoreLogoKey: string | null;
@@ -211,6 +212,7 @@ function SidebarBrand({
   logoHueRotateDeg: number;
   className?: string;
   variant?: "sidebar" | "header";
+  subtitle?: string;
 }) {
   return (
     <div
@@ -253,7 +255,7 @@ function SidebarBrand({
             {activeStoreName ?? "Operations"}
           </p>
           {variant !== "header" ? (
-            <p className="truncate text-xs text-muted-foreground">{APP_NAME}</p>
+            <p className="truncate text-xs text-muted-foreground">{subtitle}</p>
           ) : null}
         </div>
       )}
@@ -624,6 +626,7 @@ export function AdminShell({
     });
   };
   const isDistributor = userType === "distributor";
+  const brandSubtitle = isDistributor ? "Distributor Panel" : APP_NAME;
   const distributorName =
     isDistributor && saleChannelType === "distributor" ? saleChannelName : null;
   const navItems = isDistributor ? (saleChannelType === "store" ? storeNav : distributorNav) : nav;
@@ -673,6 +676,7 @@ export function AdminShell({
               activeStoreLogoKey={activeStoreLogoKey}
               isCollapsed={isCollapsed}
               logoHueRotateDeg={logoHueRotateDeg}
+              subtitle={brandSubtitle}
             />
             <ScrollArea className="min-h-0 flex-1">
               <NavList isCollapsed={isCollapsed} navItems={navItems} />
@@ -716,6 +720,7 @@ export function AdminShell({
                 activeStoreName={activeStoreName}
                 activeStoreLogoKey={activeStoreLogoKey}
                 logoHueRotateDeg={logoHueRotateDeg}
+                subtitle={brandSubtitle}
                 className="h-auto min-h-0 flex-1 border-0 px-0 py-0"
               />
             </Link>
@@ -745,7 +750,7 @@ export function AdminShell({
             <SheetHeader className="border-b border-sidebar-border px-4 py-3 text-left">
               <SheetTitle className="font-heading text-base">Navigation</SheetTitle>
               <SheetDescription className="text-xs text-muted-foreground">
-                {APP_NAME}
+                {brandSubtitle}
               </SheetDescription>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1">

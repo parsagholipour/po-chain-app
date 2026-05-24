@@ -345,7 +345,6 @@ export function ProductsView() {
       ) : null}
 
       <TableContainer
-        className="overflow-visible"
         footer={
           <TablePagination
             {...pagination}
