@@ -573,7 +573,7 @@ export function ProductForm({
                 </FieldContent>
               </Field>
               <Field data-invalid={!!form.formState.errors.mop} className="gap-1.5">
-                <FieldLabel htmlFor="pf-mop">MOP</FieldLabel>
+                <FieldLabel htmlFor="pf-mop">MOQ</FieldLabel>
                 <FieldContent>
                   <Input
                     id="pf-mop"

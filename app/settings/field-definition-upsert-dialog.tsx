@@ -61,7 +61,7 @@ const NATIVE_FIELDS: Record<string, NativeField[]> = {
     { value: "upcGtin", label: "UPC/GTIN" },
     { value: "cost", label: "Cost" },
     { value: "price", label: "Price" },
-    { value: "mop", label: "MOP" },
+    { value: "mop", label: "MOQ" },
     { value: "map", label: "MAP" },
     { value: "msrp", label: "MSRP" },
     { value: "quantityPerCarton", label: "Quantity per carton" },
