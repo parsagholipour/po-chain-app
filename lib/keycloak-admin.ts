@@ -208,21 +208,60 @@ async function updateKeycloakUser(
   location: KeycloakAdminLocation,
   userId: string,
   input: { email: string; name: string | null },
+  options: { updateUsername?: boolean } = {},
 ) {
+  const body: KeycloakUserRepresentation & {
+    firstName?: string;
+    lastName: string;
+    enabled: boolean;
+    emailVerified: boolean;
+  } = {
+    email: input.email,
+    firstName: input.name ?? undefined,
+    lastName: DISTRIBUTOR_KEYCLOAK_LAST_NAME,
+    enabled: true,
+    emailVerified: true,
+  };
+  if (options.updateUsername !== false) {
+    body.username = input.email;
+  }
+
   const response = await keycloakFetch(location, `/${encodeURIComponent(userId)}`, {
     method: "PUT",
-    body: JSON.stringify({
-      username: input.email,
-      email: input.email,
-      firstName: input.name ?? undefined,
-      lastName: DISTRIBUTOR_KEYCLOAK_LAST_NAME,
-      enabled: true,
-      emailVerified: true,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
     throw new KeycloakAdminError("Could not update Keycloak user", response.status);
+  }
+}
+
+function isRecoverableExistingUserUpdateError(error: unknown) {
+  return error instanceof KeycloakAdminError && (error.status === 404 || error.status === 409);
+}
+
+async function updateExistingKeycloakUser(
+  location: KeycloakAdminLocation,
+  userId: string,
+  input: { email: string; name: string | null },
+) {
+  try {
+    await updateKeycloakUser(location, userId, input);
+    return true;
+  } catch (error) {
+    if (!(error instanceof KeycloakAdminError) || error.status !== 400) {
+      if (isRecoverableExistingUserUpdateError(error)) return false;
+      throw error;
+    }
+  }
+
+  // Some realms disallow username edits even for admin clients; keep the user and update email only.
+  try {
+    await updateKeycloakUser(location, userId, input, { updateUsername: false });
+    return true;
+  } catch (error) {
+    if (isRecoverableExistingUserUpdateError(error)) return false;
+    throw error;
   }
 }
 
@@ -260,17 +299,10 @@ export async function provisionDistributorKeycloakUser(input: {
 
   const existingUserId = input.existingUserId;
   if (existingUserId) {
-    let updatedExistingUser = false;
-    try {
-      await updateKeycloakUser(location, existingUserId, { email, name: input.name });
-      updatedExistingUser = true;
-    } catch (error) {
-      if (
-        !(error instanceof KeycloakAdminError && (error.status === 404 || error.status === 409))
-      ) {
-        throw error;
-      }
-    }
+    const updatedExistingUser = await updateExistingKeycloakUser(location, existingUserId, {
+      email,
+      name: input.name,
+    });
 
     if (updatedExistingUser) {
       if (input.password) {

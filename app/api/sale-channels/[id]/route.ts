@@ -68,6 +68,7 @@ async function upsertDistributorLoginUser(
     name: string;
     saleChannelId: string;
     storeId: string;
+    targetUserId?: string | null;
   },
 ) {
   const email = input.email.trim().toLowerCase();
@@ -79,8 +80,15 @@ async function upsertDistributorLoginUser(
     where: { keycloakSub: input.keycloakSub },
     select: { id: true, type: true, saleChannelId: true },
   });
+  const existingTargetUser = input.targetUserId
+    ? await tx.user.findUnique({
+        where: { id: input.targetUserId },
+        select: { id: true, type: true, saleChannelId: true },
+      })
+    : null;
   const targetUser =
     existingByKeycloakSub ??
+    (existingTargetUser?.type === "distributor" ? existingTargetUser : null) ??
     (existingByEmail?.type === "distributor" ? existingByEmail : null);
   const appEmail = await availableDistributorAppEmail(tx, {
     preferredEmail: email,
@@ -236,6 +244,7 @@ export async function PATCH(
           name: nextName,
           saleChannelId: pid.data.id,
           storeId,
+          targetUserId: existing.loginUser?.id,
         });
       }
 
