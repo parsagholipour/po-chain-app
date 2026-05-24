@@ -116,6 +116,7 @@ type BackOrderReviewLine = BackOrderDraftLine & {
   availableQuantity: number;
   unavailableQuantity: number;
   stockCount: number;
+  itemsPerCarton: number | null;
   isShort: boolean;
 };
 
@@ -314,6 +315,23 @@ function isQuantityCartonValid(quantity: number, itemsPerCarton: number | null) 
 function snapQuantityToCarton(quantity: number, itemsPerCarton: number | null) {
   if (quantity <= 0 || itemsPerCarton == null) return Math.max(0, quantity);
   return Math.round(quantity / itemsPerCarton) * itemsPerCarton;
+}
+
+function floorQuantityToCarton(quantity: number, itemsPerCarton: number | null) {
+  const safeQuantity = Math.max(0, quantity);
+  if (safeQuantity <= 0 || itemsPerCarton == null) return safeQuantity;
+  return Math.floor(safeQuantity / itemsPerCarton) * itemsPerCarton;
+}
+
+function availableOrderQuantity(
+  requestedQuantity: number,
+  remainingStock: number,
+  itemsPerCarton: number | null,
+) {
+  return floorQuantityToCarton(
+    Math.min(Math.max(0, requestedQuantity), Math.max(0, remainingStock)),
+    itemsPerCarton,
+  );
 }
 
 function sessionDestinationKey(locationId: string) {
@@ -944,7 +962,12 @@ export function NewOrderView() {
       const remainingStock =
         remainingStockByProductId.get(product.id) ?? Math.max(0, product.stockCount);
       const requestedQuantity = Math.max(0, line.quantity);
-      const availableQuantity = Math.min(requestedQuantity, remainingStock);
+      const itemsPerCarton = productItemsPerCarton(product);
+      const availableQuantity = availableOrderQuantity(
+        requestedQuantity,
+        remainingStock,
+        itemsPerCarton,
+      );
       remainingStockByProductId.set(product.id, remainingStock - availableQuantity);
 
       return [
@@ -957,6 +980,7 @@ export function NewOrderView() {
           availableQuantity,
           unavailableQuantity: requestedQuantity - availableQuantity,
           stockCount: product.stockCount,
+          itemsPerCarton,
           isShort: requestedQuantity > availableQuantity,
         },
       ];
@@ -1055,17 +1079,16 @@ export function NewOrderView() {
           let backOrderQuantity = 0;
 
           if (product?.stockCount != null) {
-            if (product.stockCount <= 0) {
-              quantity = 0;
-              backOrderQuantity = backOrderDraft?.backOrder ? requestedQuantity : 0;
-            } else {
-              const remaining =
-                remainingStockByProductId.get(product.id) ?? product.stockCount;
-              quantity = Math.min(requestedQuantity, Math.max(0, remaining));
-              remainingStockByProductId.set(product.id, remaining - quantity);
-              const overflowQuantity = requestedQuantity - quantity;
-              backOrderQuantity = backOrderDraft?.backOrder ? overflowQuantity : 0;
-            }
+            const remaining =
+              remainingStockByProductId.get(product.id) ?? product.stockCount;
+            quantity = availableOrderQuantity(
+              requestedQuantity,
+              remaining,
+              productItemsPerCarton(product),
+            );
+            remainingStockByProductId.set(product.id, remaining - quantity);
+            const overflowQuantity = requestedQuantity - quantity;
+            backOrderQuantity = backOrderDraft?.backOrder ? overflowQuantity : 0;
           }
 
           return isStoreSaleChannel
@@ -1223,6 +1246,9 @@ export function NewOrderView() {
   const backOrderVisibleLineKeys = new Set(backOrderReview?.visibleLineKeys ?? []);
   const backOrderDisplayLines = backOrderReviewLines.filter(
     (line) => line.isShort || backOrderVisibleLineKeys.has(line.key),
+  );
+  const backOrderReviewHasCartonViolations = backOrderReviewLines.some(
+    (line) => !isQuantityCartonValid(line.quantity, line.itemsPerCarton),
   );
   const backOrderShortageUnits = backOrderReviewLines.reduce(
     (sum, line) => sum + line.unavailableQuantity,
@@ -1409,7 +1435,7 @@ export function NewOrderView() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-64 sm:min-w-72">Product</TableHead>
+                  <TableHead className="w-64 max-w-64 sm:w-72 sm:max-w-72">Product</TableHead>
                   <TableHead className="w-32 text-end">Unit price</TableHead>
                   <TableHead className="w-24 text-end">Available</TableHead>
                   {locations.map((location) => (
@@ -1454,22 +1480,27 @@ export function NewOrderView() {
 
                     return (
                       <TableRow key={row.id}>
-                        <TableCell>
+                        <TableCell className="w-64 max-w-64 sm:w-72 sm:max-w-72">
                           {row.productId ? (
-                            <div className="flex min-w-64 items-center gap-3 sm:min-w-72">
+                            <div className="flex w-64 max-w-64 items-center gap-3 sm:w-72 sm:max-w-72">
                               {product ? <OrderProductImage product={product} /> : null}
-                              <div className="min-w-0">
-                                <div className="font-medium leading-tight">
+                              <div className="min-w-0 flex-1">
+                                <div
+                                  className="truncate font-medium leading-tight"
+                                  title={product?.name ?? undefined}
+                                >
                                   {product?.name ?? "Unknown product"}
                                 </div>
-                                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                  <span className="font-mono text-foreground">
+                                <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                                  <span className="shrink-0 font-mono text-foreground">
                                     {product?.sku ?? row.productId}
                                   </span>
                                   {product?.collection?.name ? (
-                                    <span>{product.collection.name}</span>
+                                    <span className="truncate">{product.collection.name}</span>
                                   ) : null}
-                                  {product?.category?.name ? <span>{product.category.name}</span> : null}
+                                  {product?.category?.name ? (
+                                    <span className="truncate">{product.category.name}</span>
+                                  ) : null}
                                 </div>
                               </div>
                             </div>
@@ -1479,7 +1510,7 @@ export function NewOrderView() {
                               variant="outline"
                               disabled={allProductsSelected}
                               onClick={() => openProductPicker(row.id)}
-                              className="min-w-64 justify-start sm:min-w-72"
+                              className="w-64 max-w-64 justify-start sm:w-72 sm:max-w-72"
                             >
                               <Search className="size-4" />
                               {allProductsSelected ? "All products selected" : "Search products"}
@@ -1674,6 +1705,10 @@ export function NewOrderView() {
                     {backOrderDisplayLines.length > 0 ? (
                       backOrderDisplayLines.map((line) => {
                         const checkboxId = `back-order-${line.key}`;
+                        const cartonInvalid = !isQuantityCartonValid(
+                          line.quantity,
+                          line.itemsPerCarton,
+                        );
 
                         return (
                           <TableRow key={line.key}>
@@ -1689,6 +1724,9 @@ export function NewOrderView() {
                                       {line.product.sku}
                                     </span>
                                     <span>Stock {line.stockCount}</span>
+                                    {line.itemsPerCarton != null ? (
+                                      <span>{line.itemsPerCarton} items per carton</span>
+                                    ) : null}
                                   </div>
                                 </div>
                               </div>
@@ -1699,18 +1737,42 @@ export function NewOrderView() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Input
-                                type="number"
-                                min={0}
-                                className="ml-auto w-24 text-end tabular-nums"
-                                value={line.quantity > 0 ? line.quantity : ""}
-                                placeholder="0"
-                                onChange={(event) =>
-                                  updateBackOrderDraftLine(line.rowId, line.locationId, {
-                                    quantity: Math.max(0, Number(event.target.value) || 0),
-                                  })
-                                }
-                              />
+                              <div className="ml-auto w-24 space-y-1">
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step={line.itemsPerCarton ?? 1}
+                                  aria-invalid={cartonInvalid}
+                                  className={cn(
+                                    "w-full text-end tabular-nums",
+                                    cartonInvalid && "border-destructive",
+                                  )}
+                                  value={line.quantity > 0 ? line.quantity : ""}
+                                  placeholder="0"
+                                  onChange={(event) =>
+                                    updateBackOrderDraftLine(line.rowId, line.locationId, {
+                                      quantity: Math.max(0, Number(event.target.value) || 0),
+                                    })
+                                  }
+                                  onBlur={() => {
+                                    if (line.itemsPerCarton == null) return;
+                                    const snapped = snapQuantityToCarton(
+                                      line.quantity,
+                                      line.itemsPerCarton,
+                                    );
+                                    if (snapped !== line.quantity) {
+                                      updateBackOrderDraftLine(line.rowId, line.locationId, {
+                                        quantity: snapped,
+                                      });
+                                    }
+                                  }}
+                                />
+                                {cartonInvalid ? (
+                                  <p className="text-end text-xs text-destructive">
+                                    Full cartons only
+                                  </p>
+                                ) : null}
+                              </div>
                             </TableCell>
                             <TableCell className="text-end tabular-nums">
                               {line.availableQuantity}
@@ -1781,6 +1843,11 @@ export function NewOrderView() {
                   Resolve will place the order with the quantities shown above.
                 </p>
               )}
+              {backOrderReviewHasCartonViolations ? (
+                <p className="text-destructive">
+                  Back order quantities must stay in full-carton increments.
+                </p>
+              ) : null}
             </div>
           ) : null}
           <DialogFooter>
@@ -1794,7 +1861,11 @@ export function NewOrderView() {
             </Button>
             <Button
               type="button"
-              disabled={submitOrder.isPending || !backOrderReview}
+              disabled={
+                submitOrder.isPending ||
+                !backOrderReview ||
+                backOrderReviewHasCartonViolations
+              }
               onClick={() => {
                 if (!backOrderReview) return;
                 submitBackOrderResolution(backOrderReview);
