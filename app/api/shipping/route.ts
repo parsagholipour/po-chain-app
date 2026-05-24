@@ -12,6 +12,10 @@ import {
   shippingTypeSchema,
 } from "@/lib/validations/shipping";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
+import {
+  createShippingCreatedNotifications,
+} from "@/lib/notification-events";
+import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
 import { shippingDetailInclude } from "@/lib/shipping-include";
 import { shippingRowFromPrisma } from "@/lib/shipping-api";
 import { reconcileLinkedOrderStatusesForShipping } from "@/lib/shipping-order-status";
@@ -441,6 +445,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const notificationIds: string[] = [];
       const { manufacturingOrderIds, purchaseOrderIds, warehouseOrderIds } =
         await validateShippingWrite(tx, {
         storeId,
@@ -542,13 +547,26 @@ export async function POST(request: Request) {
         warehouseOrderIds,
       });
 
-      return shipping.id;
+      notificationIds.push(
+        ...(await createShippingCreatedNotifications(tx, {
+          storeId,
+          createdById: userId,
+          shippingId: shipping.id,
+          trackingNumber: shipping.trackingNumber,
+          purchaseOrderIds,
+          manufacturingOrderIds,
+          warehouseOrderIds,
+        })),
+      );
+
+      return { shippingId: shipping.id, notificationIds };
     });
 
     const full = await prisma.shipping.findFirst({
-      where: { id: result, storeId },
+      where: { id: result.shippingId, storeId },
       include: shippingDetailInclude,
     });
+    await dispatchNotificationEmailsSafely(result.notificationIds);
     return NextResponse.json(full ? shippingRowFromPrisma(full) : null, { status: 201 });
   } catch (e) {
     if (e instanceof Error) {

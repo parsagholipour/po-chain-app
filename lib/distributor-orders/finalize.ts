@@ -1,4 +1,5 @@
 import type { Prisma } from "@/app/generated/prisma/client";
+import { createExternalOrderNotifications } from "@/lib/notification-events";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 
 export async function convertPaidDistributorInvoiceDrafts({
@@ -55,6 +56,7 @@ export async function convertPaidDistributorInvoiceDrafts({
   });
 
   const convertedPurchaseOrderIds: string[] = [];
+  const notificationIds: string[] = [];
 
   for (const draft of drafts) {
     if (draft.convertedPurchaseOrderId) {
@@ -93,7 +95,13 @@ export async function convertPaidDistributorInvoiceDrafts({
         storeId: draft.storeId,
         createdById: draft.createdById,
       },
-      select: { id: true },
+      select: {
+        id: true,
+        number: true,
+        name: true,
+        saleChannelId: true,
+        isBackOrder: true,
+      },
     });
 
     if (draft.lines.length > 0) {
@@ -120,7 +128,14 @@ export async function convertPaidDistributorInvoiceDrafts({
     });
 
     convertedPurchaseOrderIds.push(purchaseOrder.id);
+    notificationIds.push(
+      ...(await createExternalOrderNotifications(tx, {
+        storeId: draft.storeId,
+        createdById: draft.createdById,
+        purchaseOrder,
+      })),
+    );
   }
 
-  return { convertedPurchaseOrderIds };
+  return { convertedPurchaseOrderIds, notificationIds };
 }

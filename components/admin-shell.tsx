@@ -29,6 +29,7 @@ import {
 
 import { AuthControls } from "@/components/auth-controls";
 import { AssistantSheet } from "@/components/assistant/assistant-sheet";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { APP_NAME } from "@/lib/app-name";
 import { logoHueRotateFilterStyle } from "@/lib/store-theme";
 import { ModeToggle } from "@/components/mode-toggle";
@@ -730,6 +731,7 @@ export function AdminShell({
                 AI
               </Button>
             ) : null}
+            <NotificationBell enabled={Boolean(activeStoreId)} />
             <ModeToggle />
             <div className="hidden shrink-0 sm:block">
               <AuthControls />
@@ -770,6 +772,7 @@ export function AdminShell({
                 </Suspense>
               ) : null}
             </div>
+            <NotificationBell enabled={Boolean(activeStoreId)} />
             {!isDistributor ? (
               <Button
                 type="button"

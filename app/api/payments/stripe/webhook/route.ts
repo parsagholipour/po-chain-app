@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { convertPaidDistributorInvoiceDrafts } from "@/lib/distributor-orders/finalize";
+import { createPaymentStatusNotifications } from "@/lib/notification-events";
+import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
 import {
   constructStripeWebhookEventFromCandidates,
   normalizeStripeWebhookEvent,
@@ -48,7 +50,7 @@ async function processPaymentWebhook({
       },
       select: { id: true },
     });
-    if (existing) return { duplicate: true };
+    if (existing) return { duplicate: true, notificationIds: [] as string[] };
 
     const paymentAttempt = normalized.paymentAttemptId
       ? await tx.paymentAttempt.findUnique({
@@ -105,8 +107,8 @@ async function processPaymentWebhook({
 
     const nextInvoiceStatus = invoiceStatusForWebhook(normalized);
     if (normalized.paymentStatus === "paid") {
-      await convertPaidDistributorInvoiceDrafts({ tx, invoiceId: invoice.id });
-      return { duplicate: false };
+      const conversion = await convertPaidDistributorInvoiceDrafts({ tx, invoiceId: invoice.id });
+      return { duplicate: false, notificationIds: conversion.notificationIds };
     }
 
     if (invoice.paymentStatus !== "paid") {
@@ -116,7 +118,17 @@ async function processPaymentWebhook({
       });
     }
 
-    return { duplicate: false };
+    const notificationIds =
+      normalized.paymentStatus === "failed" || normalized.paymentStatus === "cancelled"
+        ? await createPaymentStatusNotifications(tx, {
+            storeId: invoice.storeId,
+            invoiceId: invoice.id,
+            providerEventId: normalized.providerEventId,
+            paymentStatus: normalized.paymentStatus,
+          })
+        : [];
+
+    return { duplicate: false, notificationIds };
   });
 }
 
@@ -138,6 +150,7 @@ export async function POST(request: Request) {
 
     const payload = JSON.parse(rawBody) as Prisma.InputJsonValue;
     const result = await processPaymentWebhook({ normalized, payload, verifiedStoreIds });
+    await dispatchNotificationEmailsSafely(result.notificationIds);
     return NextResponse.json({ received: true, ...result });
   } catch (e) {
     if (e instanceof PaymentProviderConfigError) {

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
+import { createBackorderActualizedNotification } from "@/lib/notification-events";
+import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
@@ -29,7 +31,7 @@ export async function POST(
   if (!pid.success) return jsonFromZod(pid.error);
 
   try {
-    const actualizedPoId = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const backPo = await tx.purchaseOrder.findFirst({
         where: {
           id: pid.data.id,
@@ -71,7 +73,12 @@ export async function POST(
           storeId,
           createdById: userId,
         },
-        select: { id: true },
+        select: {
+          id: true,
+          number: true,
+          name: true,
+          saleChannelId: true,
+        },
       });
 
       if (backPo.lines.length > 0) {
@@ -94,13 +101,21 @@ export async function POST(
         data: { actualizedPoId: actualizedPo.id },
       });
 
-      return actualizedPo.id;
+      const notificationIds = await createBackorderActualizedNotification(tx, {
+        storeId,
+        createdById: userId,
+        backorder: backPo,
+        actualizedPurchaseOrder: actualizedPo,
+      });
+
+      return { actualizedPoId: actualizedPo.id, notificationIds };
     });
 
     const full = await prisma.purchaseOrder.findFirst({
-      where: { id: actualizedPoId, storeId, type: PURCHASE_ORDER_TYPE_DISTRIBUTOR },
+      where: { id: result.actualizedPoId, storeId, type: PURCHASE_ORDER_TYPE_DISTRIBUTOR },
       include: purchaseOrderDetailInclude,
     });
+    await dispatchNotificationEmailsSafely(result.notificationIds);
     return NextResponse.json(full ? purchaseOrderDetailFromPrisma(full) : null, {
       status: 201,
     });

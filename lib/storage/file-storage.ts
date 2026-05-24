@@ -146,7 +146,10 @@ export async function getPresignedPutUrl(key: string, contentType: string): Prom
 }
 
 /** Time-limited read URL (private buckets). */
-export async function getPresignedGetUrl(key: string): Promise<string> {
+export async function getPresignedGetUrl(
+  key: string,
+  expiresInSeconds?: number,
+): Promise<string> {
   const cfg = getObjectStorageConfig();
   const objectKey = s3ObjectKeyFromStoredValue(key);
   const command = new GetObjectCommand({
@@ -155,6 +158,6 @@ export async function getPresignedGetUrl(key: string): Promise<string> {
   });
 
   return getSignedUrl(getPresignS3Client(), command, {
-    expiresIn: cfg.presignExpiresSeconds,
+    expiresIn: expiresInSeconds ?? cfg.presignExpiresSeconds,
   });
 }

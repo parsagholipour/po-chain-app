@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -38,6 +39,24 @@ type DistributorOrderInvoice = {
     status: string;
   }>;
 };
+
+type PlacedPurchaseOrder = {
+  id: string;
+  number: number;
+  name: string;
+  status: string;
+  saleChannelLocation: { id: string; name: string } | null;
+  shipToLocationName: string | null;
+};
+
+function parsePurchaseOrderIds(value: string | null) {
+  return value
+    ? value
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean)
+    : [];
+}
 
 function statusCopy(invoice: DistributorOrderInvoice | undefined) {
   if (!invoice) {
@@ -93,6 +112,11 @@ function statusCopy(invoice: DistributorOrderInvoice | undefined) {
 export function NewOrderSuccessView() {
   const searchParams = useSearchParams();
   const invoiceId = searchParams.get("invoiceId");
+  const purchaseOrderIdsParam = searchParams.get("purchaseOrderIds");
+  const purchaseOrderIds = useMemo(
+    () => parsePurchaseOrderIds(purchaseOrderIdsParam),
+    [purchaseOrderIdsParam],
+  );
 
   const {
     data: invoice,
@@ -118,12 +142,118 @@ export function NewOrderSuccessView() {
     },
   });
 
+  const purchaseOrdersQuery = useQuery({
+    queryKey: ["new-order-purchase-orders", purchaseOrderIds],
+    enabled: !invoiceId && purchaseOrderIds.length > 0,
+    queryFn: async () => {
+      const rows = await Promise.all(
+        purchaseOrderIds.map(async (id) => {
+          const { data } = await api.get<PlacedPurchaseOrder>(`/api/purchase-orders/${id}`);
+          return data;
+        }),
+      );
+      return rows;
+    },
+  });
+
+  if (!invoiceId && purchaseOrderIds.length > 0) {
+    if (purchaseOrdersQuery.isError) {
+      return (
+        <Card className="mx-auto max-w-lg border-border/80 text-center">
+          <CardHeader>
+            <CardTitle>Couldn&apos;t load order status</CardTitle>
+            <CardDescription>{apiErrorMessage(purchaseOrdersQuery.error)}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap justify-center gap-2">
+            <Button
+              type="button"
+              onClick={() => purchaseOrdersQuery.refetch()}
+              disabled={purchaseOrdersQuery.isFetching}
+            >
+              {purchaseOrdersQuery.isFetching ? "Retrying..." : "Try again"}
+            </Button>
+            <Link href="/purchase-orders-overview" className={buttonVariants({ variant: "outline" })}>
+              Purchase orders
+            </Link>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    const purchaseOrders = purchaseOrdersQuery.data ?? [];
+    const isLoadingOrders = purchaseOrdersQuery.isPending || purchaseOrdersQuery.isFetching;
+
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <Card className="border-border/80 text-center">
+          <CardHeader className="items-center">
+            {isLoadingOrders ? (
+              <Loader2 className="size-10 animate-spin text-muted-foreground" />
+            ) : (
+              <CheckCircle2 className="size-10 text-emerald-600 dark:text-emerald-400" />
+            )}
+            <div>
+              <CardTitle>{isLoadingOrders ? "Checking order" : "Order placed"}</CardTitle>
+              <CardDescription>
+                {isLoadingOrders
+                  ? "Loading the status for this order."
+                  : "Your purchase orders have been created."}
+              </CardDescription>
+            </div>
+          </CardHeader>
+        </Card>
+
+        <Card className="border-border/80">
+          <CardHeader>
+            <CardTitle>Purchase Orders</CardTitle>
+            <CardDescription>
+              Each active location receives a separate purchase order.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y divide-border/70 rounded-lg border border-border/80">
+              {purchaseOrders.map((po) => (
+                <div
+                  key={po.id}
+                  className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {po.saleChannelLocation?.name ?? po.shipToLocationName ?? "Location"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{po.name}</p>
+                  </div>
+                  <Link
+                    href={`/purchase-orders/${po.id}`}
+                    className={cn(buttonVariants({ variant: "outline", size: "sm" }), "shrink-0")}
+                  >
+                    PO #{po.number}
+                    <ExternalLink className="size-3.5" />
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="flex flex-wrap justify-center gap-2">
+          <Link href="/new-order" className={buttonVariants({ variant: "outline" })}>
+            New order
+          </Link>
+          <Link href="/purchase-orders-overview" className={buttonVariants({ variant: "default" })}>
+            Purchase orders
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   if (!invoiceId) {
     return (
       <Card className="mx-auto max-w-lg border-border/80 text-center">
         <CardHeader>
-          <CardTitle>Missing invoice</CardTitle>
-          <CardDescription>The order status link did not include an invoice id.</CardDescription>
+          <CardTitle>Missing order</CardTitle>
+          <CardDescription>The order status link did not include an order reference.</CardDescription>
         </CardHeader>
         <CardContent>
           <Link href="/new-order" className={buttonVariants({ variant: "default" })}>

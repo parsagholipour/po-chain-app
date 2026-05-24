@@ -156,6 +156,35 @@ enum ProductEditingStatus {
   one_print_only
 }
 
+enum NotificationType {
+  purchase_order_created
+  external_order_created
+  payment_failed
+  payment_cancelled
+  po_status_changed
+  shipment_status_changed
+  backorder_actualized
+  po_osd_created
+}
+
+enum NotificationPriority {
+  info
+  important
+  urgent
+}
+
+enum NotificationAudience {
+  store_owner
+  distributor
+}
+
+enum NotificationEmailDeliveryStatus {
+  pending
+  sent
+  failed
+  skipped
+}
+
 model Store {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
@@ -204,6 +233,8 @@ model Store {
   draftPurchaseOrderLines              DraftPurchaseOrderLine[]
   paymentAttempts                      PaymentAttempt[]
   paymentWebhookEvents                 PaymentWebhookEvent[]
+  notifications                        Notification[]
+  notificationEmailDeliveries          NotificationEmailDelivery[]
 
   @@index([name])
 }
@@ -323,6 +354,8 @@ model User {
   productCollectionsCreated                   ProductCollection[]                   @relation("ProductCollectionCreatedBy")
   purchaseOrderOsdsCreated                    PurchaseOrderOsd[]                    @relation("PurchaseOrderOsdCreatedBy")
   orderStatusLogsCreated                      OrderStatusLog[]
+  notificationsCreated                        Notification[]                        @relation("NotificationCreatedBy")
+  notificationReads                           NotificationRead[]
 }
 
 model Manufacturer {
@@ -395,6 +428,7 @@ model SaleChannel {
   magicLinks          SaleChannelMagicLink[]
   loginUser           User?                  @relation("SaleChannelLoginUser")
   draftPurchaseOrders DraftPurchaseOrder[]
+  notifications       Notification[]
 
   @@index([storeId, type, name])
   @@index([storeId, createdAt])
@@ -1168,4 +1202,70 @@ model OrderStatusLog {
   @@index([storeId, manufacturingOrderId, createdAt])
   @@index([storeId, warehouseOrderId, createdAt])
   @@index([storeId, shippingId, createdAt])
+}
+
+model Notification {
+  id            String               @id @default(uuid()) @db.Uuid
+  type          NotificationType
+  priority      NotificationPriority @default(info)
+  audience      NotificationAudience
+  title         String
+  body          String               @db.Text
+  href          String?
+  entityType    String?
+  entityId      String?              @db.Uuid
+  dedupeKey     String
+  data          Json?
+  saleChannelId String?              @db.Uuid
+  storeId       String               @db.Uuid
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  createdById   String?              @db.Uuid
+
+  saleChannel     SaleChannel?                @relation(fields: [saleChannelId], references: [id], onDelete: SetNull)
+  store           Store                       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdBy       User?                       @relation("NotificationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  reads           NotificationRead[]
+  emailDeliveries NotificationEmailDelivery[]
+
+  @@unique([storeId, dedupeKey])
+  @@index([storeId, audience, createdAt])
+  @@index([storeId, saleChannelId, audience, createdAt])
+  @@index([storeId, type, createdAt])
+  @@index([storeId, entityType, entityId])
+}
+
+model NotificationRead {
+  notificationId String   @db.Uuid
+  userId         String   @db.Uuid
+  readAt         DateTime @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([notificationId, userId])
+  @@index([userId, readAt])
+}
+
+model NotificationEmailDelivery {
+  id             String                          @id @default(uuid()) @db.Uuid
+  notificationId String                          @db.Uuid
+  recipientEmail String?
+  recipientName  String?
+  status         NotificationEmailDeliveryStatus @default(pending)
+  attemptCount   Int                             @default(0)
+  nextAttemptAt  DateTime?
+  sentAt         DateTime?
+  messageId      String?
+  lastError      String?                         @db.Text
+  storeId        String                          @db.Uuid
+  createdAt      DateTime                        @default(now())
+  updatedAt      DateTime                        @updatedAt
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  store        Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextAttemptAt, createdAt])
+  @@index([storeId, status, createdAt])
+  @@index([notificationId])
 }

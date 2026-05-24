@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
+import { createPurchaseOrderOsdNotifications } from "@/lib/notification-events";
+import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
 import { requireStoreContext } from "@/lib/store-context";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import { osdCreateSchema } from "@/lib/validations/purchase-order";
@@ -32,7 +34,7 @@ export async function GET(
       storeId,
       type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
     },
-    select: { id: true },
+    select: { id: true, number: true, name: true, saleChannelId: true },
   });
   if (!po) return jsonError("Purchase order not found", 404);
 
@@ -72,7 +74,7 @@ export async function POST(
       storeId,
       type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
     },
-    select: { id: true },
+    select: { id: true, number: true, name: true, saleChannelId: true },
   });
   if (!po) return jsonError("Purchase order not found", 404);
 
@@ -87,7 +89,7 @@ export async function POST(
   }
 
   try {
-    const osd = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const created = await tx.purchaseOrderOsd.create({
         data: {
           purchaseOrderId: pid.data.id,
@@ -116,9 +118,18 @@ export async function POST(
         }
         throw e;
       }
-      return created;
+      const notificationIds = await createPurchaseOrderOsdNotifications(tx, {
+        storeId,
+        createdById: userId,
+        osdId: created.id,
+        purchaseOrder: po,
+        type: parsed.data.type,
+        lineCount: parsed.data.lines.length,
+      });
+      return { osd: created, notificationIds };
     });
-    return NextResponse.json(purchaseOrderOsdFromPrisma(osd), { status: 201 });
+    await dispatchNotificationEmailsSafely(result.notificationIds);
+    return NextResponse.json(purchaseOrderOsdFromPrisma(result.osd), { status: 201 });
   } catch (e) {
     if (e instanceof Error && e.message === "OSD_NEGATIVE_QUANTITY") {
       return jsonError("Effective quantity would become negative for one or more lines", 400);

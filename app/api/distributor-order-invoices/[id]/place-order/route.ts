@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { convertPaidDistributorInvoiceDrafts } from "@/lib/distributor-orders/finalize";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
+import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
 import { prisma } from "@/lib/prisma";
 import {
   isDistributorContext,
@@ -76,6 +77,7 @@ export async function POST(
       };
     });
 
+    await dispatchNotificationEmailsSafely(result.notificationIds);
     return NextResponse.json(result);
   } catch (e) {
     if (e instanceof Error) {

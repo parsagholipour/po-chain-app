@@ -11,6 +11,8 @@ import {
   purchaseOrderStatusSchema,
 } from "@/lib/validations/purchase-order";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
+import { createManualPurchaseOrderNotification } from "@/lib/notification-events";
+import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
@@ -361,11 +363,24 @@ export async function POST(request: Request) {
         });
       }
 
-      return po.id;
+      const notificationIds = await createManualPurchaseOrderNotification(tx, {
+        storeId,
+        createdById: userId,
+        purchaseOrder: {
+          id: po.id,
+          number: po.number,
+          name: po.name,
+          saleChannelId: po.saleChannelId,
+        },
+      });
+
+      return { purchaseOrderId: po.id, notificationIds };
     });
 
+    await dispatchNotificationEmailsSafely(result.notificationIds);
+
     const full = await prisma.purchaseOrder.findFirst({
-      where: { id: result, storeId, type: PURCHASE_ORDER_TYPE_DISTRIBUTOR },
+      where: { id: result.purchaseOrderId, storeId, type: PURCHASE_ORDER_TYPE_DISTRIBUTOR },
       include: purchaseOrderDetailInclude,
     });
     return NextResponse.json(full ? purchaseOrderDetailFromPrisma(full) : null, {

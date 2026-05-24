@@ -4,6 +4,8 @@ import { shippingPatchSchema, shippingPatchToPrisma } from "@/lib/validations/sh
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { createOrderStatusLog } from "@/lib/order-status-log";
+import { createShippingStatusNotifications } from "@/lib/notification-events";
+import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
 import { shippingDetailInclude } from "@/lib/shipping-include";
 import { shippingRowFromPrisma } from "@/lib/shipping-api";
 import { logisticsPartnerTypeForShippingType } from "@/lib/shipping";
@@ -24,6 +26,16 @@ const paramsSchema = z.object({ id: z.uuid() });
 
 function uniqueIds(ids: string[] | undefined) {
   return [...new Set(ids ?? [])];
+}
+
+const notifiableShippingStatuses = ["in_transit", "delivered", "cancelled"] as const;
+
+function isNotifiableShippingStatus(
+  status: string,
+): status is (typeof notifiableShippingStatuses)[number] {
+  return notifiableShippingStatuses.includes(
+    status as (typeof notifiableShippingStatuses)[number],
+  );
 }
 
 export async function GET(
@@ -97,6 +109,7 @@ export async function PATCH(
 
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const notificationIds: string[] = [];
       const existing = await tx.shipping.findFirst({
         where: { id: pid.data.id, storeId },
         select: {
@@ -242,7 +255,7 @@ export async function PATCH(
       });
 
       if (parsed.data.status && parsed.data.status !== existing.status) {
-        await createOrderStatusLog({
+        const statusLog = await createOrderStatusLog({
           tx,
           storeId,
           createdById: userId,
@@ -250,6 +263,24 @@ export async function PATCH(
           fromStatus: existing.status,
           toStatus: parsed.data.status,
         });
+        if (
+          statusLog &&
+          isNotifiableShippingStatus(parsed.data.status)
+        ) {
+          notificationIds.push(
+            ...(await createShippingStatusNotifications(tx, {
+              storeId,
+              createdById: userId,
+              shippingId: pid.data.id,
+              trackingNumber: shipping.trackingNumber,
+              toStatus: parsed.data.status,
+              statusLogId: statusLog.id,
+              purchaseOrderIds: nextPurchaseOrderIds,
+              manufacturingOrderIds: nextManufacturingOrderIds,
+              warehouseOrderIds: nextWarehouseOrderIds,
+            })),
+          );
+        }
       }
 
       if (parsed.data.manufacturingOrderIds !== undefined) {
@@ -307,13 +338,14 @@ export async function PATCH(
         warehouseOrderIds: uniqueIds([...existingWarehouseOrderIds, ...nextWarehouseOrderIds]),
       });
 
-      return shipping.id;
+      return { shippingId: shipping.id, notificationIds };
     });
 
     const full = await prisma.shipping.findFirst({
-      where: { id: result, storeId },
+      where: { id: result.shippingId, storeId },
       include: shippingDetailInclude,
     });
+    await dispatchNotificationEmailsSafely(result.notificationIds);
     return NextResponse.json(full ? shippingRowFromPrisma(full) : null);
   } catch (e) {
     if (e instanceof Error) {

@@ -1,6 +1,12 @@
 import "server-only";
 
+import nodemailer from "nodemailer";
+
 const SENDGRID_MAIL_SEND_URL = "https://api.sendgrid.com/v3/mail/send";
+const DEFAULT_SMTP_HOST = "localhost";
+const DEFAULT_SMTP_PORT = 1025;
+const DEFAULT_LOCAL_FROM = "no-reply@po-app.local";
+const DEFAULT_LOCAL_FROM_NAME = "PO App";
 
 export type EmailAddress =
   | string
@@ -30,7 +36,7 @@ type EmailBase = {
   customArgs?: Record<string, string>;
   headers?: Record<string, string>;
   attachments?: EmailAttachment[];
-  /** Unix timestamp for scheduled delivery. */
+  /** Unix timestamp for scheduled delivery. SendGrid-only. */
   sendAt?: number;
 };
 
@@ -66,7 +72,7 @@ export type EmailSendResult = {
   messageId?: string;
 };
 
-type SendGridAddress = {
+type NormalizedAddress = {
   email: string;
   name?: string;
 };
@@ -85,16 +91,16 @@ type SendGridAttachment = {
 };
 
 type SendGridPersonalization = {
-  to: SendGridAddress[];
-  cc?: SendGridAddress[];
-  bcc?: SendGridAddress[];
+  to: NormalizedAddress[];
+  cc?: NormalizedAddress[];
+  bcc?: NormalizedAddress[];
   dynamic_template_data?: Record<string, unknown>;
 };
 
 type SendGridPayload = {
   personalizations: SendGridPersonalization[];
-  from: SendGridAddress;
-  reply_to?: SendGridAddress;
+  from: NormalizedAddress;
+  reply_to?: NormalizedAddress;
   subject?: string;
   content?: SendGridContent[];
   template_id?: string;
@@ -104,6 +110,33 @@ type SendGridPayload = {
   headers?: Record<string, string>;
   send_at?: number;
 };
+
+type EmailTransportName = "sendgrid" | "smtp";
+
+type SendGridEmailConfig = {
+  transport: "sendgrid";
+  apiKey: string;
+  from: NormalizedAddress;
+  replyTo?: NormalizedAddress;
+  mailSendUrl: string;
+};
+
+type SmtpEmailConfig = {
+  transport: "smtp";
+  from: NormalizedAddress;
+  replyTo?: NormalizedAddress;
+  host: string;
+  port: number;
+  secure: boolean;
+  user?: string;
+  password?: string;
+};
+
+type EmailConfig = SendGridEmailConfig | SmtpEmailConfig;
+
+interface EmailTransport {
+  send(message: EmailMessage, config: EmailConfig): Promise<EmailSendResult>;
+}
 
 export class EmailConfigurationError extends Error {
   constructor(message: string) {
@@ -124,18 +157,12 @@ export class EmailSendError extends Error {
   }
 }
 
-type EmailConfig = {
-  apiKey: string;
-  from: SendGridAddress;
-  replyTo?: SendGridAddress;
-  mailSendUrl: string;
-};
+class SendGridEmailTransport implements EmailTransport {
+  async send(message: EmailMessage, config: EmailConfig): Promise<EmailSendResult> {
+    if (config.transport !== "sendgrid") {
+      throw new EmailConfigurationError("SendGrid transport received SMTP config.");
+    }
 
-let cachedConfig: EmailConfig | null = null;
-
-export class EmailService {
-  static async send(message: EmailMessage): Promise<EmailSendResult> {
-    const config = getEmailConfig();
     const payload = toSendGridPayload(message, config);
 
     let response: Response;
@@ -163,6 +190,79 @@ export class EmailService {
       messageId: response.headers.get("x-message-id") ?? undefined,
     };
   }
+}
+
+class SmtpEmailTransport implements EmailTransport {
+  async send(message: EmailMessage, config: EmailConfig): Promise<EmailSendResult> {
+    if (config.transport !== "smtp") {
+      throw new EmailConfigurationError("SMTP transport received SendGrid config.");
+    }
+    if ("templateId" in message && message.templateId) {
+      throw new EmailSendError("SMTP email does not support SendGrid template ids.", 400);
+    }
+    if (message.sendAt) {
+      throw new EmailSendError("SMTP email does not support scheduled delivery.", 400);
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth:
+        config.user && config.password
+          ? { user: config.user, pass: config.password }
+          : undefined,
+    });
+
+    try {
+      const info = await transporter.sendMail({
+        from: formatAddress(message.from ? normalizeAddress(message.from, "from") : config.from),
+        to: normalizeRecipients(message.to, "to").map(formatAddress),
+        cc: message.cc ? normalizeRecipients(message.cc, "cc").map(formatAddress) : undefined,
+        bcc: message.bcc ? normalizeRecipients(message.bcc, "bcc").map(formatAddress) : undefined,
+        replyTo: message.replyTo
+          ? formatAddress(normalizeAddress(message.replyTo, "replyTo"))
+          : config.replyTo
+            ? formatAddress(config.replyTo)
+            : undefined,
+        subject: message.subject,
+        text: "text" in message ? message.text : undefined,
+        html: "html" in message ? message.html : undefined,
+        headers: message.headers,
+        attachments: message.attachments?.map((attachment) => ({
+          content: Buffer.from(attachment.content, "base64"),
+          filename: attachment.filename,
+          contentType: attachment.type,
+          cid: attachment.contentId,
+          contentDisposition: attachment.disposition,
+        })),
+      });
+
+      return {
+        ok: true,
+        status: 202,
+        messageId: info.messageId,
+      };
+    } catch (error) {
+      throw new EmailSendError(
+        error instanceof Error ? error.message : "Unable to send SMTP email.",
+        502,
+      );
+    }
+  }
+}
+
+let cachedConfig: EmailConfig | null = null;
+const transports: Record<EmailTransportName, EmailTransport> = {
+  sendgrid: new SendGridEmailTransport(),
+  smtp: new SmtpEmailTransport(),
+};
+
+export class EmailService {
+  static async send(message: EmailMessage): Promise<EmailSendResult> {
+    const config = getEmailConfig();
+    return transports[config.transport].send(message, config);
+  }
 
   static isConfigured(): boolean {
     return isEmailConfigured();
@@ -181,14 +281,43 @@ export function isEmailConfigured(): boolean {
 function getEmailConfig(): EmailConfig {
   if (cachedConfig) return cachedConfig;
 
-  cachedConfig = {
-    apiKey: required("SENDGRID_API_KEY"),
-    from: readDefaultAddress("EMAIL_FROM", "EMAIL_FROM_NAME"),
-    replyTo: readOptionalAddress("EMAIL_REPLY_TO", "EMAIL_REPLY_TO_NAME"),
-    mailSendUrl: optional("SENDGRID_MAIL_SEND_URL") ?? SENDGRID_MAIL_SEND_URL,
-  };
+  const transport = readTransport();
+  const requireVerifiedSender = transport === "sendgrid";
+  const from = readDefaultAddress("EMAIL_FROM", "EMAIL_FROM_NAME", {
+    fallbackEmail: requireVerifiedSender ? undefined : DEFAULT_LOCAL_FROM,
+    fallbackName: requireVerifiedSender ? undefined : DEFAULT_LOCAL_FROM_NAME,
+  });
+  const replyTo = readOptionalAddress("EMAIL_REPLY_TO", "EMAIL_REPLY_TO_NAME");
 
+  if (transport === "sendgrid") {
+    cachedConfig = {
+      transport,
+      apiKey: required("SENDGRID_API_KEY"),
+      from,
+      replyTo,
+      mailSendUrl: optional("SENDGRID_MAIL_SEND_URL") ?? SENDGRID_MAIL_SEND_URL,
+    };
+    return cachedConfig;
+  }
+
+  cachedConfig = {
+    transport,
+    from,
+    replyTo,
+    host: optional("SMTP_HOST") ?? DEFAULT_SMTP_HOST,
+    port: optionalInt("SMTP_PORT") ?? DEFAULT_SMTP_PORT,
+    secure: optionalBoolean("SMTP_SECURE") ?? false,
+    user: optional("SMTP_USER"),
+    password: optional("SMTP_PASSWORD"),
+  };
   return cachedConfig;
+}
+
+function readTransport(): EmailTransportName {
+  const raw = optional("EMAIL_TRANSPORT")?.toLowerCase();
+  if (!raw) return process.env.NODE_ENV === "production" ? "sendgrid" : "smtp";
+  if (raw === "sendgrid" || raw === "smtp") return raw;
+  throw new EmailConfigurationError("EMAIL_TRANSPORT must be either sendgrid or smtp.");
 }
 
 function required(name: string): string {
@@ -204,11 +333,37 @@ function optional(name: string): string | undefined {
   return value || undefined;
 }
 
-function readDefaultAddress(emailEnv: string, nameEnv: string): SendGridAddress {
+function optionalInt(name: string): number | undefined {
+  const value = optional(name);
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new EmailConfigurationError(`${name} must be a positive integer.`);
+  }
+  return parsed;
+}
+
+function optionalBoolean(name: string): boolean | undefined {
+  const value = optional(name);
+  if (!value) return undefined;
+  if (["1", "true", "yes"].includes(value.toLowerCase())) return true;
+  if (["0", "false", "no"].includes(value.toLowerCase())) return false;
+  throw new EmailConfigurationError(`${name} must be true or false.`);
+}
+
+function readDefaultAddress(
+  emailEnv: string,
+  nameEnv: string,
+  fallback?: { fallbackEmail?: string; fallbackName?: string },
+): NormalizedAddress {
+  const email = optional(emailEnv) ?? fallback?.fallbackEmail;
+  if (!email) {
+    throw new EmailConfigurationError(`Missing required environment variable: ${emailEnv}`);
+  }
   return normalizeAddress(
     {
-      email: required(emailEnv),
-      name: optional(nameEnv),
+      email,
+      name: optional(nameEnv) ?? fallback?.fallbackName,
     },
     emailEnv,
   );
@@ -217,7 +372,7 @@ function readDefaultAddress(emailEnv: string, nameEnv: string): SendGridAddress 
 function readOptionalAddress(
   emailEnv: string,
   nameEnv: string,
-): SendGridAddress | undefined {
+): NormalizedAddress | undefined {
   const email = optional(emailEnv);
   if (!email) return undefined;
   return normalizeAddress({ email, name: optional(nameEnv) }, emailEnv);
@@ -225,7 +380,7 @@ function readOptionalAddress(
 
 function toSendGridPayload(
   message: EmailMessage,
-  config: EmailConfig,
+  config: SendGridEmailConfig,
 ): SendGridPayload {
   const personalization: SendGridPersonalization = {
     to: normalizeRecipients(message.to, "to"),
@@ -290,7 +445,7 @@ function toSendGridPayload(
 function normalizeRecipients(
   recipients: EmailRecipients,
   fieldName: string,
-): SendGridAddress[] {
+): NormalizedAddress[] {
   const values = Array.isArray(recipients) ? recipients : [recipients];
   if (values.length === 0) {
     throw new EmailSendError(`Email field "${fieldName}" requires at least one address.`, 400);
@@ -301,7 +456,7 @@ function normalizeRecipients(
   );
 }
 
-function normalizeAddress(address: EmailAddress, fieldName: string): SendGridAddress {
+function normalizeAddress(address: EmailAddress, fieldName: string): NormalizedAddress {
   if (typeof address === "string") {
     const email = address.trim();
     if (!email) {
@@ -317,6 +472,10 @@ function normalizeAddress(address: EmailAddress, fieldName: string): SendGridAdd
 
   const name = address.name?.trim();
   return name ? { email, name } : { email };
+}
+
+function formatAddress(address: NormalizedAddress) {
+  return address.name ? { name: address.name, address: address.email } : address.email;
 }
 
 async function readSendGridError(response: Response) {

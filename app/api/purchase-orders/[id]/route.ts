@@ -7,6 +7,8 @@ import {
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { createOrderStatusLog } from "@/lib/order-status-log";
+import { createPurchaseOrderStatusNotification } from "@/lib/notification-events";
+import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import {
@@ -128,7 +130,8 @@ export async function PATCH(
   const { saleChannelId, saleChannelLocationId, invoice, ...scalarRest } = parsed.data;
 
   try {
-    await prisma.$transaction(async (tx) => {
+    const notificationIds = await prisma.$transaction(async (tx) => {
+      const notificationIds: string[] = [];
       const existing = await tx.purchaseOrder.findFirst({
         where: {
           id: pid.data.id,
@@ -137,6 +140,8 @@ export async function PATCH(
         },
         select: {
           id: true,
+          number: true,
+          name: true,
           invoiceId: true,
           status: true,
           saleChannelId: true,
@@ -223,7 +228,7 @@ export async function PATCH(
       }
 
       if (scalarRest.status && scalarRest.status !== existing.status) {
-        await createOrderStatusLog({
+        const statusLog = await createOrderStatusLog({
           tx,
           storeId,
           createdById: userId,
@@ -231,7 +236,29 @@ export async function PATCH(
           fromStatus: existing.status,
           toStatus: scalarRest.status,
         });
+        if (
+          statusLog &&
+          (scalarRest.status === "in_transit" ||
+            scalarRest.status === "invoiced" ||
+            scalarRest.status === "closed")
+        ) {
+          notificationIds.push(
+            ...(await createPurchaseOrderStatusNotification(tx, {
+              storeId,
+              createdById: userId,
+              purchaseOrder: {
+                id: existing.id,
+                number: existing.number,
+                name: existing.name,
+                saleChannelId: saleChannelId ?? existing.saleChannelId,
+              },
+              toStatus: scalarRest.status,
+              statusLogId: statusLog.id,
+            })),
+          );
+        }
       }
+      return notificationIds;
     });
 
     const row = await prisma.purchaseOrder.findFirst({
@@ -243,6 +270,7 @@ export async function PATCH(
       include: purchaseOrderDetailInclude,
     });
     if (!row) return jsonError("Not found", 404);
+    await dispatchNotificationEmailsSafely(notificationIds);
     return NextResponse.json(purchaseOrderDetailFromPrisma(row));
   } catch (e) {
     if (e instanceof Error && e.message === "PO_NOT_FOUND_OR_WRONG_TYPE") {

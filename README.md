@@ -41,18 +41,75 @@ Next.js (App Router) starter with PostgreSQL via Prisma, shadcn/ui on Tailwind C
 
    Open [http://localhost:4000](http://localhost:4000) (this repo runs `next dev -p 4000`).
 
-## Email (SendGrid)
+## Docker development
 
-Transactional email is handled by the server-only [`EmailService`](lib/services/email.ts), which calls SendGrid's Mail Send API.
+Docker is configured for local development only. Production continues to use the existing non-Docker setup and does not include MailHog.
 
-Required environment variables:
+1. Make sure `.env` exists:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Start the dev stack:
+
+   ```bash
+   make docker-dev-build
+   ```
+
+   Use `make docker-dev` after the image has already been built.
+
+The dev Compose stack starts:
+
+| Service | URL / port |
+| ------- | ---------- |
+| Next.js app | [http://localhost:4000](http://localhost:4000) |
+| MailHog UI | [http://localhost:8025](http://localhost:8025) |
+| MailHog SMTP | `mailhog:1025` from Docker, `localhost:1025` from the host |
+| PostgreSQL | `postgres:5432` from Docker, `localhost:5433` from the host |
+| MinIO API | `minio:9000` from Docker, [http://localhost:9000](http://localhost:9000) from the host |
+| MinIO console | [http://localhost:9001](http://localhost:9001) |
+
+The app container overrides the dev-only connection values from `.env`, including `DATABASE_URL`, `EMAIL_TRANSPORT=smtp`, `SMTP_HOST=mailhog`, and MinIO endpoints. To stop the stack:
+
+```bash
+make docker-dev-down
+```
+
+Docker development intentionally runs Next.js with the webpack dev watcher plus polling. This avoids missed hot-reload events from host bind mounts while leaving normal non-Docker `npm run dev` on Turbopack.
+
+If a host port is already in use, override it when starting Compose:
+
+```bash
+APP_PORT=4001 make docker-dev-build
+```
+
+The same pattern works for `POSTGRES_PORT`, `MAILHOG_SMTP_PORT`, `MAILHOG_UI_PORT`, `MINIO_API_PORT`, and `MINIO_CONSOLE_PORT`.
+
+## Email and notifications
+
+Transactional email is handled by the server-only [`EmailService`](lib/services/email.ts). It uses an adapter so local development can send through MailHog SMTP while production sends through SendGrid. Important notifications are stored in-app and queued into `NotificationEmailDelivery` outbox rows for retryable delivery.
+
+Local MailHog defaults:
 
 | Variable | Purpose |
 | -------- | ------- |
+| `EMAIL_TRANSPORT` | Optional in development; set to `smtp` to force SMTP. |
+| `SMTP_HOST` / `SMTP_PORT` | MailHog SMTP endpoint, default `localhost:1025`. |
+| `SMTP_SECURE` | Optional; defaults to `false`. |
+| `SMTP_USER` / `SMTP_PASSWORD` | Optional SMTP auth. |
+
+Production SendGrid variables:
+
+| Variable | Purpose |
+| -------- | ------- |
+| `EMAIL_TRANSPORT` | Optional in production; defaults to `sendgrid`. |
 | `SENDGRID_API_KEY` | SendGrid API key with Mail Send access. |
 | `EMAIL_FROM` | Default verified sender email address. |
 | `EMAIL_FROM_NAME` | Optional default sender display name. |
 | `EMAIL_REPLY_TO` / `EMAIL_REPLY_TO_NAME` | Optional default reply-to address. |
+| `SENDGRID_MAIL_SEND_URL` | Optional SendGrid Mail Send URL override. |
+| `NOTIFICATION_DISPATCH_TOKEN` | Optional bearer token for retry dispatch via `/api/notifications/email-deliveries/dispatch`. |
 
 Example:
 
@@ -89,6 +146,7 @@ Copy the MinIO-related keys from [`.env.example`](.env.example) into `.env`:
 | `MINIO_REGION` | Optional (default `us-east-1`); MinIO is usually indifferent. |
 | `STORAGE_MAX_UPLOAD_BYTES` | Optional. Max size for **server** multipart uploads (default 10 MiB). |
 | `STORAGE_PRESIGN_EXPIRES_SECONDS` | Optional. Lifetime of presigned URLs in seconds (default 900). |
+| `PO_EMAIL_PDF_URL_EXPIRES_SECONDS` | Optional. Lifetime of generated PO PDF email links in seconds (default 604800, max 604800). |
 
 If these are missing or empty, storage APIs respond with **503** and a configuration error.
 
@@ -168,6 +226,9 @@ Avoid storing long-lived public MinIO URLs in the database unless you have a sta
 | `npm run db:push` | Push schema to DB (prototyping)              |
 | `npm run db:migrate` | Create/apply migrations                     |
 | `npm run db:studio` | Prisma Studio                             |
+| `make docker-dev` | Start the local development Docker stack |
+| `make docker-dev-build` | Build and start the local development Docker stack |
+| `make docker-dev-down` | Stop the local development Docker stack |
 
 ## Repository layout
 

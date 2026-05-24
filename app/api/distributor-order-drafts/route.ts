@@ -8,6 +8,9 @@ import {
   moneyToCents,
 } from "@/lib/distributor-orders/money";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
+import { createExternalOrderNotifications } from "@/lib/notification-events";
+import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
+import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import {
   isDistributorContext,
   requireStoreContext,
@@ -42,9 +45,18 @@ const documentInputSchema = z.object({
   "Provide either a saved location id or a destination key",
 );
 
+const purchaseOrderNameInputSchema = z.object({
+  saleChannelLocationId: z.uuid().optional(),
+  destinationKey: z.string().trim().min(1).max(160).optional(),
+  name: z.string().trim().max(120).optional(),
+}).refine(
+  (value) => Boolean(value.saleChannelLocationId) !== Boolean(value.destinationKey),
+  "Provide either a saved location id or a destination key",
+);
+
 const bodySchema = z.object({
-  name: z.string().trim().min(1).max(120).optional(),
   lines: z.array(lineInputSchema).min(1),
+  purchaseOrderNames: z.array(purchaseOrderNameInputSchema).default([]),
   documents: z.array(documentInputSchema).default([]),
 });
 
@@ -92,9 +104,36 @@ function sessionDestinationKey(sessionLocationId: string) {
   return `session:${sessionLocationId}`;
 }
 
+function inputDestinationKey(value: {
+  saleChannelLocationId?: string;
+  destinationKey?: string;
+}) {
+  return value.saleChannelLocationId
+    ? savedDestinationKey(value.saleChannelLocationId)
+    : value.destinationKey!;
+}
+
 function snapshotData(destination: DestinationSnapshot) {
   return {
     destinationKey: destination.destinationKey,
+    saleChannelLocationId: destination.saleChannelLocationId,
+    shipToLocationName: destination.name,
+    shipToRecipientName: destination.recipientName,
+    shipToCompanyName: destination.companyName,
+    shipToPhoneNumber: destination.phoneNumber,
+    shipToEmail: destination.email,
+    shipToAddressLine1: destination.addressLine1,
+    shipToAddressLine2: destination.addressLine2,
+    shipToCity: destination.city,
+    shipToStateProvince: destination.stateProvince,
+    shipToPostalCode: destination.postalCode,
+    shipToCountry: destination.country,
+    shipToNotes: destination.shippingNotes,
+  };
+}
+
+function purchaseOrderSnapshotData(destination: DestinationSnapshot) {
+  return {
     saleChannelLocationId: destination.saleChannelLocationId,
     shipToLocationName: destination.name,
     shipToRecipientName: destination.recipientName,
@@ -163,9 +202,13 @@ export async function POST(request: Request) {
     const documentSavedLocationIds = parsed.data.documents.flatMap((doc) =>
       doc.saleChannelLocationId ? [doc.saleChannelLocationId] : [],
     );
+    const namedSavedLocationIds = parsed.data.purchaseOrderNames.flatMap((poName) =>
+      poName.saleChannelLocationId ? [poName.saleChannelLocationId] : [],
+    );
     const requestedSavedLocationIds = uniqueValues([
       ...quantitySavedLocationIds,
       ...documentSavedLocationIds,
+      ...namedSavedLocationIds,
     ]);
     const hasSessionLocations = parsed.data.lines.some((line) =>
       line.quantities.some((qty) => qty.sessionLocation),
@@ -347,11 +390,24 @@ export async function POST(request: Request) {
         ...activeLinesByDestination.keys(),
         ...activeBackOrderLinesByDestination.keys(),
       ]);
+      const purchaseOrderNameByDestinationKey = new Map<string, string>();
+      for (const poName of parsed.data.purchaseOrderNames) {
+        const destinationKey = inputDestinationKey(poName);
+        if (!activeDestinationKeys.has(destinationKey)) {
+          throw new Error("PURCHASE_ORDER_NAME_LOCATION_INACTIVE");
+        }
+        if (purchaseOrderNameByDestinationKey.has(destinationKey)) {
+          throw new Error("DUPLICATE_PURCHASE_ORDER_NAME");
+        }
+        const name = poName.name?.trim();
+        if (name) {
+          purchaseOrderNameByDestinationKey.set(destinationKey, name);
+        }
+      }
+
       const documentByDestinationKey = new Map<string, string | null>();
       for (const doc of parsed.data.documents) {
-        const destinationKey = doc.saleChannelLocationId
-          ? savedDestinationKey(doc.saleChannelLocationId)
-          : doc.destinationKey!;
+        const destinationKey = inputDestinationKey(doc);
         if (!activeDestinationKeys.has(destinationKey)) {
           throw new Error("DOCUMENT_LOCATION_INACTIVE");
         }
@@ -359,7 +415,106 @@ export async function POST(request: Request) {
       }
 
       const invoiceNumber = distributorOrderInvoiceNumber();
-      const orderBaseName = parsed.data.name ?? `Distributor order ${invoiceNumber}`;
+      const generatedOrderBaseName = `Distributor order ${invoiceNumber}`;
+
+      function purchaseOrderNameForDestination(
+        destination: DestinationSnapshot,
+        isBackOrder: boolean,
+      ) {
+        const name =
+          purchaseOrderNameByDestinationKey.get(destination.destinationKey) ??
+          `${generatedOrderBaseName} - ${destination.name}`;
+        return isBackOrder ? `${name} - Back Order` : name;
+      }
+
+      if (saleChannel.type === "distributor") {
+        const purchaseOrders: Array<{
+          id: string;
+          number: number;
+          name: string;
+          status: string;
+          saleChannelLocationId: string | null;
+          shipToLocationName: string | null;
+          isBackOrder: boolean;
+        }> = [];
+        const notificationIds: string[] = [];
+
+        async function createPurchaseOrdersForLines(
+          linesByDestination: typeof activeLinesByDestination,
+          isBackOrder: boolean,
+        ) {
+          for (const [destinationKey, destinationLines] of linesByDestination) {
+            const destination = destinationByKey.get(destinationKey);
+            if (!destination) throw new Error("LOCATION_NOT_FOUND");
+
+            const purchaseOrder = await tx.purchaseOrder.create({
+              data: {
+                name: purchaseOrderNameForDestination(destination, isBackOrder),
+                type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
+                status: "open",
+                documentKey: documentByDestinationKey.get(destinationKey) ?? null,
+                saleChannelId,
+                isBackOrder,
+                ...purchaseOrderSnapshotData(destination),
+                storeId,
+                createdById: userId,
+              },
+              select: {
+                id: true,
+                number: true,
+                name: true,
+                status: true,
+                saleChannelId: true,
+                saleChannelLocationId: true,
+                shipToLocationName: true,
+                isBackOrder: true,
+              },
+            });
+
+            await tx.purchaseOrderLine.createMany({
+              data: destinationLines.map((line) => ({
+                purchaseOrderId: purchaseOrder.id,
+                productId: line.product.id,
+                quantity: line.quantity,
+                orderedQuantity: line.quantity,
+                unitCost:
+                  line.product.costCents == null ? null : centsToMoney(line.product.costCents),
+                unitPrice: centsToMoney(line.product.priceCents),
+                storeId,
+                createdById: userId,
+              })),
+            });
+
+            purchaseOrders.push({
+              id: purchaseOrder.id,
+              number: purchaseOrder.number,
+              name: purchaseOrder.name,
+              status: purchaseOrder.status,
+              saleChannelLocationId: purchaseOrder.saleChannelLocationId,
+              shipToLocationName: purchaseOrder.shipToLocationName,
+              isBackOrder: purchaseOrder.isBackOrder,
+            });
+            notificationIds.push(
+              ...(await createExternalOrderNotifications(tx, {
+                storeId,
+                createdById: userId,
+                purchaseOrder,
+              })),
+            );
+          }
+        }
+
+        await createPurchaseOrdersForLines(activeLinesByDestination, false);
+        await createPurchaseOrdersForLines(activeBackOrderLinesByDestination, true);
+
+        return {
+          type: "purchase_orders" as const,
+          purchaseOrders,
+          convertedPurchaseOrderIds: purchaseOrders.map((po) => po.id),
+          notificationIds,
+        };
+      }
+
       const invoice = await tx.invoice.create({
         data: {
           invoiceNumber,
@@ -398,7 +553,7 @@ export async function POST(request: Request) {
           if (!destination) throw new Error("LOCATION_NOT_FOUND");
           const draft = await tx.draftPurchaseOrder.create({
             data: {
-              name: `${orderBaseName} - ${destination.name}${isBackOrder ? " - Back Order" : ""}`,
+              name: purchaseOrderNameForDestination(destination, isBackOrder),
               invoiceId: invoice.id,
               saleChannelId,
               isBackOrder,
@@ -438,8 +593,19 @@ export async function POST(request: Request) {
       await createDraftsForLines(activeLinesByDestination, false);
       await createDraftsForLines(activeBackOrderLinesByDestination, true);
 
-      return { invoice, drafts };
+      return { type: "invoice_drafts" as const, invoice, drafts };
     });
+
+    if (result.type === "purchase_orders") {
+      await dispatchNotificationEmailsSafely(result.notificationIds);
+      return NextResponse.json(
+        {
+          purchaseOrders: result.purchaseOrders,
+          convertedPurchaseOrderIds: result.convertedPurchaseOrderIds,
+        },
+        { status: 201 },
+      );
+    }
 
     return NextResponse.json(result, { status: 201 });
   } catch (e) {
@@ -473,6 +639,12 @@ export async function POST(request: Request) {
       }
       if (e.message === "DOCUMENT_LOCATION_INACTIVE") {
         return jsonError("Documents can only be attached to locations with active quantities", 400);
+      }
+      if (e.message === "PURCHASE_ORDER_NAME_LOCATION_INACTIVE") {
+        return jsonError("PO names can only be set for locations with active quantities", 400);
+      }
+      if (e.message === "DUPLICATE_PURCHASE_ORDER_NAME") {
+        return jsonError("Each location can only have one PO name", 400);
       }
       if (e.message.startsWith("MISSING_PRICE:")) {
         const [, sku, name] = e.message.split(":");

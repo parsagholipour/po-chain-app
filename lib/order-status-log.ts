@@ -60,10 +60,10 @@ export async function createOrderStatusLog({
   ...parent
 }: CreateOrderStatusLogInput) {
   if (fromStatus === toStatus) {
-    return;
+    return null;
   }
 
-  await tx.orderStatusLog.create({
+  return tx.orderStatusLog.create({
     data: {
       ...parent,
       storeId,
@@ -71,6 +71,7 @@ export async function createOrderStatusLog({
       fromStatus,
       toStatus,
     },
+    select: { id: true },
   });
 }
 

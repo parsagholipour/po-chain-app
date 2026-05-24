@@ -55,6 +55,16 @@ type DraftCreateResponse = {
   };
 };
 
+type DirectOrderCreateResponse = {
+  purchaseOrders: Array<{
+    id: string;
+    number: number;
+    name: string;
+    status: string;
+  }>;
+  convertedPurchaseOrderIds: string[];
+};
+
 type CheckoutResponse = {
   checkoutUrl: string;
   paymentAttemptId: string;
@@ -73,7 +83,7 @@ type OrderSubmitResponse =
     }
   | {
       action: "placed";
-      invoiceId: string;
+      purchaseOrderIds: string[];
     };
 
 type BackOrderSubmitMode = {
@@ -277,12 +287,16 @@ function isSessionLocation(value: unknown): value is SaleChannelLocation {
   );
 }
 
-function LocationDocumentUpload({
+function LocationPurchaseOrderDetails({
   location,
+  purchaseOrderName,
+  onPurchaseOrderNameChange,
   onDocumentChange,
   onUploadingChange,
 }: {
   location: SaleChannelLocation;
+  purchaseOrderName: string;
+  onPurchaseOrderNameChange: (locationId: string, name: string) => void;
   onDocumentChange: (locationId: string, documentKey: string | null) => void;
   onUploadingChange: (locationId: string, uploading: boolean) => void;
 }) {
@@ -306,48 +320,62 @@ function LocationDocumentUpload({
 
   return (
     <div className="rounded-lg border border-border/80 bg-background p-3">
-      <div className="space-y-2">
-        <Label htmlFor={`location-document-${location.id}`}>
-          {location.name} document (optional)
-        </Label>
-        <Input
-          id={`location-document-${location.id}`}
-          type="file"
-          disabled={isDocUploading}
-          onChange={(event) => onDocFileChange(event.target.files?.[0] ?? null)}
-        />
-        {docFile && !documentKey && isDocUploading ? (
-          <p className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="size-3.5 animate-spin" />
-            Uploading...
-          </p>
-        ) : null}
-        {docFile && !documentKey && !isDocUploading ? (
-          <Button type="button" variant="secondary" size="sm" onClick={onRetryDocUpload}>
-            Retry upload
-          </Button>
-        ) : null}
-        {displayName ? (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">File:</span>
-            <span className="break-all font-medium">{displayName}</span>
-            {documentKey ? (
-              <DocumentDownloadLink
-                documentKey={documentKey}
-                fileName={displayName}
-                fallback={null}
-              />
-            ) : null}
-          </div>
-        ) : null}
+      <div className="space-y-3">
+        <div className="min-w-0">
+          <p className="font-medium">{location.name}</p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`location-po-name-${location.id}`}>PO name (optional)</Label>
+          <Input
+            id={`location-po-name-${location.id}`}
+            value={purchaseOrderName}
+            maxLength={120}
+            onChange={(event) => onPurchaseOrderNameChange(location.id, event.target.value)}
+            placeholder={`e.g. ${location.name} replenishment`}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor={`location-document-${location.id}`}>Document (optional)</Label>
+          <Input
+            id={`location-document-${location.id}`}
+            type="file"
+            disabled={isDocUploading}
+            onChange={(event) => onDocFileChange(event.target.files?.[0] ?? null)}
+          />
+          {docFile && !documentKey && isDocUploading ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" />
+              Uploading...
+            </p>
+          ) : null}
+          {docFile && !documentKey && !isDocUploading ? (
+            <Button type="button" variant="secondary" size="sm" onClick={onRetryDocUpload}>
+              Retry upload
+            </Button>
+          ) : null}
+          {displayName ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">File:</span>
+              <span className="break-all font-medium">{displayName}</span>
+              {documentKey ? (
+                <DocumentDownloadLink
+                  documentKey={documentKey}
+                  fileName={displayName}
+                  fallback={null}
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
 }
 
 export function NewOrderView() {
-  const [orderName, setOrderName] = useState("");
   const [rows, setRows] = useState<OrderRow[]>(() => [newRow("row-1")]);
+  const [purchaseOrderNamesByLocationId, setPurchaseOrderNamesByLocationId] =
+    useState<Record<string, string>>({});
   const [documentsByLocationId, setDocumentsByLocationId] = useState<Record<string, string | null>>({});
   const [uploadingByLocationId, setUploadingByLocationId] = useState<Record<string, boolean>>({});
   const [productPickerOpen, setProductPickerOpen] = useState(false);
@@ -528,6 +556,20 @@ export function NewOrderView() {
 
   const grandTotalCents = Array.from(locationTotals.values()).reduce((sum, total) => sum + total, 0);
 
+  const setLocationPurchaseOrderName = useCallback((locationId: string, name: string) => {
+    setPurchaseOrderNamesByLocationId((current) => {
+      if (!name) {
+        const next = { ...current };
+        delete next[locationId];
+        return next;
+      }
+      return {
+        ...current,
+        [locationId]: name,
+      };
+    });
+  }, []);
+
   const setLocationDocument = useCallback((locationId: string, documentKey: string | null) => {
     setDocumentsByLocationId((current) => ({
       ...current,
@@ -640,6 +682,11 @@ export function NewOrderView() {
       const documents = { ...current };
       delete documents[locationId];
       return documents;
+    });
+    setPurchaseOrderNamesByLocationId((current) => {
+      const names = { ...current };
+      delete names[locationId];
+      return names;
     });
   }
 
@@ -759,11 +806,28 @@ export function NewOrderView() {
     mutationFn: async (mode) => {
       const lines = distributorOrderLines(mode);
       const submittedActiveLocationIds = activeLocationIdsForOrderLines(lines);
-      const { data: draftResponse } = await api.post<DraftCreateResponse>(
+      const purchaseOrderNames = submittedActiveLocationIds.flatMap((locationId) => {
+        const name = purchaseOrderNamesByLocationId[locationId]?.trim();
+        if (!name) return [];
+        return [
+          isStoreSaleChannel
+            ? {
+                destinationKey: sessionDestinationKey(locationId),
+                name,
+              }
+            : {
+                saleChannelLocationId: locationId,
+                name,
+              },
+        ];
+      });
+      const { data: draftResponse } = await api.post<
+        DraftCreateResponse | DirectOrderCreateResponse
+      >(
         "/api/distributor-order-drafts",
         {
-          name: orderName.trim() || undefined,
           lines,
+          purchaseOrderNames,
           documents: submittedActiveLocationIds.map((locationId) =>
             isStoreSaleChannel
               ? {
@@ -779,13 +843,24 @@ export function NewOrderView() {
       );
 
       if (!isStoreSaleChannel) {
+        if ("purchaseOrders" in draftResponse) {
+          return {
+            action: "placed",
+            purchaseOrderIds: draftResponse.convertedPurchaseOrderIds,
+          };
+        }
+
         const { data: placedOrder } = await api.post<PlaceOrderResponse>(
           `/api/distributor-order-invoices/${draftResponse.invoice.id}/place-order`,
         );
         return {
           action: "placed",
-          invoiceId: placedOrder.invoiceId,
+          purchaseOrderIds: placedOrder.convertedPurchaseOrderIds,
         };
+      }
+
+      if (!("invoice" in draftResponse)) {
+        throw new Error("Expected an invoice-backed checkout response");
       }
 
       const { data: checkout } = await api.post<CheckoutResponse>(
@@ -801,7 +876,8 @@ export function NewOrderView() {
         window.location.assign(result.checkoutUrl);
         return;
       }
-      window.location.assign(`/new-order/success?invoiceId=${result.invoiceId}`);
+      const purchaseOrderIds = encodeURIComponent(result.purchaseOrderIds.join(","));
+      window.location.assign(`/new-order/success?purchaseOrderIds=${purchaseOrderIds}`);
     },
     onError: (error: unknown) => toast.error(apiErrorMessage(error)),
   });
@@ -881,16 +957,6 @@ export function NewOrderView() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="max-w-md space-y-2">
-            <Label htmlFor="order-name">Order name (optional)</Label>
-            <Input
-              id="order-name"
-              value={orderName}
-              onChange={(event) => setOrderName(event.target.value)}
-              placeholder="e.g. Summer launch replenishment"
-            />
-          </div>
-
           {isStoreSaleChannel ? (
             <div className="space-y-3 rounded-lg border border-border/80 p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1219,22 +1285,24 @@ export function NewOrderView() {
 
       <Card className="border-border/80">
         <CardHeader>
-          <CardTitle>Location Documents</CardTitle>
+          <CardTitle>Location PO Details</CardTitle>
           <CardDescription>
-            Attach an optional document for each location that has quantity.
+            Set optional PO names and documents for each location that has quantity.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {activeLocations.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Enter quantities above to attach location documents.
+              Enter quantities above to name POs or attach documents.
             </p>
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
               {activeLocations.map((location) => (
-                <LocationDocumentUpload
+                <LocationPurchaseOrderDetails
                   key={location.id}
                   location={location}
+                  purchaseOrderName={purchaseOrderNamesByLocationId[location.id] ?? ""}
+                  onPurchaseOrderNameChange={setLocationPurchaseOrderName}
                   onDocumentChange={setLocationDocument}
                   onUploadingChange={setLocationUploading}
                 />

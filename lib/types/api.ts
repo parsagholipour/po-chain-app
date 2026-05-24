@@ -7,6 +7,41 @@ export type PaginatedResponse<T> = {
   pageSize: number;
 };
 
+export type NotificationType =
+  | "purchase_order_created"
+  | "external_order_created"
+  | "payment_failed"
+  | "payment_cancelled"
+  | "po_status_changed"
+  | "shipment_status_changed"
+  | "backorder_actualized"
+  | "po_osd_created";
+
+export type NotificationPriority = "info" | "important" | "urgent";
+
+export type NotificationAudience = "store_owner" | "distributor";
+
+export type NotificationListItem = {
+  id: string;
+  type: NotificationType;
+  priority: NotificationPriority;
+  audience: NotificationAudience;
+  title: string;
+  body: string;
+  href: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  data: unknown;
+  createdAt: string;
+  readAt: string | null;
+};
+
+export type NotificationsResponse = {
+  rows: NotificationListItem[];
+  unreadCount: number;
+  nextCursor: string | null;
+};
+
 export type CustomFieldCondition = {
   id: string;
   definitionId: string;
