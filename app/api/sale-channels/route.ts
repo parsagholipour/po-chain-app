@@ -229,6 +229,11 @@ export async function POST(request: Request) {
       return jsonError(e.message, 503);
     }
     if (e instanceof KeycloakAdminError) {
+      console.warn("[sale-channels] Keycloak admin error", {
+        message: e.message,
+        status: e.status,
+        details: e.details,
+      });
       return jsonError(e.message, 502);
     }
     const j = jsonFromPrisma(e);

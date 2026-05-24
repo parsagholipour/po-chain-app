@@ -47,6 +47,7 @@ export class KeycloakAdminError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly details?: string,
   ) {
     super(message);
     this.name = "KeycloakAdminError";
@@ -152,6 +153,11 @@ async function keycloakFetch(
   });
 }
 
+async function keycloakErrorDetails(response: Response) {
+  const text = await response.text().catch(() => "");
+  return text.trim().slice(0, 1000) || undefined;
+}
+
 async function findKeycloakUserByEmail(
   location: KeycloakAdminLocation,
   email: string,
@@ -167,7 +173,11 @@ async function findKeycloakUserByEmail(
     | null;
 
   if (!response.ok || !Array.isArray(users)) {
-    throw new KeycloakAdminError("Could not look up Keycloak user", response.status);
+    throw new KeycloakAdminError(
+      "Could not look up Keycloak user",
+      response.status,
+      Array.isArray(users) ? undefined : JSON.stringify(users),
+    );
   }
 
   return users.find((user) => user.email?.toLowerCase() === email.toLowerCase()) ?? null;
@@ -232,7 +242,11 @@ async function updateKeycloakUser(
   });
 
   if (!response.ok) {
-    throw new KeycloakAdminError("Could not update Keycloak user", response.status);
+    throw new KeycloakAdminError(
+      "Could not update Keycloak user",
+      response.status,
+      await keycloakErrorDetails(response),
+    );
   }
 }
 
@@ -284,7 +298,28 @@ async function resetKeycloakPassword(
   );
 
   if (!response.ok) {
-    throw new KeycloakAdminError("Could not set Keycloak password", response.status);
+    throw new KeycloakAdminError(
+      "Could not set Keycloak password",
+      response.status,
+      await keycloakErrorDetails(response),
+    );
+  }
+}
+
+async function deleteKeycloakUser(
+  location: KeycloakAdminLocation,
+  userId: string,
+) {
+  const response = await keycloakFetch(location, `/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok && response.status !== 404) {
+    throw new KeycloakAdminError(
+      "Could not delete previous Keycloak user",
+      response.status,
+      await keycloakErrorDetails(response),
+    );
   }
 }
 
@@ -314,11 +349,19 @@ export async function provisionDistributorKeycloakUser(input: {
 
   const existing = await findKeycloakUserByEmail(location, email);
   if (existing?.id) {
-    await updateKeycloakUser(location, existing.id, { email, name: input.name });
-    if (input.password) {
-      await resetKeycloakPassword(location, existing.id, input.password);
+    const updatedExistingUser = await updateExistingKeycloakUser(location, existing.id, {
+      email,
+      name: input.name,
+    });
+    if (updatedExistingUser) {
+      if (input.password) {
+        await resetKeycloakPassword(location, existing.id, input.password);
+      }
+      if (existingUserId && existing.id !== existingUserId) {
+        await deleteKeycloakUser(location, existingUserId);
+      }
+      return { id: existing.id, created: false };
     }
-    return { id: existing.id, created: false };
   }
 
   const response = await keycloakFetch(location, "", {
@@ -343,7 +386,11 @@ export async function provisionDistributorKeycloakUser(input: {
   });
 
   if (!response.ok) {
-    throw new KeycloakAdminError("Could not create Keycloak user", response.status);
+    throw new KeycloakAdminError(
+      "Could not create Keycloak user",
+      response.status,
+      await keycloakErrorDetails(response),
+    );
   }
 
   const locationHeader = response.headers.get("location");

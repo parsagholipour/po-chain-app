@@ -7,11 +7,19 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { SessionProvider } from "next-auth/react";
 import NextTopLoader from "nextjs-toploader";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ConfirmProvider } from "@/components/confirm-provider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => makeQueryClient());
+
+  useEffect(() => {
+    const restoreWindow = window as Window & { __PO_REACT_APP_MOUNTED__?: boolean };
+    restoreWindow.__PO_REACT_APP_MOUNTED__ = true;
+    return () => {
+      restoreWindow.__PO_REACT_APP_MOUNTED__ = false;
+    };
+  }, []);
 
   return (
     <SessionProvider basePath="/api/auth">

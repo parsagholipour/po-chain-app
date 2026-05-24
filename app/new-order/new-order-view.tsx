@@ -39,6 +39,11 @@ import {
 } from "@/components/ui/table";
 import { ProductDetailDialog } from "./product-detail-dialog";
 import { ProductPickerDialog } from "./product-picker-dialog";
+import {
+  readBrowserStorageEventItem,
+  readBrowserStorageItem,
+  writeBrowserStorageItem,
+} from "./browser-storage";
 
 type OrderRow = {
   id: string;
@@ -114,6 +119,40 @@ type BackOrderReviewLine = BackOrderDraftLine & {
   isShort: boolean;
 };
 
+const NEW_ORDER_SELECTED_PRODUCTS_STORAGE_PREFIX = "po-new-order-selected-products";
+const PRODUCT_PICKER_SELECTION_STORAGE_PREFIX = "po-new-order-product-picker-selection";
+
+function selectedProductsStorageKey(saleChannelId: string) {
+  return `${NEW_ORDER_SELECTED_PRODUCTS_STORAGE_PREFIX}:${saleChannelId}`;
+}
+
+function productPickerStorageKey(saleChannelId: string) {
+  return `${PRODUCT_PICKER_SELECTION_STORAGE_PREFIX}:${saleChannelId}`;
+}
+
+function uniqueProductIds(values: unknown[]) {
+  return Array.from(
+    new Set(
+      values.filter(
+        (value): value is string => typeof value === "string" && value.length > 0,
+      ),
+    ),
+  );
+}
+
+function productIdsFromStoredValue(raw: string | null) {
+  try {
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? uniqueProductIds(parsed) : [];
+  } catch {
+    return [];
+  }
+}
+
+function readStoredProductIds(storageKey: string) {
+  return productIdsFromStoredValue(readBrowserStorageItem(storageKey));
+}
+
 function newRow(id: string): OrderRow {
   return {
     id,
@@ -141,6 +180,29 @@ function ensureTrailingBlankRow(rows: OrderRow[]) {
     return [...rows, newRow(nextOrderRowId(rows))];
   }
   return rows;
+}
+
+function rowsFromStoredProductIds(
+  productIds: string[],
+  productById: Map<string, SaleChannelProduct>,
+  currentRows: OrderRow[] = [],
+) {
+  const currentRowByProductId = new Map(
+    currentRows
+      .filter((row) => row.productId.length > 0)
+      .map((row) => [row.productId, row]),
+  );
+  const rows = productIds
+    .filter((productId) => productById.has(productId))
+    .map(
+      (productId) =>
+        currentRowByProductId.get(productId) ?? {
+          ...newRow(`product:${productId}`),
+          productId,
+        },
+    );
+
+  return ensureTrailingBlankRow(rows);
 }
 
 function quantityValue(row: OrderRow, locationId: string) {
@@ -304,6 +366,15 @@ function isSessionLocation(value: unknown): value is SaleChannelLocation {
   );
 }
 
+function sessionLocationsFromStoredValue(raw: string | null) {
+  try {
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(isSessionLocation) : [];
+  } catch {
+    return [];
+  }
+}
+
 function LocationPurchaseOrderDetails({
   location,
   purchaseOrderName,
@@ -400,11 +471,13 @@ export function NewOrderView() {
   const [productDetailRowId, setProductDetailRowId] = useState<string | null>(null);
   const [sessionLocations, setSessionLocations] = useState<SaleChannelLocation[]>([]);
   const [loadedSessionLocationKey, setLoadedSessionLocationKey] = useState<string | null>(null);
+  const [loadedSessionProductSelectionKey, setLoadedSessionProductSelectionKey] =
+    useState<string | null>(null);
   const [sessionLocationOpen, setSessionLocationOpen] = useState(false);
   const [editingSessionLocation, setEditingSessionLocation] = useState<SaleChannelLocation | null>(null);
   const [backOrderReview, setBackOrderReview] = useState<BackOrderReview | null>(null);
 
-  const { data: saleChannels = [], isPending: saleChannelsPending } = useQuery({
+  const { data: saleChannels = [], isLoading: saleChannelsLoading } = useQuery({
     queryKey: ["sale-channels"],
     queryFn: async () => {
       const { data } = await api.get<SaleChannel[]>("/api/sale-channels");
@@ -419,8 +492,14 @@ export function NewOrderView() {
     orderSaleChannel && isStoreSaleChannel
       ? `po-store-session-locations:${orderSaleChannel.id}`
       : null;
+  const sessionProductSelectionStorageKey = orderSaleChannel
+    ? selectedProductsStorageKey(orderSaleChannel.id)
+    : null;
+  const pickerProductSelectionStorageKey = orderSaleChannel
+    ? productPickerStorageKey(orderSaleChannel.id)
+    : null;
 
-  const { data: savedLocations = [], isPending: savedLocationsPending } = useQuery({
+  const { data: savedLocations = [], isLoading: savedLocationsLoading } = useQuery({
     queryKey: ["sale-channel-locations", orderSaleChannel?.id],
     enabled: Boolean(orderSaleChannel?.id && orderSaleChannel.type === "distributor"),
     queryFn: async () => {
@@ -440,13 +519,9 @@ export function NewOrderView() {
         setLoadedSessionLocationKey(null);
         return;
       }
-      try {
-        const raw = window.sessionStorage.getItem(sessionLocationStorageKey);
-        const parsed = raw ? JSON.parse(raw) : [];
-        setSessionLocations(Array.isArray(parsed) ? parsed.filter(isSessionLocation) : []);
-      } catch {
-        setSessionLocations([]);
-      }
+      setSessionLocations(
+        sessionLocationsFromStoredValue(readBrowserStorageItem(sessionLocationStorageKey)),
+      );
       setLoadedSessionLocationKey(sessionLocationStorageKey);
     });
     return () => {
@@ -456,13 +531,35 @@ export function NewOrderView() {
 
   useEffect(() => {
     if (!sessionLocationStorageKey || loadedSessionLocationKey !== sessionLocationStorageKey) return;
-    window.sessionStorage.setItem(sessionLocationStorageKey, JSON.stringify(sessionLocations));
+    writeBrowserStorageItem(sessionLocationStorageKey, JSON.stringify(sessionLocations));
   }, [loadedSessionLocationKey, sessionLocationStorageKey, sessionLocations]);
 
-  const locations = isStoreSaleChannel ? sessionLocations : savedLocations;
-  const locationsPending = isStoreSaleChannel ? false : savedLocationsPending;
+  useEffect(() => {
+    if (!sessionLocationStorageKey) return;
 
-  const { data: products = [], isPending: productsPending } = useQuery({
+    function handleStorage(event: StorageEvent) {
+      if (
+        event.storageArea !== window.localStorage ||
+        event.key !== sessionLocationStorageKey
+      ) {
+        return;
+      }
+      setSessionLocations(sessionLocationsFromStoredValue(readBrowserStorageEventItem(event)));
+    }
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [sessionLocationStorageKey]);
+
+  const locations = isStoreSaleChannel ? sessionLocations : savedLocations;
+  const locationsPending =
+    orderSaleChannel?.type === "distributor" ? savedLocationsLoading : false;
+
+  const {
+    data: products = [],
+    isLoading: productsLoading,
+    isPending: productsPending,
+  } = useQuery({
     queryKey: ["sale-channel-products"],
     queryFn: async () => {
       const { data } = await api.get<SaleChannelProduct[]>("/api/sale-channel/products");
@@ -478,6 +575,131 @@ export function NewOrderView() {
     () => new Map(locations.map((location) => [location.id, location])),
     [locations],
   );
+  const sessionSelectedProductIds = useMemo(
+    () => uniqueProductIds(rows.map((row) => row.productId)),
+    [rows],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!sessionProductSelectionStorageKey) {
+      if (saleChannelsLoading) return;
+      queueMicrotask(() => {
+        if (!cancelled) setLoadedSessionProductSelectionKey(null);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (
+      productsPending ||
+      loadedSessionProductSelectionKey === sessionProductSelectionStorageKey
+    ) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const productIds = readStoredProductIds(sessionProductSelectionStorageKey);
+      setRows((current) => rowsFromStoredProductIds(productIds, productById, current));
+      setLoadedSessionProductSelectionKey(sessionProductSelectionStorageKey);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loadedSessionProductSelectionKey,
+    productById,
+    productsPending,
+    saleChannelsLoading,
+    sessionProductSelectionStorageKey,
+  ]);
+
+  useEffect(() => {
+    if (
+      !sessionProductSelectionStorageKey ||
+      loadedSessionProductSelectionKey !== sessionProductSelectionStorageKey
+    ) {
+      return;
+    }
+    writeBrowserStorageItem(
+      sessionProductSelectionStorageKey,
+      JSON.stringify(sessionSelectedProductIds),
+    );
+  }, [
+    loadedSessionProductSelectionKey,
+    sessionProductSelectionStorageKey,
+    sessionSelectedProductIds,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (
+      productsPending ||
+      !sessionProductSelectionStorageKey ||
+      loadedSessionProductSelectionKey !== sessionProductSelectionStorageKey
+    ) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setRows((current) => {
+        const availableRows = current.filter(
+          (row) => !row.productId || productById.has(row.productId),
+        );
+        const next = ensureTrailingBlankRow(availableRows);
+        if (
+          next.length === current.length &&
+          next.every((row, index) => row === current[index])
+        ) {
+          return current;
+        }
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loadedSessionProductSelectionKey,
+    productById,
+    productsPending,
+    sessionProductSelectionStorageKey,
+  ]);
+
+  useEffect(() => {
+    if (
+      productsPending ||
+      !sessionProductSelectionStorageKey ||
+      loadedSessionProductSelectionKey !== sessionProductSelectionStorageKey
+    ) {
+      return;
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (
+        event.storageArea !== window.localStorage ||
+        event.key !== sessionProductSelectionStorageKey
+      ) {
+        return;
+      }
+      const productIds = productIdsFromStoredValue(readBrowserStorageEventItem(event));
+      setRows((current) => rowsFromStoredProductIds(productIds, productById, current));
+    }
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [
+    loadedSessionProductSelectionKey,
+    productById,
+    productsPending,
+    sessionProductSelectionStorageKey,
+  ]);
 
   const activeLocationIds = useMemo(() => {
     return locations
@@ -990,9 +1212,9 @@ export function NewOrderView() {
     cartonViolations.length === 0 &&
     !isUploading &&
     !submitOrder.isPending &&
-    !saleChannelsPending &&
+    !saleChannelsLoading &&
     !locationsPending &&
-    !productsPending;
+    !productsLoading;
 
   const activeLocations = locations.filter((location) => activeLocationIdSet.has(location.id));
   const backOrderReviewLines = backOrderReview
@@ -1075,7 +1297,7 @@ export function NewOrderView() {
                 <div className="min-w-0">
                   <p className="font-medium">Session locations</p>
                   <p className="text-sm text-muted-foreground">
-                    These locations are saved only in this browser session.
+                    These locations are saved in this browser and shared across tabs.
                   </p>
                 </div>
                 <Button
@@ -1140,7 +1362,7 @@ export function NewOrderView() {
             </div>
           ) : null}
 
-          {!saleChannelsPending && !orderSaleChannel ? (
+          {!saleChannelsLoading && !orderSaleChannel ? (
             <p className="text-sm text-destructive">
               Your account is not linked to an order sale channel.
             </p>
@@ -1200,7 +1422,7 @@ export function NewOrderView() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {productsPending || locationsPending || saleChannelsPending ? (
+                {productsLoading || locationsPending || saleChannelsLoading ? (
                   <TableRow>
                     <TableCell
                       colSpan={locations.length + 5}
@@ -1395,19 +1617,15 @@ export function NewOrderView() {
         </CardContent>
       </Card>
 
-      <Card className="border-border/80">
-        <CardHeader>
-          <CardTitle>Location PO Details</CardTitle>
-          <CardDescription>
-            Set optional PO names and documents for each location that has quantity.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {activeLocations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Enter quantities above to name POs or attach documents.
-            </p>
-          ) : (
+      {activeLocations.length > 0 ? (
+        <Card className="border-border/80">
+          <CardHeader>
+            <CardTitle>Location PO Details</CardTitle>
+            <CardDescription>
+              Set optional PO names and documents for each location that has quantity.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
             <div className="grid gap-3 md:grid-cols-2">
               {activeLocations.map((location) => (
                 <LocationPurchaseOrderDetails
@@ -1420,9 +1638,9 @@ export function NewOrderView() {
                 />
               ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Dialog
         open={backOrderReview != null}
@@ -1595,6 +1813,7 @@ export function NewOrderView() {
           onOpenChange={handleProductPickerOpenChange}
           products={products}
           selectedProductIds={selectedProductIds}
+          storageKey={pickerProductSelectionStorageKey}
           onAddProducts={addProductsFromPicker}
         />
       ) : null}

@@ -19,6 +19,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { PriceView } from "@/components/ui/price-view";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
+import {
+  readBrowserStorageEventItem,
+  readBrowserStorageItem,
+  writeBrowserStorageItem,
+} from "./browser-storage";
 
 function emptyValue(value: string | number | null | undefined) {
   return value == null || value === "" ? (
@@ -77,9 +82,50 @@ function productMatchesSearch(product: SaleChannelProduct, tokens: string[]) {
 
 const ESTIMATED_PRODUCT_ROW_HEIGHT = 180;
 const PRODUCT_LIST_INITIAL_HEIGHT = 544;
+const DEFAULT_PICKER_STORAGE_KEY = "po-new-order-product-picker-selection";
+
+function uniqueProductIds(values: unknown[]) {
+  return Array.from(
+    new Set(
+      values.filter(
+        (value): value is string => typeof value === "string" && value.length > 0,
+      ),
+    ),
+  );
+}
+
+function productIdsFromStoredValue(raw: string | null) {
+  try {
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? uniqueProductIds(parsed) : [];
+  } catch {
+    return [];
+  }
+}
+
+function readStoredProductIds(storageKey: string) {
+  return productIdsFromStoredValue(readBrowserStorageItem(storageKey));
+}
+
+function writeStoredProductIds(storageKey: string, productIds: Iterable<string>) {
+  writeBrowserStorageItem(storageKey, JSON.stringify(Array.from(new Set(productIds))));
+}
+
+function sameProductIdSet(left: Set<string>, right: Set<string>) {
+  if (left.size !== right.size) return false;
+  for (const value of left) {
+    if (!right.has(value)) return false;
+  }
+  return true;
+}
 
 function isOutOfStock(product: SaleChannelProduct) {
   return product.stockCount != null && product.stockCount <= 0;
+}
+
+function stockSortRank(product: SaleChannelProduct) {
+  if (product.stockCount == null) return 1;
+  return isOutOfStock(product) ? 2 : 0;
 }
 
 function stockBadge(product: SaleChannelProduct) {
@@ -94,7 +140,14 @@ function stockBadge(product: SaleChannelProduct) {
       </Badge>
     );
   }
-  return <Badge variant="default">In stock</Badge>;
+  return (
+    <Badge
+      variant="secondary"
+      className="border-emerald-200 bg-emerald-100 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200"
+    >
+      In stock
+    </Badge>
+  );
 }
 
 function ProductImage({
@@ -253,17 +306,25 @@ export function ProductPickerDialog({
   onOpenChange,
   products,
   selectedProductIds,
+  storageKey,
   onAddProducts,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   products: SaleChannelProduct[];
   selectedProductIds: Set<string>;
+  storageKey?: string | null;
   onAddProducts: (productIds: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
   const [checkedProductIds, setCheckedProductIds] = useState<Set<string>>(() => new Set());
+  const [loadedStorageKey, setLoadedStorageKey] = useState<string | null>(null);
   const productListRef = useRef<HTMLDivElement>(null);
+  const checkedProductStorageKey = storageKey ?? DEFAULT_PICKER_STORAGE_KEY;
+  const productIdSet = useMemo(
+    () => new Set(products.map((product) => product.id)),
+    [products],
+  );
 
   const visibleProducts = useMemo(() => {
     const searchTokens = parseSearchTokens(query);
@@ -272,7 +333,7 @@ export function ProductPickerDialog({
       : products;
 
     return [...matchingProducts].sort(
-      (left, right) => Number(isOutOfStock(left)) - Number(isOutOfStock(right)),
+      (left, right) => stockSortRank(left) - stockSortRank(right),
     );
   }, [products, query]);
 
@@ -287,11 +348,84 @@ export function ProductPickerDialog({
     getItemKey: (index) => visibleProducts[index]?.id ?? index,
   });
 
-  const checkedCount = checkedProductIds.size;
+  const addableCheckedProductIds = useMemo(
+    () =>
+      Array.from(checkedProductIds).filter(
+        (productId) => productIdSet.has(productId) && !selectedProductIds.has(productId),
+      ),
+    [checkedProductIds, productIdSet, selectedProductIds],
+  );
+  const checkedCount = addableCheckedProductIds.length;
 
   useEffect(() => {
     productVirtualizer.scrollToOffset(0);
   }, [productVirtualizer, query]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const storedProductIds = readStoredProductIds(checkedProductStorageKey);
+    setCheckedProductIds(
+      new Set(
+        storedProductIds.filter(
+          (productId) =>
+            !selectedProductIds.has(productId) &&
+            (products.length === 0 || productIdSet.has(productId)),
+        ),
+      ),
+    );
+    setLoadedStorageKey(checkedProductStorageKey);
+  }, [checkedProductStorageKey, open, productIdSet, products.length, selectedProductIds]);
+
+  useEffect(() => {
+    setCheckedProductIds((current) => {
+      const next = new Set(
+        Array.from(current).filter(
+          (productId) =>
+            !selectedProductIds.has(productId) &&
+            (products.length === 0 || productIdSet.has(productId)),
+        ),
+      );
+      return sameProductIdSet(current, next) ? current : next;
+    });
+  }, [productIdSet, products.length, selectedProductIds]);
+
+  useEffect(() => {
+    if (loadedStorageKey !== checkedProductStorageKey) return;
+    writeStoredProductIds(checkedProductStorageKey, checkedProductIds);
+  }, [checkedProductIds, checkedProductStorageKey, loadedStorageKey]);
+
+  useEffect(() => {
+    if (!open || loadedStorageKey !== checkedProductStorageKey) return;
+
+    function handleStorage(event: StorageEvent) {
+      if (
+        event.storageArea !== window.localStorage ||
+        event.key !== checkedProductStorageKey
+      ) {
+        return;
+      }
+      setCheckedProductIds(
+        new Set(
+          productIdsFromStoredValue(readBrowserStorageEventItem(event)).filter(
+            (productId) =>
+              !selectedProductIds.has(productId) &&
+              (products.length === 0 || productIdSet.has(productId)),
+          ),
+        ),
+      );
+    }
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
+  }, [
+    checkedProductStorageKey,
+    loadedStorageKey,
+    open,
+    productIdSet,
+    products.length,
+    selectedProductIds,
+  ]);
 
   function toggleProduct(productId: string, checked: boolean) {
     if (selectedProductIds.has(productId)) return;
@@ -304,8 +438,14 @@ export function ProductPickerDialog({
   }
 
   function handleAddProducts() {
-    const productIds = Array.from(checkedProductIds);
+    const productIds = addableCheckedProductIds;
     if (productIds.length === 0) return;
+    const addedProductIds = new Set(productIds);
+    const remainingProductIds = new Set(
+      Array.from(checkedProductIds).filter((productId) => !addedProductIds.has(productId)),
+    );
+    setCheckedProductIds(remainingProductIds);
+    writeStoredProductIds(checkedProductStorageKey, remainingProductIds);
     onAddProducts(productIds);
     onOpenChange(false);
   }
@@ -338,7 +478,7 @@ export function ProductPickerDialog({
           ) : (
             <div
               ref={productListRef}
-              className="h-[min(52dvh,34rem)] overflow-y-auto pr-1"
+              className="h-[min(52dvh,34rem)] pt-1 overflow-y-auto pr-1"
             >
               <div
                 role="list"
