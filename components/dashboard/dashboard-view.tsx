@@ -184,7 +184,7 @@ export function DashboardView() {
 
       <ChartCard title="Order pipeline by status">
         <BarChart
-          labels={statuses.map(formatStatusLabel)}
+          labels={statuses.map((status) => formatStatusLabel(status))}
           series={stackedSeries}
           stacked
           className="h-[320px]"
