@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const shippingDestinationRequiredTypes = new Set(["purchase_order", "stock_order"]);
+
 export const shippingTypeSchema = z.enum([
   "manufacturing_order",
   "purchase_order",
@@ -80,7 +82,7 @@ const shippingDestinationSchema = {
   shipToNotes: optionalNullableString,
 };
 
-export const shippingCreateSchema = z.object({
+const shippingCreateObjectSchema = z.object({
   type: shippingTypeSchema,
   status: shippingStatusSchema,
   cost: optionalShippingCost,
@@ -97,7 +99,19 @@ export const shippingCreateSchema = z.object({
   ...shippingDestinationSchema,
 });
 
-export const shippingPatchSchema = shippingCreateSchema
+export const shippingCreateSchema = shippingCreateObjectSchema.superRefine(
+  (data, ctx) => {
+    if (shippingDestinationRequiredTypes.has(data.type) && !data.saleChannelLocationId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["saleChannelLocationId"],
+        message: "Select a destination location",
+      });
+    }
+  },
+);
+
+export const shippingPatchSchema = shippingCreateObjectSchema
   .omit({ type: true })
   .partial()
   .extend({

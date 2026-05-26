@@ -1,10 +1,12 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import type {
   OrderStatusLog,
+  SaleChannelLocationRef,
   ShippingRow,
   WarehouseOrderSummary,
 } from "@/lib/types/api";
@@ -28,6 +30,7 @@ type OrderOption = {
   number: number;
   name: string;
   isBackOrder?: boolean;
+  saleChannel?: { id: string; name: string; type: string; logoKey: string | null } | null;
   saleChannelLocation?: ShippingRow["saleChannelLocation"] | null;
   shipToLocationName?: string | null;
   shipToRecipientName?: string | null;
@@ -43,6 +46,7 @@ type OrderOption = {
   shipToNotes?: string | null;
   linkedSaleChannels?: string[];
 };
+type SaleChannelLocationOption = SaleChannelLocationRef;
 
 interface ShippingUpsertDialogProps {
   open: boolean;
@@ -210,10 +214,62 @@ export function ShippingUpsertDialog({
 
   const isSubmitting = createMut.isPending || updateMut.isPending;
 
-  const availablePurchaseOrders =
-    currentType === "stock_order"
-      ? stockOrders ?? []
-      : (purchaseOrders ?? []).filter((order) => !order.isBackOrder);
+  const availablePurchaseOrders = useMemo(
+    () =>
+      currentType === "stock_order"
+        ? stockOrders ?? []
+        : (purchaseOrders ?? []).filter((order) => !order.isBackOrder),
+    [currentType, purchaseOrders, stockOrders],
+  );
+  const saleChannelIdsForLocations = useMemo(() => {
+    if (currentType !== "purchase_order" && currentType !== "stock_order") return [];
+    return [
+      ...new Set(
+        availablePurchaseOrders
+          .map((order) => order.saleChannel?.id ?? order.saleChannelLocation?.saleChannelId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ].sort();
+  }, [availablePurchaseOrders, currentType]);
+
+  const {
+    data: fetchedSaleChannelLocations = [],
+    isPending: isSaleChannelLocationsPending,
+  } = useQuery({
+    queryKey: ["sale-channel-locations", "shipping-form", saleChannelIdsForLocations],
+    queryFn: async () => {
+      const results = await Promise.all(
+        saleChannelIdsForLocations.map(async (saleChannelId) => {
+          const { data } = await api.get<SaleChannelLocationOption[]>(
+            `/api/sale-channels/${saleChannelId}/locations`,
+          );
+          return data;
+        }),
+      );
+      return results.flat();
+    },
+    enabled:
+      open &&
+      saleChannelIdsForLocations.length > 0 &&
+      (currentType === "purchase_order" || currentType === "stock_order"),
+  });
+
+  const availableSaleChannelLocations = useMemo(() => {
+    const byId = new Map<string, SaleChannelLocationOption>();
+    for (const order of availablePurchaseOrders) {
+      if (order.saleChannelLocation) {
+        byId.set(order.saleChannelLocation.id, order.saleChannelLocation);
+      }
+    }
+    if (shipping?.saleChannelLocation) {
+      byId.set(shipping.saleChannelLocation.id, shipping.saleChannelLocation);
+    }
+    for (const location of fetchedSaleChannelLocations) {
+      byId.set(location.id, location);
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [availablePurchaseOrders, fetchedSaleChannelLocations, shipping]);
+
   const isOrderOptionsPending =
     currentType === "manufacturing_order"
       ? isManufacturingOrdersPending
@@ -222,9 +278,16 @@ export function ShippingUpsertDialog({
       : currentType === "stock_order"
         ? isStockOrdersPending
         : isPurchaseOrdersPending;
+  const isDestinationLocationsPending =
+    (currentType === "purchase_order" || currentType === "stock_order") &&
+    saleChannelIdsForLocations.length > 0 &&
+    isSaleChannelLocationsPending;
   const isEditFormLoading =
     isEditing &&
-    (isShippingPending || isOrderOptionsPending || isLogisticsPartnersPending);
+    (isShippingPending ||
+      isOrderOptionsPending ||
+      isLogisticsPartnersPending ||
+      isDestinationLocationsPending);
   const formKey = isEditing
     ? `shipping-edit-${editingId}`
     : `shipping-create-${defaultType}-${open ? "open" : "closed"}`;
@@ -302,10 +365,12 @@ export function ShippingUpsertDialog({
             availableManufacturingOrders={manufacturingOrders ?? []}
             availablePurchaseOrders={availablePurchaseOrders}
             availableWarehouseOrders={warehouseOrders ?? []}
+            availableSaleChannelLocations={availableSaleChannelLocations}
             availableLogisticsPartners={logisticsPartners}
             requiredManufacturingOrderIds={requiredManufacturingOrderIds}
             requiredPurchaseOrderIds={requiredPurchaseOrderIds}
             requiredWarehouseOrderIds={requiredWarehouseOrderIds}
+            isSaleChannelLocationsPending={isDestinationLocationsPending}
             statusLogs={shipping?.statusLogs ?? []}
           />
         )}

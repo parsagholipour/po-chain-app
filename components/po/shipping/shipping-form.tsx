@@ -3,7 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useForm, useWatch, type Resolver } from "react-hook-form";
 import {
   CustomFieldsRenderer,
@@ -43,7 +43,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { StorageObjectLink } from "@/components/ui/storage-object-link";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { ShippingRow } from "@/lib/types/api";
+import type { SaleChannelLocationRef, ShippingRow } from "@/lib/types/api";
 
 export type ShippingFormValues = z.infer<typeof shippingCreateSchema>;
 
@@ -51,6 +51,7 @@ type OrderOption = {
   id: string;
   number: number;
   name: string;
+  saleChannel?: { id: string; name: string; type: string; logoKey: string | null } | null;
   saleChannelLocation?: ShippingRow["saleChannelLocation"] | null;
   shipToLocationName?: string | null;
   shipToRecipientName?: string | null;
@@ -67,6 +68,7 @@ type OrderOption = {
   /** From linked POs / stock orders (manufacturing orders only). */
   linkedSaleChannels?: string[];
 };
+type SaleChannelLocationOption = SaleChannelLocationRef;
 type LogisticsPartnerOption = {
   id: string;
   name: string;
@@ -82,14 +84,17 @@ interface ShippingFormProps {
   availableManufacturingOrders?: OrderOption[];
   availablePurchaseOrders?: OrderOption[];
   availableWarehouseOrders?: OrderOption[];
+  availableSaleChannelLocations?: SaleChannelLocationOption[];
   availableLogisticsPartners?: LogisticsPartnerOption[];
   requiredManufacturingOrderIds?: string[];
   requiredPurchaseOrderIds?: string[];
   requiredWarehouseOrderIds?: string[];
+  isSaleChannelLocationsPending?: boolean;
   statusLogs?: ShippingRow["statusLogs"];
 }
 
 const NO_PARTNER_VALUE = "__none__";
+const NO_LOCATION_VALUE = "__none_location__";
 const EMPTY_ID_LIST: string[] = [];
 const shippingTypeSelectItems = Object.entries(shippingTypeLabels).map(
   ([value, label]) => ({
@@ -103,21 +108,6 @@ const shippingStatusSelectItems = Object.entries(shippingStatusLabels).map(
     label,
   }),
 );
-
-const destinationFieldNames = [
-  "shipToLocationName",
-  "shipToRecipientName",
-  "shipToCompanyName",
-  "shipToPhoneNumber",
-  "shipToEmail",
-  "shipToAddressLine1",
-  "shipToAddressLine2",
-  "shipToCity",
-  "shipToStateProvince",
-  "shipToPostalCode",
-  "shipToCountry",
-  "shipToNotes",
-] as const satisfies readonly (keyof ShippingFormValues)[];
 
 function uniqueIds(ids: string[] | undefined) {
   return [...new Set(ids ?? [])];
@@ -157,44 +147,6 @@ function destinationValuesFromLocation(location: NonNullable<ShippingRow["saleCh
   } satisfies Partial<ShippingFormValues>;
 }
 
-function destinationValuesFromOrder(order: OrderOption) {
-  if (order.saleChannelLocation) {
-    return destinationValuesFromLocation(order.saleChannelLocation);
-  }
-  if (
-    !order.shipToLocationName ||
-    !order.shipToRecipientName ||
-    !order.shipToAddressLine1 ||
-    !order.shipToCity ||
-    !order.shipToCountry
-  ) {
-    return null;
-  }
-
-  return {
-    saleChannelLocationId: null,
-    shipToLocationName: order.shipToLocationName,
-    shipToRecipientName: order.shipToRecipientName,
-    shipToCompanyName: order.shipToCompanyName ?? "",
-    shipToPhoneNumber: order.shipToPhoneNumber ?? "",
-    shipToEmail: order.shipToEmail ?? "",
-    shipToAddressLine1: order.shipToAddressLine1,
-    shipToAddressLine2: order.shipToAddressLine2 ?? "",
-    shipToCity: order.shipToCity,
-    shipToStateProvince: order.shipToStateProvince ?? "",
-    shipToPostalCode: order.shipToPostalCode ?? "",
-    shipToCountry: order.shipToCountry,
-    shipToNotes: order.shipToNotes ?? "",
-  } satisfies Partial<ShippingFormValues>;
-}
-
-function destinationSignature(values: Partial<ShippingFormValues>) {
-  return JSON.stringify({
-    saleChannelLocationId: values.saleChannelLocationId ?? null,
-    ...Object.fromEntries(destinationFieldNames.map((field) => [field, values[field] ?? ""])),
-  });
-}
-
 function emptyDestinationValues() {
   return {
     saleChannelLocationId: null,
@@ -213,6 +165,52 @@ function emptyDestinationValues() {
   } satisfies Partial<ShippingFormValues>;
 }
 
+function emptyDestinationSnapshotValues() {
+  return {
+    shipToLocationName: "",
+    shipToRecipientName: "",
+    shipToCompanyName: "",
+    shipToPhoneNumber: "",
+    shipToEmail: "",
+    shipToAddressLine1: "",
+    shipToAddressLine2: "",
+    shipToCity: "",
+    shipToStateProvince: "",
+    shipToPostalCode: "",
+    shipToCountry: "",
+    shipToNotes: "",
+  } satisfies Partial<ShippingFormValues>;
+}
+
+function saleChannelIdForOrder(order: OrderOption) {
+  return order.saleChannel?.id ?? order.saleChannelLocation?.saleChannelId ?? null;
+}
+
+function locationAddress(location: SaleChannelLocationOption) {
+  const cityLine = [
+    location.city,
+    location.stateProvince,
+    location.postalCode,
+    location.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  return [location.addressLine1, location.addressLine2, cityLine]
+    .filter(Boolean)
+    .join(" - ");
+}
+
+function locationContact(location: SaleChannelLocationOption) {
+  return [
+    location.recipientName,
+    location.companyName,
+    location.phoneNumber,
+    location.email,
+  ]
+    .filter(Boolean)
+    .join(" - ");
+}
+
 export function ShippingForm({
   defaultValues,
   editingId,
@@ -222,10 +220,12 @@ export function ShippingForm({
   availableManufacturingOrders = [],
   availablePurchaseOrders = [],
   availableWarehouseOrders = [],
+  availableSaleChannelLocations = [],
   availableLogisticsPartners = [],
   requiredManufacturingOrderIds = [],
   requiredPurchaseOrderIds = [],
   requiredWarehouseOrderIds = [],
+  isSaleChannelLocationsPending = false,
   statusLogs = [],
 }: ShippingFormProps) {
   const customFieldsRef = useRef<CustomFieldsHandle>(null);
@@ -292,8 +292,6 @@ export function ShippingForm({
   const shippedAt = useWatch({ control: form.control, name: "shippedAt" }) ?? null;
   const saleChannelLocationId =
     useWatch({ control: form.control, name: "saleChannelLocationId" }) ?? null;
-  const shipToLocationName =
-    useWatch({ control: form.control, name: "shipToLocationName" }) ?? "";
   const selectedManufacturingOrderIds =
     useWatch({ control: form.control, name: "manufacturingOrderIds" }) ?? EMPTY_ID_LIST;
   const selectedPurchaseOrderIds =
@@ -324,54 +322,91 @@ export function ShippingForm({
     () => availablePurchaseOrders.filter((order) => selectedPurchaseOrderIds.includes(order.id)),
     [availablePurchaseOrders, selectedPurchaseOrderIds],
   );
-  const selectedDestination = useMemo(() => {
-    if (selectedPurchaseOrders.length === 0) return null;
-    const destinations = selectedPurchaseOrders.map(destinationValuesFromOrder);
-    if (destinations.some((destination) => !destination)) return null;
-    const [first, ...rest] = destinations;
-    if (!first) return null;
-    const firstSignature = destinationSignature(first);
-    return rest.every((destination) => destinationSignature(destination!) === firstSignature)
-      ? first
-      : null;
+  const locationById = useMemo(() => {
+    return new Map(availableSaleChannelLocations.map((location) => [location.id, location]));
+  }, [availableSaleChannelLocations]);
+  const selectedOrderSaleChannelIds = useMemo(() => {
+    return new Set(
+      selectedPurchaseOrders
+        .map(saleChannelIdForOrder)
+        .filter((id): id is string => Boolean(id)),
+    );
   }, [selectedPurchaseOrders]);
-
-  const setDestinationValues = useCallback((values: Partial<ShippingFormValues>) => {
-    form.setValue("saleChannelLocationId", values.saleChannelLocationId ?? null, {
-      shouldDirty: true,
-      shouldValidate: false,
-    });
-    for (const field of destinationFieldNames) {
-      form.setValue(field, values[field] ?? "", {
-        shouldDirty: true,
-        shouldValidate: false,
-      });
-    }
-  }, [form]);
-
-  function registerDestinationField(name: (typeof destinationFieldNames)[number]) {
-    const registration = form.register(name);
-    return {
-      ...registration,
-      onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        setDestinationTouched(true);
-        void registration.onChange(event);
-      },
-    };
-  }
+  const selectedOrderLocationId = useMemo(() => {
+    const locationIds = [
+      ...new Set(
+        selectedPurchaseOrders
+          .map((order) => order.saleChannelLocation?.id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    return locationIds.length === 1 ? locationIds[0] : null;
+  }, [selectedPurchaseOrders]);
+  const destinationLocations = useMemo(() => {
+    if (!showDestination) return [];
+    if (selectedOrderSaleChannelIds.size === 0) return availableSaleChannelLocations;
+    if (selectedOrderSaleChannelIds.size > 1) return [];
+    const [saleChannelId] = [...selectedOrderSaleChannelIds];
+    return availableSaleChannelLocations.filter(
+      (location) => location.saleChannelId === saleChannelId,
+    );
+  }, [availableSaleChannelLocations, selectedOrderSaleChannelIds, showDestination]);
+  const destinationLocationItems = useMemo(
+    () => [
+      { value: NO_LOCATION_VALUE, label: "Select a location" },
+      ...destinationLocations.map((location) => ({
+        value: location.id,
+        label: location.name,
+      })),
+    ],
+    [destinationLocations],
+  );
+  const selectedLocation = saleChannelLocationId
+    ? (locationById.get(saleChannelLocationId) ?? null)
+    : null;
+  const destinationSelectDisabled =
+    isSaleChannelLocationsPending ||
+    selectedOrderSaleChannelIds.size > 1 ||
+    destinationLocations.length === 0;
+  const destinationHint =
+    selectedOrderSaleChannelIds.size > 1
+      ? "Selected orders belong to different sale channels."
+      : isSaleChannelLocationsPending
+        ? "Loading locations..."
+        : destinationLocations.length === 0
+          ? "No saved locations are available."
+          : null;
 
   useEffect(() => {
-    if (editingId || destinationTouched || !showDestination) return;
-    if (selectedDestination) {
-      setDestinationValues(selectedDestination);
-    } else {
-      setDestinationValues(emptyDestinationValues());
+    if (!showDestination) return;
+
+    const currentLocationId = form.getValues("saleChannelLocationId") ?? null;
+    const hasCurrentLocation =
+      currentLocationId != null &&
+      destinationLocations.some((location) => location.id === currentLocationId);
+
+    if (currentLocationId && !hasCurrentLocation && !isSaleChannelLocationsPending) {
+      form.setValue("saleChannelLocationId", null, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+      return;
+    }
+
+    if (editingId || destinationTouched || !selectedOrderLocationId) return;
+    if (destinationLocations.some((location) => location.id === selectedOrderLocationId)) {
+      form.setValue("saleChannelLocationId", selectedOrderLocationId, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
     }
   }, [
+    destinationLocations,
     destinationTouched,
     editingId,
-    selectedDestination,
-    setDestinationValues,
+    form,
+    isSaleChannelLocationsPending,
+    selectedOrderLocationId,
     showDestination,
   ]);
 
@@ -402,9 +437,18 @@ export function ShippingForm({
       invoiceDocumentKey = null;
     }
 
+    const selectedLocationForSubmit = values.saleChannelLocationId
+      ? locationById.get(values.saleChannelLocationId)
+      : null;
+    const locationChanged =
+      values.saleChannelLocationId !== (defaultValues?.saleChannelLocationId ?? null);
     const destinationPayload =
       values.type === "purchase_order" || values.type === "stock_order"
-        ? {}
+        ? selectedLocationForSubmit && (!editingId || locationChanged)
+          ? destinationValuesFromLocation(selectedLocationForSubmit)
+          : editingId && locationChanged
+            ? emptyDestinationSnapshotValues()
+            : {}
         : emptyDestinationValues();
 
     const entityId = await onSubmit({
@@ -831,99 +875,66 @@ export function ShippingForm({
         )}
 
         {showDestination ? (
-          <div className="md:col-span-2">
-            <div className="grid gap-4 rounded-lg border border-border/80 p-4 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <h3 className="text-sm font-medium">Destination</h3>
-                {saleChannelLocationId || shipToLocationName ? (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {shipToLocationName || selectedDestination?.shipToLocationName}
+          <Field
+            data-invalid={!!form.formState.errors.saleChannelLocationId}
+            className="md:col-span-2"
+          >
+            <FieldLabel htmlFor="sf-ship-location" required>
+              Destination location
+            </FieldLabel>
+            <FieldContent>
+              <Select
+                value={saleChannelLocationId ?? NO_LOCATION_VALUE}
+                items={destinationLocationItems}
+                disabled={destinationSelectDisabled}
+                onValueChange={(value) => {
+                  setDestinationTouched(true);
+                  form.setValue(
+                    "saleChannelLocationId",
+                    value === NO_LOCATION_VALUE ? null : value,
+                    { shouldDirty: true, shouldValidate: true },
+                  );
+                }}
+              >
+                <SelectTrigger
+                  id="sf-ship-location"
+                  className="w-full min-w-0"
+                  aria-busy={isSaleChannelLocationsPending}
+                >
+                  <SelectValue placeholder="Select a location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_LOCATION_VALUE}>Select a location</SelectItem>
+                  {destinationLocations.map((location) => (
+                    <SelectItem key={location.id} value={location.id}>
+                      {location.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedLocation ? (
+                <div className="mt-3 rounded-lg border border-border/80 bg-muted/20 p-3 text-sm">
+                  <p className="font-medium">{selectedLocation.name}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {locationAddress(selectedLocation)}
                   </p>
-                ) : null}
-              </div>
-              <Field data-invalid={!!form.formState.errors.shipToRecipientName}>
-                <FieldLabel htmlFor="sf-ship-recipient">Recipient</FieldLabel>
-                <FieldContent>
-                  <Input id="sf-ship-recipient" {...registerDestinationField("shipToRecipientName")} />
-                  <FieldError errors={[form.formState.errors.shipToRecipientName]} />
-                </FieldContent>
-              </Field>
-              <Field data-invalid={!!form.formState.errors.shipToCompanyName}>
-                <FieldLabel htmlFor="sf-ship-company">Company</FieldLabel>
-                <FieldContent>
-                  <Input id="sf-ship-company" {...registerDestinationField("shipToCompanyName")} />
-                  <FieldError errors={[form.formState.errors.shipToCompanyName]} />
-                </FieldContent>
-              </Field>
-              <Field data-invalid={!!form.formState.errors.shipToPhoneNumber}>
-                <FieldLabel htmlFor="sf-ship-phone">Phone</FieldLabel>
-                <FieldContent>
-                  <Input id="sf-ship-phone" {...registerDestinationField("shipToPhoneNumber")} />
-                  <FieldError errors={[form.formState.errors.shipToPhoneNumber]} />
-                </FieldContent>
-              </Field>
-              <Field data-invalid={!!form.formState.errors.shipToEmail}>
-                <FieldLabel htmlFor="sf-ship-email">Email</FieldLabel>
-                <FieldContent>
-                  <Input id="sf-ship-email" type="email" {...registerDestinationField("shipToEmail")} />
-                  <FieldError errors={[form.formState.errors.shipToEmail]} />
-                </FieldContent>
-              </Field>
-              <Field data-invalid={!!form.formState.errors.shipToAddressLine1} className="md:col-span-2">
-                <FieldLabel htmlFor="sf-ship-address1">Address line 1</FieldLabel>
-                <FieldContent>
-                  <Input id="sf-ship-address1" {...registerDestinationField("shipToAddressLine1")} />
-                  <FieldError errors={[form.formState.errors.shipToAddressLine1]} />
-                </FieldContent>
-              </Field>
-              <Field data-invalid={!!form.formState.errors.shipToAddressLine2} className="md:col-span-2">
-                <FieldLabel htmlFor="sf-ship-address2">Address line 2</FieldLabel>
-                <FieldContent>
-                  <Input id="sf-ship-address2" {...registerDestinationField("shipToAddressLine2")} />
-                  <FieldError errors={[form.formState.errors.shipToAddressLine2]} />
-                </FieldContent>
-              </Field>
-              <Field data-invalid={!!form.formState.errors.shipToCity}>
-                <FieldLabel htmlFor="sf-ship-city">City</FieldLabel>
-                <FieldContent>
-                  <Input id="sf-ship-city" {...registerDestinationField("shipToCity")} />
-                  <FieldError errors={[form.formState.errors.shipToCity]} />
-                </FieldContent>
-              </Field>
-              <Field data-invalid={!!form.formState.errors.shipToStateProvince}>
-                <FieldLabel htmlFor="sf-ship-state">State / Province</FieldLabel>
-                <FieldContent>
-                  <Input id="sf-ship-state" {...registerDestinationField("shipToStateProvince")} />
-                  <FieldError errors={[form.formState.errors.shipToStateProvince]} />
-                </FieldContent>
-              </Field>
-              <Field data-invalid={!!form.formState.errors.shipToPostalCode}>
-                <FieldLabel htmlFor="sf-ship-postal">Postal code</FieldLabel>
-                <FieldContent>
-                  <Input id="sf-ship-postal" {...registerDestinationField("shipToPostalCode")} />
-                  <FieldError errors={[form.formState.errors.shipToPostalCode]} />
-                </FieldContent>
-              </Field>
-              <Field data-invalid={!!form.formState.errors.shipToCountry}>
-                <FieldLabel htmlFor="sf-ship-country">Country</FieldLabel>
-                <FieldContent>
-                  <Input id="sf-ship-country" {...registerDestinationField("shipToCountry")} />
-                  <FieldError errors={[form.formState.errors.shipToCountry]} />
-                </FieldContent>
-              </Field>
-              <Field data-invalid={!!form.formState.errors.shipToNotes} className="md:col-span-2">
-                <FieldLabel htmlFor="sf-ship-destination-notes">Destination notes</FieldLabel>
-                <FieldContent>
-                  <Textarea
-                    id="sf-ship-destination-notes"
-                    rows={3}
-                    {...registerDestinationField("shipToNotes")}
-                  />
-                  <FieldError errors={[form.formState.errors.shipToNotes]} />
-                </FieldContent>
-              </Field>
-            </div>
-          </div>
+                  {locationContact(selectedLocation) ? (
+                    <p className="mt-1 text-muted-foreground">
+                      {locationContact(selectedLocation)}
+                    </p>
+                  ) : null}
+                  {selectedLocation.shippingNotes ? (
+                    <p className="mt-2 text-muted-foreground">
+                      {selectedLocation.shippingNotes}
+                    </p>
+                  ) : null}
+                </div>
+              ) : destinationHint ? (
+                <p className="mt-2 text-sm text-muted-foreground">{destinationHint}</p>
+              ) : null}
+              <FieldError errors={[form.formState.errors.saleChannelLocationId]} />
+            </FieldContent>
+          </Field>
         ) : null}
 
         <CustomFieldsRenderer

@@ -27,6 +27,11 @@ import {
   PURCHASE_ORDER_TYPE_DISTRIBUTOR,
   PURCHASE_ORDER_TYPE_STOCK,
 } from "@/lib/purchase-order-type";
+import {
+  hasShippingDestinationSnapshotValue,
+  shippingDestinationFromLocation,
+  type ShippingDestinationLocation,
+} from "@/lib/shipping-destination";
 
 export const runtime = "nodejs";
 
@@ -72,7 +77,7 @@ type ShippingValidationDb = {
         shippingNotes: true;
         saleChannelId: true;
       };
-    }): Promise<SaleChannelLocationDestination | null>;
+    }): Promise<ShippingDestinationLocation | null>;
   };
 };
 
@@ -80,72 +85,9 @@ function uniqueIds(ids: string[] | undefined) {
   return [...new Set(ids ?? [])];
 }
 
-type SaleChannelLocationDestination = {
-  id: string;
-  name: string;
-  recipientName: string;
-  companyName: string | null;
-  phoneNumber: string | null;
-  email: string | null;
-  addressLine1: string;
-  addressLine2: string | null;
-  city: string;
-  stateProvince: string | null;
-  postalCode: string | null;
-  country: string;
-  shippingNotes: string | null;
-  saleChannelId: string;
-};
-
-const destinationFieldNames = [
-  "shipToLocationName",
-  "shipToRecipientName",
-  "shipToCompanyName",
-  "shipToPhoneNumber",
-  "shipToEmail",
-  "shipToAddressLine1",
-  "shipToAddressLine2",
-  "shipToCity",
-  "shipToStateProvince",
-  "shipToPostalCode",
-  "shipToCountry",
-  "shipToNotes",
-] as const;
-
-type DestinationFieldName = (typeof destinationFieldNames)[number];
-
-type DestinationInput = Partial<Record<DestinationFieldName, string | null>> & {
-  saleChannelLocationId?: string | null;
-};
-
-function hasDestinationSnapshotValue(data: DestinationInput) {
-  return destinationFieldNames.some((field) => {
-    const value = data[field];
-    return typeof value === "string" ? value.trim().length > 0 : value != null;
-  });
-}
-
-function shippingDestinationFromLocation(location: SaleChannelLocationDestination) {
-  return {
-    saleChannelLocationId: location.id,
-    shipToLocationName: location.name,
-    shipToRecipientName: location.recipientName,
-    shipToCompanyName: location.companyName,
-    shipToPhoneNumber: location.phoneNumber,
-    shipToEmail: location.email,
-    shipToAddressLine1: location.addressLine1,
-    shipToAddressLine2: location.addressLine2,
-    shipToCity: location.city,
-    shipToStateProvince: location.stateProvince,
-    shipToPostalCode: location.postalCode,
-    shipToCountry: location.country,
-    shipToNotes: location.shippingNotes,
-  };
-}
-
 function shippingDestinationFromOrderSnapshot(order: {
   saleChannelLocationId: string | null;
-  saleChannelLocation: SaleChannelLocationDestination | null;
+  saleChannelLocation: ShippingDestinationLocation | null;
   shipToLocationName: string | null;
   shipToRecipientName: string | null;
   shipToCompanyName: string | null;
@@ -457,7 +399,7 @@ export async function POST(request: Request) {
       });
 
       let shippingData = shippingCreateToPrisma(parsed.data);
-      const hasDestinationSnapshot = hasDestinationSnapshotValue(parsed.data);
+      const hasDestinationSnapshot = hasShippingDestinationSnapshotValue(parsed.data);
       const explicitLocation = parsed.data.saleChannelLocationId
         ? await validateShippingSaleChannelLocation(tx, {
             storeId,
@@ -483,7 +425,7 @@ export async function POST(request: Request) {
         }
       }
 
-      if (explicitLocation && !hasDestinationSnapshot) {
+      if (explicitLocation) {
         shippingData = {
           ...shippingData,
           ...shippingDestinationFromLocation(explicitLocation),

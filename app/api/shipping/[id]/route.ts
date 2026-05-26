@@ -19,6 +19,11 @@ import {
   isDistributorContext,
   requireStoreContext,
 } from "@/lib/store-context";
+import {
+  hasShippingDestinationSnapshotValue,
+  shippingDestinationFromLocation,
+  type ShippingDestinationLocation,
+} from "@/lib/shipping-destination";
 
 export const runtime = "nodejs";
 
@@ -218,12 +223,28 @@ export async function PATCH(
           ? warehouseOrderIds
           : existingWarehouseOrderIds;
 
+      let explicitLocation: ShippingDestinationLocation | null = null;
       if (parsed.data.saleChannelLocationId) {
-        const location = await tx.saleChannelLocation.findFirst({
+        explicitLocation = await tx.saleChannelLocation.findFirst({
           where: { id: parsed.data.saleChannelLocationId, storeId },
-          select: { saleChannelId: true },
+          select: {
+            id: true,
+            name: true,
+            recipientName: true,
+            companyName: true,
+            phoneNumber: true,
+            email: true,
+            addressLine1: true,
+            addressLine2: true,
+            city: true,
+            stateProvince: true,
+            postalCode: true,
+            country: true,
+            shippingNotes: true,
+            saleChannelId: true,
+          },
         });
-        if (!location) {
+        if (!explicitLocation) {
           throw new Error("SALE_CHANNEL_LOCATION_NOT_FOUND");
         }
         if (
@@ -234,7 +255,7 @@ export async function PATCH(
             where: {
               id: { in: nextPurchaseOrderIds },
               storeId,
-              saleChannelId: location.saleChannelId,
+              saleChannelId: explicitLocation.saleChannelId,
               ...(existing.type === "purchase_order" ? { isBackOrder: false } : {}),
             },
           });
@@ -248,6 +269,12 @@ export async function PATCH(
       delete shippingData.manufacturingOrderIds;
       delete shippingData.purchaseOrderIds;
       delete shippingData.warehouseOrderIds;
+      if (
+        explicitLocation &&
+        !hasShippingDestinationSnapshotValue(shippingData)
+      ) {
+        Object.assign(shippingData, shippingDestinationFromLocation(explicitLocation));
+      }
 
       const shipping = await tx.shipping.update({
         where: { id: pid.data.id },
