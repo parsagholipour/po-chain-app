@@ -16,6 +16,12 @@ import {
 export const runtime = "nodejs";
 
 const paramsSchema = z.object({ id: z.uuid() });
+const backOrderNameSuffixPattern = /\s-\sback order\s*$/i;
+
+function actualizedPurchaseOrderName(name: string) {
+  const actualizedName = name.replace(backOrderNameSuffixPattern, "");
+  return actualizedName.trim().length > 0 ? actualizedName : name;
+}
 
 export async function POST(
   _request: Request,
@@ -51,7 +57,7 @@ export async function POST(
 
       const actualizedPo = await tx.purchaseOrder.create({
         data: {
-          name: backPo.name,
+          name: actualizedPurchaseOrderName(backPo.name),
           type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
           status: "open",
           invoiceId: backPo.invoiceId,
