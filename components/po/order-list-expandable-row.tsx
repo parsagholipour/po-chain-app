@@ -104,10 +104,14 @@ export function ExpandableOrderSummaryRow({
             )}
           </Button>
         </TableCell>
-        <TableCell className="min-w-56 max-w-80 whitespace-normal">
-          <div className="space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <Link href={href} className="font-medium hover:underline">
+        <TableCell className="max-w-56">
+          <div className="min-w-0 space-y-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <Link
+                href={href}
+                className="min-w-0 truncate font-medium hover:underline"
+                title={row.name}
+              >
                 {row.name}
               </Link>
               {row.isBackOrder ? (
