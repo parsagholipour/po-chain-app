@@ -87,6 +87,24 @@ export function statusBadgeClassName(status: string) {
   return statusBadgeClassNames[status] ?? "border-border bg-muted text-muted-foreground";
 }
 
+/** PO, stock, and MO statuses used together on pipeline charts. */
+export const pipelineStatusLabels: Record<string, string> = {
+  ...distributorPoStatusLabels,
+  ...moStatusLabels,
+};
+
+export function formatStatusLabel(
+  status: string,
+  labels: Record<string, string> = pipelineStatusLabels,
+) {
+  const known = labels[status];
+  if (known) return known;
+  return status
+    .split("_")
+    .map((part) => (part ? `${part[0].toUpperCase()}${part.slice(1)}` : part))
+    .join(" ");
+}
+
 /** @deprecated Use distributorPoStatusLabels for PO; moStatusLabels for MO */
 export const poStatusLabels = { ...distributorPoStatusLabels, ...moStatusLabels };
 

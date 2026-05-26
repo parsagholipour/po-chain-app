@@ -8,6 +8,7 @@ import { DoughnutChart } from "@/components/analytics/charts/doughnut-chart";
 import { CHART_COLORS } from "@/components/analytics/charts/chart-setup";
 import { PriceView } from "@/components/ui/price-view";
 import { api } from "@/lib/axios";
+import { formatStatusLabel, moStatusLabels } from "@/lib/po/status-labels";
 
 type Payload = {
   pipeline: {
@@ -40,7 +41,7 @@ export function ManufacturingView() {
         <div className="lg:col-span-3">
           <ChartCard title="Manufacturing orders by status">
             <BarChart
-              labels={moStatus.map(([status]) => status)}
+              labels={moStatus.map(([status]) => formatStatusLabel(status, moStatusLabels))}
               series={[
                 { label: "Orders", data: moStatus.map(([, count]) => count), color: CHART_COLORS.primary },
               ]}
@@ -51,7 +52,7 @@ export function ManufacturingView() {
         <div className="lg:col-span-2">
           <ChartCard title="MO status share">
             <DoughnutChart
-              labels={moStatus.map(([status]) => status)}
+              labels={moStatus.map(([status]) => formatStatusLabel(status, moStatusLabels))}
               values={moStatus.map(([, count]) => count)}
               className="h-[300px]"
             />
@@ -63,7 +64,7 @@ export function ManufacturingView() {
         <div className="lg:col-span-3">
           <ChartCard title="Manufacturer status funnel">
             <BarChart
-              labels={funnel.map(([status]) => status)}
+              labels={funnel.map(([status]) => formatStatusLabel(status, moStatusLabels))}
               series={[
                 { label: "Pivots", data: funnel.map(([, count]) => count), color: CHART_COLORS.purple },
               ]}
@@ -74,7 +75,7 @@ export function ManufacturingView() {
         <div className="lg:col-span-2">
           <ChartCard title="Verified vs unverified allocations">
             <DoughnutChart
-              labels={verified.map(([k]) => k)}
+              labels={verified.map(([k]) => formatStatusLabel(k))}
               values={verified.map(([, v]) => v)}
               className="h-[300px]"
             />

@@ -3,8 +3,8 @@ import "server-only";
 import type { Prisma } from "@/app/generated/prisma/client";
 import {
   createNotification,
-  distributorEmailRecipient,
-  storeOwnerEmailRecipient,
+  distributorEmailRecipients,
+  storeOwnerEmailRecipients,
 } from "@/lib/notifications";
 import {
   distributorPoStatusLabels,
@@ -98,7 +98,7 @@ export async function createExternalOrderNotifications(
   const body = `${poLabel(purchaseOrder)} was created from an external order.`;
   const href = `/purchase-orders/${purchaseOrder.id}`;
 
-  const storeOwner = await storeOwnerEmailRecipient(tx, storeId);
+  const storeOwners = await storeOwnerEmailRecipients(tx, storeId);
   const storeNotification = await createNotification(tx, {
     type: "external_order_created",
     priority: "important",
@@ -111,12 +111,12 @@ export async function createExternalOrderNotifications(
     dedupeKey: `external-order:store-owner:po:${purchaseOrder.id}`,
     storeId,
     createdById,
-    emailRecipients: [storeOwner],
+    emailRecipients: storeOwners,
   });
   ids.push(storeNotification.id);
 
   if (purchaseOrder.saleChannelId) {
-    const distributor = await distributorEmailRecipient(tx, {
+    const distributors = await distributorEmailRecipients(tx, {
       storeId,
       saleChannelId: purchaseOrder.saleChannelId,
     });
@@ -133,7 +133,7 @@ export async function createExternalOrderNotifications(
       saleChannelId: purchaseOrder.saleChannelId,
       storeId,
       createdById,
-      emailRecipients: [distributor],
+      emailRecipients: distributors,
     });
     ids.push(distributorNotification.id);
   }
@@ -153,7 +153,7 @@ export async function createManualPurchaseOrderNotification(
     purchaseOrder: PurchaseOrderNotificationRef;
   },
 ) {
-  const storeOwner = await storeOwnerEmailRecipient(tx, storeId);
+  const storeOwners = await storeOwnerEmailRecipients(tx, storeId);
   const notification = await createNotification(tx, {
     type: "purchase_order_created",
     priority: "info",
@@ -166,7 +166,7 @@ export async function createManualPurchaseOrderNotification(
     dedupeKey: `manual-po-created:store-owner:${purchaseOrder.id}`,
     storeId,
     createdById,
-    emailRecipients: [storeOwner],
+    emailRecipients: storeOwners,
   });
   return [notification.id];
 }
@@ -203,7 +203,7 @@ export async function createPaymentStatusNotifications(
   const ids: string[] = [];
   const statusWord = paymentStatus === "failed" ? "failed" : "was cancelled";
   const notificationType = paymentStatus === "failed" ? "payment_failed" : "payment_cancelled";
-  const storeOwner = await storeOwnerEmailRecipient(tx, storeId);
+  const storeOwners = await storeOwnerEmailRecipients(tx, storeId);
 
   const storeNotification = await createNotification(tx, {
     type: notificationType,
@@ -216,7 +216,7 @@ export async function createPaymentStatusNotifications(
     entityId: invoice.id,
     dedupeKey: `payment:${paymentStatus}:store-owner:${providerEventId}`,
     storeId,
-    emailRecipients: [storeOwner],
+    emailRecipients: storeOwners,
   });
   ids.push(storeNotification.id);
 
@@ -227,7 +227,7 @@ export async function createPaymentStatusNotifications(
   );
 
   for (const saleChannel of saleChannels.values()) {
-    const distributor = await distributorEmailRecipient(tx, {
+    const distributors = await distributorEmailRecipients(tx, {
       storeId,
       saleChannelId: saleChannel.id,
     });
@@ -243,7 +243,7 @@ export async function createPaymentStatusNotifications(
       dedupeKey: `payment:${paymentStatus}:distributor:${saleChannel.id}:${providerEventId}`,
       saleChannelId: saleChannel.id,
       storeId,
-      emailRecipients: [distributor],
+      emailRecipients: distributors,
     });
     ids.push(notification.id);
   }
@@ -270,7 +270,7 @@ export async function createPurchaseOrderStatusNotification(
   if (!purchaseOrder.saleChannelId) return [];
 
   const label = statusLabel(toStatus, distributorPoStatusLabels);
-  const distributor = await distributorEmailRecipient(tx, {
+  const distributors = await distributorEmailRecipients(tx, {
     storeId,
     saleChannelId: purchaseOrder.saleChannelId,
   });
@@ -287,7 +287,7 @@ export async function createPurchaseOrderStatusNotification(
     saleChannelId: purchaseOrder.saleChannelId,
     storeId,
     createdById,
-    emailRecipients: [distributor],
+    emailRecipients: distributors,
   });
   return [notification.id];
 }
@@ -341,7 +341,7 @@ export async function createShippingStatusNotifications(
   const label = statusLabel(toStatus, shippingStatusLabels);
   for (const po of purchaseOrders as ShippingPurchaseOrderRef[]) {
     if (!po.saleChannelId) continue;
-    const distributor = await distributorEmailRecipient(tx, {
+    const distributors = await distributorEmailRecipients(tx, {
       storeId,
       saleChannelId: po.saleChannelId,
     });
@@ -358,7 +358,7 @@ export async function createShippingStatusNotifications(
       saleChannelId: po.saleChannelId,
       storeId,
       createdById,
-      emailRecipients: [distributor],
+      emailRecipients: distributors,
     });
     ids.push(notification.id);
   }
@@ -410,7 +410,7 @@ export async function createShippingCreatedNotifications(
   const ids: string[] = [];
   for (const po of purchaseOrders as ShippingPurchaseOrderRef[]) {
     if (!po.saleChannelId) continue;
-    const distributor = await distributorEmailRecipient(tx, {
+    const distributors = await distributorEmailRecipients(tx, {
       storeId,
       saleChannelId: po.saleChannelId,
     });
@@ -429,7 +429,7 @@ export async function createShippingCreatedNotifications(
       saleChannelId: po.saleChannelId,
       storeId,
       createdById,
-      emailRecipients: [distributor],
+      emailRecipients: distributors,
     });
     ids.push(notification.id);
   }
@@ -453,7 +453,7 @@ export async function createBackorderActualizedNotification(
 ) {
   if (!backorder.saleChannelId) return [];
 
-  const distributor = await distributorEmailRecipient(tx, {
+  const distributors = await distributorEmailRecipients(tx, {
     storeId,
     saleChannelId: backorder.saleChannelId,
   });
@@ -470,7 +470,7 @@ export async function createBackorderActualizedNotification(
     saleChannelId: backorder.saleChannelId,
     storeId,
     createdById,
-    emailRecipients: [distributor],
+    emailRecipients: distributors,
   });
   return [notification.id];
 }
@@ -498,7 +498,7 @@ export async function createPurchaseOrderOsdNotifications(
   const body = `${type} OS&D was recorded for ${poLabel(purchaseOrder)} across ${lineCount} line${lineCount === 1 ? "" : "s"}.`;
   const href = `/purchase-orders/${purchaseOrder.id}`;
 
-  const storeOwner = await storeOwnerEmailRecipient(tx, storeId);
+  const storeOwners = await storeOwnerEmailRecipients(tx, storeId);
   const storeNotification = await createNotification(tx, {
     type: "po_osd_created",
     priority: "urgent",
@@ -511,12 +511,12 @@ export async function createPurchaseOrderOsdNotifications(
     dedupeKey: `po-osd:store-owner:${osdId}`,
     storeId,
     createdById,
-    emailRecipients: [storeOwner],
+    emailRecipients: storeOwners,
   });
   ids.push(storeNotification.id);
 
   if (purchaseOrder.saleChannelId) {
-    const distributor = await distributorEmailRecipient(tx, {
+    const distributors = await distributorEmailRecipients(tx, {
       storeId,
       saleChannelId: purchaseOrder.saleChannelId,
     });
@@ -533,7 +533,7 @@ export async function createPurchaseOrderOsdNotifications(
       saleChannelId: purchaseOrder.saleChannelId,
       storeId,
       createdById,
-      emailRecipients: [distributor],
+      emailRecipients: distributors,
     });
     ids.push(distributorNotification.id);
   }

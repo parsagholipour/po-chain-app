@@ -9,6 +9,8 @@ import { DoughnutChart } from "@/components/analytics/charts/doughnut-chart";
 import { CHART_COLORS } from "@/components/analytics/charts/chart-setup";
 import { KpiCard } from "@/components/analytics/kpi-card";
 import { api } from "@/lib/axios";
+import { formatStatusLabel, shippingStatusLabels } from "@/lib/po/status-labels";
+import { shippingTypeLabels } from "@/lib/shipping";
 
 type Payload = {
   byPartner: Record<string, number>;
@@ -75,7 +77,7 @@ export function ShippingView() {
       <div className="grid gap-4 lg:grid-cols-2">
         <ChartCard title="Spend by shipment type">
           <BarChart
-            labels={type.map(([k]) => k)}
+            labels={type.map(([k]) => formatStatusLabel(k, shippingTypeLabels))}
             series={[{ label: "Spend", data: type.map(([, v]) => v), color: CHART_COLORS.purple }]}
             currency
             className="h-[260px]"
@@ -83,7 +85,7 @@ export function ShippingView() {
         </ChartCard>
         <ChartCard title="Shipments by status">
           <BarChart
-            labels={status.map(([k]) => k)}
+            labels={status.map(([k]) => formatStatusLabel(k, shippingStatusLabels))}
             series={[{ label: "Shipments", data: status.map(([, v]) => v), color: CHART_COLORS.secondary }]}
             className="h-[260px]"
           />

@@ -8,6 +8,7 @@ import { BarChart } from "@/components/analytics/charts/bar-chart";
 import { DoughnutChart } from "@/components/analytics/charts/doughnut-chart";
 import { CHART_COLORS } from "@/components/analytics/charts/chart-setup";
 import { api } from "@/lib/axios";
+import { distributorPoStatusLabels, formatStatusLabel } from "@/lib/po/status-labels";
 import type { InflowOutflowRow } from "@/lib/types/analytics";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -43,7 +44,9 @@ export function StockOrdersView() {
         <div className="lg:col-span-3">
           <ChartCard title="Stock orders by status">
             <BarChart
-              labels={statusEntries.map(([status]) => status)}
+              labels={statusEntries.map(([status]) =>
+                formatStatusLabel(status, distributorPoStatusLabels),
+              )}
               series={[{ label: "Orders", data: statusEntries.map(([, v]) => v), color: CHART_COLORS.secondary }]}
               className="h-[280px]"
             />
@@ -52,7 +55,7 @@ export function StockOrdersView() {
         <div className="lg:col-span-2">
           <ChartCard title="Status share">
             <DoughnutChart
-              labels={statusEntries.map(([s]) => s)}
+              labels={statusEntries.map(([s]) => formatStatusLabel(s, distributorPoStatusLabels))}
               values={statusEntries.map(([, v]) => v)}
               className="h-[280px]"
             />

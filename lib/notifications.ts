@@ -47,6 +47,49 @@ export type CreateNotificationResult = {
 
 type NotificationTx = Prisma.TransactionClient;
 
+function isSystemGeneratedEmail(email: string) {
+  const normalized = email.trim().toLowerCase();
+  return normalized.endsWith("@po-app.local") || normalized.endsWith("@keycloak.local");
+}
+
+function preferredEmail(...emails: Array<string | null | undefined>) {
+  for (const email of emails) {
+    const trimmed = email?.trim();
+    if (trimmed && !isSystemGeneratedEmail(trimmed)) return trimmed;
+  }
+  return null;
+}
+
+function preferredName(...names: Array<string | null | undefined>) {
+  for (const name of names) {
+    const trimmed = name?.trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+function uniqueEmailRecipients(
+  recipients: NotificationEmailRecipient[],
+  missingReason: string,
+) {
+  const seen = new Set<string>();
+  const unique: NotificationEmailRecipient[] = [];
+
+  for (const recipient of recipients) {
+    const email = recipient.email?.trim();
+    if (!email) continue;
+    const key = email.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({
+      email,
+      name: recipient.name?.trim() || null,
+    });
+  }
+
+  return unique.length > 0 ? unique : [{ email: null, missingReason }];
+}
+
 export async function createNotification(
   tx: NotificationTx,
   input: CreateNotificationInput,
@@ -104,15 +147,53 @@ export async function storeOwnerEmailRecipient(
   tx: NotificationTx,
   storeId: string,
 ): Promise<NotificationEmailRecipient> {
+  return (await storeOwnerEmailRecipients(tx, storeId))[0];
+}
+
+export async function storeOwnerEmailRecipients(
+  tx: NotificationTx,
+  storeId: string,
+): Promise<NotificationEmailRecipient[]> {
   const store = await tx.store.findUnique({
     where: { id: storeId },
-    select: { name: true, email: true },
+    select: {
+      name: true,
+      email: true,
+      userStores: {
+        where: { user: { type: "internal" } },
+        select: {
+          user: {
+            select: {
+              email: true,
+              name: true,
+              realEmail: true,
+              realName: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "asc" },
+      },
+    },
   });
-  return {
-    email: store?.email ?? null,
-    name: store?.name ?? null,
-    missingReason: "Store.email is missing.",
-  };
+
+  const recipients: NotificationEmailRecipient[] = [];
+  if (store) {
+    recipients.push({
+      email: preferredEmail(store.email),
+      name: preferredName(store.name),
+    });
+    recipients.push(
+      ...store.userStores.map(({ user }) => ({
+        email: preferredEmail(user.realEmail, user.email),
+        name: preferredName(user.realName, user.name),
+      })),
+    );
+  }
+
+  return uniqueEmailRecipients(
+    recipients,
+    "Store.email and internal user emails are missing.",
+  );
 }
 
 export async function distributorEmailRecipient(
@@ -125,22 +206,64 @@ export async function distributorEmailRecipient(
     saleChannelId: string | null | undefined;
   },
 ): Promise<NotificationEmailRecipient> {
+  return (await distributorEmailRecipients(tx, { storeId, saleChannelId }))[0];
+}
+
+export async function distributorEmailRecipients(
+  tx: NotificationTx,
+  {
+    storeId,
+    saleChannelId,
+  }: {
+    storeId: string;
+    saleChannelId: string | null | undefined;
+  },
+): Promise<NotificationEmailRecipient[]> {
   if (!saleChannelId) {
-    return {
-      email: null,
-      missingReason: "Distributor sale channel is missing.",
-    };
+    return [
+      {
+        email: null,
+        missingReason: "Distributor sale channel is missing.",
+      },
+    ];
   }
 
   const saleChannel = await tx.saleChannel.findFirst({
     where: { id: saleChannelId, storeId },
-    select: { name: true, email: true },
+    select: {
+      name: true,
+      email: true,
+      loginUser: {
+        select: {
+          email: true,
+          name: true,
+          realEmail: true,
+          realName: true,
+        },
+      },
+    },
   });
-  return {
-    email: saleChannel?.email ?? null,
-    name: saleChannel?.name ?? null,
-    missingReason: "SaleChannel.email is missing.",
-  };
+  const recipients: NotificationEmailRecipient[] = [];
+  if (saleChannel) {
+    recipients.push({
+      email: preferredEmail(saleChannel.email),
+      name: preferredName(saleChannel.name),
+    });
+    if (saleChannel.loginUser) {
+      recipients.push({
+        email: preferredEmail(
+          saleChannel.loginUser.realEmail,
+          saleChannel.loginUser.email,
+        ),
+        name: preferredName(saleChannel.loginUser.realName, saleChannel.loginUser.name),
+      });
+    }
+  }
+
+  return uniqueEmailRecipients(
+    recipients,
+    "SaleChannel.email and distributor login user email are missing.",
+  );
 }
 
 export async function dispatchNotificationEmails({

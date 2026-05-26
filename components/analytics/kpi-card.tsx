@@ -1,4 +1,5 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { formatUsd } from "@/lib/format-usd";
 import type { AnalyticsKpiValueFormat } from "@/lib/types/analytics";
 
@@ -26,18 +27,26 @@ export function KpiCard({
   deltaPct: number | null;
   valueFormat?: AnalyticsKpiValueFormat;
 }) {
-  const deltaLabel =
-    deltaPct == null ? "n/a vs previous period" : `${deltaPct >= 0 ? "+" : ""}${deltaPct.toFixed(1)}% vs previous period`;
-
   return (
     <Card size="sm" className="border-border/70 bg-card/50">
       <CardHeader>
         <CardDescription>{label}</CardDescription>
-        <CardTitle className="break-words text-xl tabular-nums sm:text-2xl">{formatKpiValue(value, valueFormat)}</CardTitle>
+        <CardTitle className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xl tabular-nums sm:text-2xl">
+          <span className="break-words">{formatKpiValue(value, valueFormat)}</span>
+          {deltaPct != null ? (
+            <span
+              className={cn(
+                "text-sm font-medium",
+                deltaPct > 0 && "text-emerald-600 dark:text-emerald-400",
+                deltaPct < 0 && "text-destructive",
+                deltaPct === 0 && "text-muted-foreground",
+              )}
+            >
+              {`${deltaPct >= 0 ? "+" : ""}${deltaPct.toFixed(1)}%`}
+            </span>
+          ) : null}
+        </CardTitle>
       </CardHeader>
-      <CardContent>
-        <p className="text-xs text-muted-foreground">{deltaLabel}</p>
-      </CardContent>
     </Card>
   );
 }

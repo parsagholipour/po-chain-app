@@ -13,6 +13,7 @@ import { DoughnutChart } from "@/components/analytics/charts/doughnut-chart";
 import { CHART_COLORS } from "@/components/analytics/charts/chart-setup";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/axios";
+import { formatStatusLabel, shippingStatusLabels } from "@/lib/po/status-labels";
 import type { AnalyticsKpi, BreakdownRow, ProductLeaderboardRow, TimeSeriesPoint } from "@/lib/types/analytics";
 
 type OverviewPayload = {
@@ -183,7 +184,7 @@ export function DashboardView() {
 
       <ChartCard title="Order pipeline by status">
         <BarChart
-          labels={statuses}
+          labels={statuses.map(formatStatusLabel)}
           series={stackedSeries}
           stacked
           className="h-[320px]"
@@ -207,7 +208,9 @@ export function DashboardView() {
         <div className="lg:col-span-2">
           <ChartCard title="Shipments by status">
             <DoughnutChart
-              labels={Object.keys(shippingData?.byStatus ?? {})}
+              labels={Object.keys(shippingData?.byStatus ?? {}).map((s) =>
+                formatStatusLabel(s, shippingStatusLabels),
+              )}
               values={Object.values(shippingData?.byStatus ?? {})}
               className="h-[280px]"
             />
