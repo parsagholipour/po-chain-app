@@ -6,6 +6,8 @@ import { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { STORE_CACHE_TAG } from "@/lib/store";
 import { requireInternalStoreContext } from "@/lib/store-context";
+import { normalizeStoreTheme, type StoreTheme } from "@/lib/store-theme";
+import { storeThemeSchema } from "@/lib/validations/store";
 
 const storeSettingsSchema = z.object({
   logoKey: z
@@ -13,12 +15,14 @@ const storeSettingsSchema = z.object({
     .trim()
     .max(1200, "Logo reference is too long")
     .nullable(),
+  theme: storeThemeSchema.optional(),
 });
 
 export type StoreSettingsUpdate = {
   id: string;
   name: string;
   logoKey: string | null;
+  theme: StoreTheme;
 };
 
 export type UpdateStoreSettingsResult =
@@ -44,18 +48,20 @@ export async function updateStoreSettings(
       where: { id: authz.context.storeId },
       data: {
         logoKey: parsed.data.logoKey || null,
+        ...(parsed.data.theme ? { theme: parsed.data.theme } : {}),
       },
       select: {
         id: true,
         name: true,
         logoKey: true,
+        theme: true,
       },
     });
 
     updateTag(STORE_CACHE_TAG);
     revalidatePath("/settings");
 
-    return { ok: true, store };
+    return { ok: true, store: { ...store, theme: normalizeStoreTheme(store.theme) } };
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&

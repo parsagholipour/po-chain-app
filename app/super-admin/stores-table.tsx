@@ -9,14 +9,24 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import { useForm, useFormState, type Resolver } from "react-hook-form";
+import {
+  useForm,
+  useFormState,
+  useWatch,
+  type Resolver,
+} from "react-hook-form";
 import { toast } from "sonner";
 import { updateSuperAdminStore, type SuperAdminStoreUpdate } from "./actions";
 import {
   superAdminStoreUpdateSchema,
   type SuperAdminStoreFormValues,
 } from "@/lib/validations/store";
-import { DEFAULT_STORE_THEME } from "@/lib/store-theme";
+import {
+  DEFAULT_STORE_THEME,
+  STORE_BODY_FONT_FAMILY_OPTIONS,
+  STORE_FONT_FAMILY_OPTIONS,
+  STORE_HEADING_FONT_FAMILY_OPTIONS,
+} from "@/lib/store-theme";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -34,6 +44,13 @@ import {
   FieldSet,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -55,6 +72,13 @@ type StoresTableProps = {
 function sortStores(rows: SuperAdminStoreRow[]) {
   return [...rows].sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+  );
+}
+
+function fontFamilyLabel(value: string) {
+  return (
+    STORE_FONT_FAMILY_OPTIONS.find((option) => option.value === value)?.label ??
+    value
   );
 }
 
@@ -87,6 +111,14 @@ function StoreEditDialog({
     defaultValues,
   });
   const { isSubmitting } = useFormState({ control: form.control });
+  const bodyFontFamily = useWatch({
+    control: form.control,
+    name: "theme.bodyFontFamily",
+  });
+  const headingFontFamily = useWatch({
+    control: form.control,
+    name: "theme.headingFontFamily",
+  });
 
   useEffect(() => {
     if (open) form.reset(defaultValues);
@@ -233,6 +265,78 @@ function StoreEditDialog({
                   />
                 </FieldContent>
               </Field>
+
+              <Field
+                data-invalid={!!form.formState.errors.theme?.headingFontFamily}
+                className="gap-1.5"
+              >
+                <FieldLabel htmlFor="store-theme-heading-font" required>
+                  Title font
+                </FieldLabel>
+                <FieldContent>
+                  <Select
+                    value={headingFontFamily}
+                    onValueChange={(value) => {
+                      if (typeof value !== "string") return;
+                      form.setValue("theme.headingFontFamily", value, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                    }}
+                    items={STORE_HEADING_FONT_FAMILY_OPTIONS}
+                  >
+                    <SelectTrigger id="store-theme-heading-font" className="w-full">
+                      <SelectValue placeholder="Title font" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORE_HEADING_FONT_FAMILY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldError
+                    errors={[form.formState.errors.theme?.headingFontFamily]}
+                  />
+                </FieldContent>
+              </Field>
+
+              <Field
+                data-invalid={!!form.formState.errors.theme?.bodyFontFamily}
+                className="gap-1.5"
+              >
+                <FieldLabel htmlFor="store-theme-body-font" required>
+                  Normal text font
+                </FieldLabel>
+                <FieldContent>
+                  <Select
+                    value={bodyFontFamily}
+                    onValueChange={(value) => {
+                      if (typeof value !== "string") return;
+                      form.setValue("theme.bodyFontFamily", value, {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      });
+                    }}
+                    items={STORE_BODY_FONT_FAMILY_OPTIONS}
+                  >
+                    <SelectTrigger id="store-theme-body-font" className="w-full">
+                      <SelectValue placeholder="Normal text font" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORE_BODY_FONT_FAMILY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldError
+                    errors={[form.formState.errors.theme?.bodyFontFamily]}
+                  />
+                </FieldContent>
+              </Field>
             </FieldGroup>
           </FieldSet>
 
@@ -302,6 +406,10 @@ export function SuperAdminStoresTable({
                     </span>
                     <span className="font-mono text-xs text-muted-foreground">
                       {store.theme.primaryColor}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {fontFamilyLabel(store.theme.headingFontFamily)} /{" "}
+                      {fontFamilyLabel(store.theme.bodyFontFamily)}
                     </span>
                   </div>
                 </TableCell>

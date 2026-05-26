@@ -192,7 +192,7 @@ model Store {
   email     String?
   website   String?
   logoKey   String?
-  theme     Json     @default("{\"primaryColor\":\"rgb(110 46 143)\",\"primaryForegroundColor\":\"rgb(255 255 255)\",\"logoHueRotateDeg\":120}")
+  theme     Json     @default("{\"primaryColor\":\"rgb(110 46 143)\",\"primaryForegroundColor\":\"rgb(255 255 255)\",\"logoHueRotateDeg\":120,\"bodyFontFamily\":\"var(--font-geist-sans)\",\"headingFontFamily\":\"var(--store-font-body)\"}")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

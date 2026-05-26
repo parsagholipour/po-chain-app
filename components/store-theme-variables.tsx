@@ -18,14 +18,26 @@ export function StoreThemeVariables({
     theme?.primaryForegroundColor ?? DEFAULT_STORE_THEME.primaryForegroundColor;
   const logoHueRotateDeg =
     theme?.logoHueRotateDeg ?? DEFAULT_STORE_THEME.logoHueRotateDeg;
+  const bodyFontFamily =
+    theme?.bodyFontFamily ?? DEFAULT_STORE_THEME.bodyFontFamily;
+  const headingFontFamily =
+    theme?.headingFontFamily ?? DEFAULT_STORE_THEME.headingFontFamily;
   const variables = useMemo(
     () =>
       getStoreThemeCssVariables({
         primaryColor,
         primaryForegroundColor,
         logoHueRotateDeg,
+        bodyFontFamily,
+        headingFontFamily,
       }),
-    [logoHueRotateDeg, primaryColor, primaryForegroundColor],
+    [
+      bodyFontFamily,
+      headingFontFamily,
+      logoHueRotateDeg,
+      primaryColor,
+      primaryForegroundColor,
+    ],
   );
 
   useEffect(() => {

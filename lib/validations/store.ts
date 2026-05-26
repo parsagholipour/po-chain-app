@@ -1,7 +1,10 @@
 import { z } from "zod";
+import { isSafeStoreFontFamily } from "@/lib/store-theme";
 
 const colorInputMessage =
   "Use a hex color, rgb(r g b), or an RGB triplet like 110 46 143";
+const fontFamilyMessage =
+  "Use a valid font family value without CSS declarations or URLs";
 
 function blankToNull(value: unknown) {
   if (typeof value !== "string") return value;
@@ -81,16 +84,29 @@ const logoHueRotateDeg = z.coerce
     message: "Logo hue rotation must be between 0 and 360 degrees",
   });
 
+const fontFamily = z
+  .string()
+  .trim()
+  .min(1, "Font family is required")
+  .max(240, "Font family is too long")
+  .refine(isSafeStoreFontFamily, {
+    message: fontFamilyMessage,
+  });
+
+export const storeThemeSchema = z.object({
+  primaryColor: themeColor,
+  primaryForegroundColor: themeColor,
+  logoHueRotateDeg,
+  bodyFontFamily: fontFamily,
+  headingFontFamily: fontFamily,
+});
+
 export const superAdminStoreUpdateSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
   slug: z.string().trim().min(1, "Slug is required"),
   email: nullableOptionalEmail,
   website: nullableOptionalUrl,
-  theme: z.object({
-    primaryColor: themeColor,
-    primaryForegroundColor: themeColor,
-    logoHueRotateDeg,
-  }),
+  theme: storeThemeSchema,
 });
 
 export type SuperAdminStoreFormValues = z.infer<

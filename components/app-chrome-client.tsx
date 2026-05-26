@@ -84,7 +84,7 @@ export function AppChromeClient({
   if (isDistributor && !distributorAllowed) {
     return (
       <div
-        className="flex min-h-[100dvh] flex-1 flex-col"
+        className="flex min-h-[100dvh] flex-1 flex-col font-sans"
         style={hasActiveStore ? getStoreThemeStyle(shellTheme) : undefined}
       >
         <StoreThemeVariables theme={hasActiveStore ? shellTheme : null} />
@@ -115,7 +115,7 @@ export function AppChromeClient({
 
   return (
     <div
-      className="flex min-h-[100dvh] flex-1 flex-col"
+      className="flex min-h-[100dvh] flex-1 flex-col font-sans"
       style={hasActiveStore ? getStoreThemeStyle(shellTheme) : undefined}
     >
       <StoreThemeVariables theme={hasActiveStore ? shellTheme : null} />

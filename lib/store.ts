@@ -5,7 +5,7 @@ import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { runIfPrismaAvailable, type PrismaAvailabilityResult } from "@/lib/prisma-unavailable";
 import {
-  DEFAULT_STORE_THEME,
+  ARCANE_FORTRESS_STORE_THEME,
   normalizeStoreTheme,
   type StoreTheme,
 } from "@/lib/store-theme";
@@ -169,7 +169,7 @@ export async function syncUserWithDefaultStore({
         {
           slug: DEFAULT_STORE_SLUG,
           name: DEFAULT_STORE_NAME,
-          theme: DEFAULT_STORE_THEME,
+          theme: ARCANE_FORTRESS_STORE_THEME,
         },
       ],
       skipDuplicates: true,
@@ -275,7 +275,7 @@ export async function ensureDefaultStoreForUser(userId: string): Promise<StoreOp
         {
           slug: DEFAULT_STORE_SLUG,
           name: DEFAULT_STORE_NAME,
-          theme: DEFAULT_STORE_THEME,
+          theme: ARCANE_FORTRESS_STORE_THEME,
         },
       ],
       skipDuplicates: true,

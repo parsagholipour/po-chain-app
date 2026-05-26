@@ -13,6 +13,7 @@ export default async function SettingsPage() {
         id: storeContext.activeStore.id,
         name: storeContext.activeStore.name,
         logoKey: storeContext.activeStore.logoKey,
+        theme: storeContext.activeStore.theme,
       }
     : null;
 
