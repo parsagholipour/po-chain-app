@@ -24,6 +24,7 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
 import { parseUuidParam, useClearIdSearchParam } from "@/lib/url-id-param";
+import { useClientReady } from "@/hooks/use-client-ready";
 import {
   LIST_FILTER_ALL_VALUE,
   useDebouncedValue,
@@ -91,6 +92,7 @@ function buildProductSearchParams({
 }
 
 export function ProductsView() {
+  const clientReady = useClientReady();
   const qc = useQueryClient();
   const searchParams = useSearchParams();
   const clearIdParam = useClearIdSearchParam();
@@ -332,13 +334,15 @@ export function ProductsView() {
             setEditing(null);
             setOpen(true);
           }}
-          disabled={manufacturersPending || manufacturers.length === 0}
+          disabled={
+            clientReady && (manufacturersPending || manufacturers.length === 0)
+          }
         >
           <Plus className="size-4" />
           Add product
         </Button>
       </div>
-      {!manufacturersPending && manufacturers.length === 0 ? (
+      {clientReady && !manufacturersPending && manufacturers.length === 0 ? (
         <p className="text-sm text-amber-600 dark:text-amber-400">
           Create at least one manufacturer before adding products.
         </p>
@@ -374,7 +378,7 @@ export function ProductsView() {
               ariaLabel: "Filter by category",
               placeholder: "Category",
               options: categoryFilterOptions,
-              disabled: categoriesPending,
+              disabled: clientReady && categoriesPending,
             },
             {
               key: "type",
@@ -387,7 +391,7 @@ export function ProductsView() {
               ariaLabel: "Filter by type",
               placeholder: "Type",
               options: typeFilterOptions,
-              disabled: productTypesPending,
+              disabled: clientReady && productTypesPending,
             },
             {
               key: "collection",
@@ -400,7 +404,7 @@ export function ProductsView() {
               ariaLabel: "Filter by collection",
               placeholder: "Collection",
               options: collectionFilterOptions,
-              disabled: productCollectionsPending,
+              disabled: clientReady && productCollectionsPending,
             },
           ]}
           hasActiveFilters={productFilters.hasActiveFilters}

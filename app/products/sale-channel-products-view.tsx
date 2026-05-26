@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ListFilters } from "@/components/ui/list-filters";
 import { TableContainer } from "@/components/ui/table-container";
 import { TablePagination } from "@/components/ui/table-pagination";
+import { useClientReady } from "@/hooks/use-client-ready";
 import { usePagination } from "@/hooks/use-pagination";
 import {
   LIST_FILTER_ALL_VALUE,
@@ -42,6 +43,7 @@ function searchHaystack(row: SaleChannelProduct) {
 }
 
 export function SaleChannelProductsView() {
+  const clientReady = useClientReady();
   const productFilters = useListFilterState({ initialFilters: filterDefaults });
   const debouncedSearch = useDebouncedValue(productFilters.search);
   const [selectedCategoryIdState, setSelectedCategoryId] = useState<string | null>(null);
@@ -181,7 +183,7 @@ export function SaleChannelProductsView() {
               ariaLabel: "Filter by collection",
               placeholder: "Collection",
               options: collectionOptions,
-              disabled: isPending || collectionOptions.length === 0,
+              disabled: clientReady && (isPending || collectionOptions.length === 0),
             },
           ]}
           hasActiveFilters={productFilters.hasActiveFilters}

@@ -2,6 +2,7 @@
 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { useClientReady } from "@/hooks/use-client-ready";
 import { cn } from "@/lib/utils";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 
@@ -32,6 +33,9 @@ export function TablePagination({
   pageSizeOptions = DEFAULT_PAGE_SIZE_OPTIONS,
   className,
 }: Props) {
+  const clientReady = useClientReady();
+  const atFirstPage = page <= 1;
+  const atLastPage = page >= pageCount;
   const hasItems = totalItems > 0;
   const rangeLabel = hasItems
     ? `${startIndex + 1}-${endIndex} of ${totalItems}`
@@ -75,7 +79,7 @@ export function TablePagination({
             variant="outline"
             className="hidden h-8 w-8 p-0 lg:flex"
             onClick={() => onPageChange(1)}
-            disabled={page <= 1}
+            disabled={clientReady && atFirstPage}
             aria-label="Go to first page"
           >
             <ChevronsLeft className="h-4 w-4" />
@@ -84,7 +88,7 @@ export function TablePagination({
             variant="outline"
             className="h-8 w-8 p-0"
             onClick={() => onPageChange(page - 1)}
-            disabled={page <= 1}
+            disabled={clientReady && atFirstPage}
             aria-label="Go to previous page"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -93,7 +97,7 @@ export function TablePagination({
             variant="outline"
             className="h-8 w-8 p-0"
             onClick={() => onPageChange(page + 1)}
-            disabled={page >= pageCount}
+            disabled={clientReady && atLastPage}
             aria-label="Go to next page"
           >
             <ChevronRight className="h-4 w-4" />
@@ -102,7 +106,7 @@ export function TablePagination({
             variant="outline"
             className="hidden h-8 w-8 p-0 lg:flex"
             onClick={() => onPageChange(pageCount)}
-            disabled={page >= pageCount}
+            disabled={clientReady && atLastPage}
             aria-label="Go to last page"
           >
             <ChevronsRight className="h-4 w-4" />
