@@ -284,10 +284,10 @@ function ProductPickerRow({
               Stock:{" "}
               <span className="text-foreground">{emptyValue(product.stockCount)}</span>
             </div>
-            <div>
-              Order by:{" "}
+            {!product.orderByDate ? null : <div>
+              Order by Date:{" "}
               <span className="text-foreground">{formatDate(product.orderByDate)}</span>
-            </div>
+            </div>}
           </div>
 
           {product.description ? (
