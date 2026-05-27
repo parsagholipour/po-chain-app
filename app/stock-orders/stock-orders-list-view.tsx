@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/axios";
@@ -322,7 +322,9 @@ export function StockOrdersListView() {
       );
       return rows;
     },
+    placeholderData: keepPreviousData,
   });
+  const isTablePending = isPending && data.length === 0;
   const pagination = usePagination({
     totalItems: data.length,
     resetDeps: [debouncedQ, status, selectedManufacturerId],
@@ -424,7 +426,7 @@ export function StockOrdersListView() {
             status={status}
             onStatusChange={setStatus}
             filterReady={filterReady}
-            isPending={isPending}
+            isPending={isTablePending}
             data={pagedRows}
             emptyNoScopeMessage="Loading…"
             emptyFilteredMessage={

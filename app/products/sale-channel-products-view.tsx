@@ -115,6 +115,7 @@ export function SaleChannelProductsView() {
     resetDeps: [debouncedSearch, productFilters.filters.collection, selectedCategoryId],
   });
   const pagedRows = pagination.sliceItems(filteredRows);
+  const isTablePending = isPending && data.length === 0;
 
   return (
     <div className="space-y-6">
@@ -193,7 +194,7 @@ export function SaleChannelProductsView() {
         />
         <SaleChannelProductsTable
           rows={pagedRows}
-          isPending={isPending}
+          isPending={isTablePending}
           emptyMessage={
             productFilters.hasActiveFilters
               ? "No products match your filters."

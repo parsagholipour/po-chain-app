@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
@@ -48,6 +48,7 @@ export function ShippingView() {
       const { data } = await api.get<ShippingRow[]>(`/api/shipping?type=${effectiveTab}`);
       return data;
     },
+    placeholderData: keepPreviousData,
   });
   const { data: shippingCounts } = useQuery({
     queryKey: ["shipping", "open-counts"],
@@ -73,6 +74,7 @@ export function ShippingView() {
   const rows = shippings || [];
   const pagination = usePagination({ totalItems: rows.length, resetDeps: [effectiveTab] });
   const pagedRows = pagination.sliceItems(rows);
+  const isTablePending = isPending && rows.length === 0;
 
   useEffect(() => {
     if (!idFromUrl || sessionStatus === "loading") return;
@@ -174,7 +176,7 @@ export function ShippingView() {
       >
         {isDistributor ? (
           <div className="p-3 pt-4 sm:p-5 sm:pt-4">
-            <ShippingTable shippings={pagedRows} isPending={isPending} readOnly />
+            <ShippingTable shippings={pagedRows} isPending={isTablePending} readOnly />
           </div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0">
@@ -206,7 +208,7 @@ export function ShippingView() {
               <div className="p-3 pt-4 sm:p-5 sm:pt-4">
                 <ShippingTable
                   shippings={pagedRows}
-                  isPending={isPending}
+                  isPending={isTablePending}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                 />

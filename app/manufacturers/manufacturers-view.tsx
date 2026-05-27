@@ -40,6 +40,7 @@ export function ManufacturersView() {
   const loadError = isError ? apiErrorMessage(error) : null;
   const pagination = usePagination({ totalItems: data.length });
   const pagedRows = pagination.sliceItems(data);
+  const isTablePending = isPending && data.length === 0;
 
   useEffect(() => {
     if (!idFromUrl || isPending) return;
@@ -136,7 +137,7 @@ export function ManufacturersView() {
       >
         <ManufacturersTable
           rows={pagedRows}
-          isPending={isPending}
+          isPending={isTablePending}
           onEdit={(row) => {
             setEditing(row);
             setOpen(true);

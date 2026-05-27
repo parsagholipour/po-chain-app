@@ -31,6 +31,7 @@ export function ProductCollectionsView() {
   });
   const pagination = usePagination({ totalItems: data.length });
   const pagedRows = pagination.sliceItems(data);
+  const isTablePending = isPending && data.length === 0;
 
   const createMut = useMutation({
     mutationFn: async (values: ProductCollectionFormValues) => {
@@ -107,7 +108,7 @@ export function ProductCollectionsView() {
       >
         <ProductCollectionsTable
           rows={pagedRows}
-          isPending={isPending}
+          isPending={isTablePending}
           onEdit={(row) => {
             setEditing(row);
             setOpen(true);

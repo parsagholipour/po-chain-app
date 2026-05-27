@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -428,7 +428,9 @@ export function PurchaseOrdersListView() {
       );
       return rows;
     },
+    placeholderData: keepPreviousData,
   });
+  const isTablePending = isPending && data.length === 0;
   const pagination = usePagination({
     totalItems: data.length,
     resetDeps: [debouncedQ, status, perspective, selectedSaleChannelId, selectedManufacturerId],
@@ -527,7 +529,7 @@ export function PurchaseOrdersListView() {
               status={status}
               onStatusChange={setStatus}
               filterReady={filterReady}
-              isPending={isPending}
+              isPending={isTablePending}
               data={pagedRows}
               emptyNoScopeMessage="Loading..."
               emptyFilteredMessage="No purchase orders match your filters."
@@ -589,7 +591,7 @@ export function PurchaseOrdersListView() {
                 status={status}
                 onStatusChange={setStatus}
                 filterReady={filterReady}
-                isPending={isPending}
+                isPending={isTablePending}
                 data={pagedRows}
                 emptyNoScopeMessage="Loading…"
                 emptyFilteredMessage={
@@ -620,7 +622,7 @@ export function PurchaseOrdersListView() {
                 status={status}
                 onStatusChange={setStatus}
                 filterReady={filterReady}
-                isPending={isPending}
+                isPending={isTablePending}
                 data={pagedRows}
                 emptyNoScopeMessage="Loading…"
                 emptyFilteredMessage={

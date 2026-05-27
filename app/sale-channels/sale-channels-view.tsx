@@ -87,6 +87,7 @@ function DistributorLocationsView() {
   const isPending = saleChannelPending || (Boolean(saleChannel) && locationsPending);
   const pagination = usePagination({ totalItems: locations.length });
   const pagedRows = pagination.sliceItems(locations);
+  const isTablePending = isPending && locations.length === 0;
 
   useEffect(() => {
     if (!idFromUrl || isPending) return;
@@ -190,7 +191,7 @@ function DistributorLocationsView() {
       >
         <SaleChannelLocationsTable
           rows={pagedRows}
-          isPending={isPending}
+          isPending={isTablePending}
           emptyMessage={
             saleChannel ? "No locations yet." : "No sale channel is assigned to your account."
           }
@@ -256,6 +257,7 @@ function InternalSaleChannelsView() {
   });
   const pagination = usePagination({ totalItems: data.length });
   const pagedRows = pagination.sliceItems(data);
+  const isTablePending = isPending && data.length === 0;
 
   useEffect(() => {
     if (!idFromUrl || isPending) return;
@@ -346,7 +348,7 @@ function InternalSaleChannelsView() {
       >
         <SaleChannelsTable
           rows={pagedRows}
-          isPending={isPending}
+          isPending={isTablePending}
           onLocations={(row) => setLocationsFor(row)}
           onMagicLinks={(row) => setMagicLinksFor(row)}
           onEdit={(row) => {

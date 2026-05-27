@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
@@ -40,9 +40,11 @@ export function LogisticsPartnersView() {
       );
       return rows;
     },
+    placeholderData: keepPreviousData,
   });
   const pagination = usePagination({ totalItems: data.length, resetDeps: [activeTab] });
   const pagedRows = pagination.sliceItems(data);
+  const isTablePending = isPending && data.length === 0;
 
   const deleteMut = useMutation({
     mutationFn: async (id: string) => {
@@ -129,7 +131,7 @@ export function LogisticsPartnersView() {
             <div className="p-5 pt-4">
               <LogisticsPartnersTable
                 partners={pagedRows}
-                isPending={isPending}
+                isPending={isTablePending}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
               />

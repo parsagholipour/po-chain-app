@@ -3,12 +3,33 @@
 import { makeQueryClient } from "@/lib/get-query-client";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useIsFetching, useIsMutating } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { SessionProvider } from "next-auth/react";
-import NextTopLoader from "nextjs-toploader";
-import { useEffect, useState } from "react";
+import NextTopLoader, { useTopLoader } from "nextjs-toploader";
+import { useEffect, useRef, useState } from "react";
 import { ConfirmProvider } from "@/components/confirm-provider";
+
+function ReactQueryTopLoader() {
+  const loader = useTopLoader();
+  const fetchingCount = useIsFetching();
+  const mutatingCount = useIsMutating();
+  const isBusy = fetchingCount + mutatingCount > 0;
+  const wasBusyRef = useRef(false);
+
+  useEffect(() => {
+    if (isBusy === wasBusyRef.current) return;
+
+    wasBusyRef.current = isBusy;
+    if (isBusy) {
+      loader.start();
+    } else {
+      loader.done();
+    }
+  }, [isBusy, loader]);
+
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => makeQueryClient());
@@ -30,6 +51,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         zIndex={9999}
       />
       <QueryClientProvider client={queryClient}>
+        <ReactQueryTopLoader />
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

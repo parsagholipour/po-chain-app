@@ -118,7 +118,6 @@ export function ProductsView() {
   const {
     data: productPage,
     isPending,
-    isFetching,
   } = useQuery({
     queryKey: [
       ...productsKey,
@@ -208,7 +207,7 @@ export function ProductsView() {
   const safePage = clamp(page, 1, pageCount);
   const startIndex = totalItems === 0 ? 0 : (safePage - 1) * pageSize;
   const endIndex = totalItems === 0 ? 0 : Math.min(startIndex + pageSize, totalItems);
-  const isTablePending = isPending || isFetching;
+  const isTablePending = isPending && rows.length === 0;
 
   useEffect(() => {
     if (page === safePage) return;

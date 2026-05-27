@@ -48,6 +48,7 @@ export function WarehousesView() {
 
   const pagination = usePagination({ totalItems: data.length });
   const pagedRows = pagination.sliceItems(data);
+  const isTablePending = isPending && data.length === 0;
 
   useEffect(() => {
     if (!idFromUrl || isPending) return;
@@ -141,7 +142,7 @@ export function WarehousesView() {
       >
         <WarehousesTable
           rows={pagedRows}
-          isPending={isPending}
+          isPending={isTablePending}
           onEdit={(row) => {
             setEditing(row);
             setOpen(true);

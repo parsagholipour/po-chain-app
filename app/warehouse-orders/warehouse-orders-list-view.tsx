@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { api } from "@/lib/axios";
 import { cn } from "@/lib/utils";
@@ -75,7 +75,9 @@ export function WarehouseOrdersListView() {
       );
       return data;
     },
+    placeholderData: keepPreviousData,
   });
+  const isTablePending = isPending && data.length === 0;
 
   const pagination = usePagination({
     totalItems: data.length,
@@ -178,7 +180,7 @@ export function WarehouseOrdersListView() {
                       Loading...
                     </TableCell>
                   </TableRow>
-                ) : isPending ? (
+                ) : isTablePending ? (
                   <TableRow>
                     <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
                       Loading...
