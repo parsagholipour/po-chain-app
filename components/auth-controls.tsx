@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { KEYCLOAK_PROVIDER_ID } from "@/lib/auth-sign-in";
-import { signIn, signOut, useSession } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import Link from "next/link";
 import type { ComponentProps } from "react";
 
@@ -47,14 +47,11 @@ export function AuthControls({
       >
         Account
       </Link>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() => signOut({ callbackUrl: "/" })}
-      >
-        Sign out
-      </Button>
+      <form action="/auth/signout" method="post">
+        <Button type="submit" variant="outline" size="sm">
+          Sign out
+        </Button>
+      </form>
     </div>
   );
 }

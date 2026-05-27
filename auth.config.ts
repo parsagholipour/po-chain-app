@@ -2,6 +2,16 @@ import type { NextAuthConfig } from "next-auth";
 import Keycloak from "next-auth/providers/keycloak";
 import { NextResponse } from "next/server";
 
+function isPublicAuthPath(pathname: string) {
+  return (
+    pathname === "/auth/error" ||
+    pathname === "/auth/keycloak" ||
+    pathname === "/auth/signed-out" ||
+    pathname === "/auth/signout" ||
+    pathname.startsWith("/magic/store/")
+  );
+}
+
 export default {
   providers: [
     Keycloak({
@@ -23,18 +33,15 @@ export default {
       return session;
     },
     authorized({ auth, request }) {
-      if (auth?.forceSignOut) {
-        const signOutUrl = new URL("/api/auth/signout", request.nextUrl.origin);
-        signOutUrl.searchParams.set("callbackUrl", new URL("/", request.nextUrl.origin).toString());
-        return NextResponse.redirect(signOutUrl);
-      }
-      if (
-        request.nextUrl.pathname.startsWith("/auth/error") ||
-        request.nextUrl.pathname === "/auth/keycloak" ||
-        request.nextUrl.pathname.startsWith("/magic/store/")
-      ) {
+      if (isPublicAuthPath(request.nextUrl.pathname)) {
         return true;
       }
+
+      if (auth?.forceSignOut) {
+        const signOutUrl = new URL("/auth/signout", request.nextUrl.origin);
+        return NextResponse.redirect(signOutUrl);
+      }
+
       return !!auth?.user;
     },
   },

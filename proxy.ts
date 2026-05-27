@@ -10,6 +10,8 @@ function isPublicRoute(pathname: string) {
   return (
     pathname === "/auth/error" ||
     pathname === "/auth/keycloak" ||
+    pathname === "/auth/signed-out" ||
+    pathname === "/auth/signout" ||
     pathname.startsWith("/magic/store/")
   );
 }

@@ -45,6 +45,8 @@ export function AppChromeClient({
   const isPublicPath =
     pathname.startsWith("/auth/error") ||
     pathname === "/auth/keycloak" ||
+    pathname === "/auth/signed-out" ||
+    pathname === "/auth/signout" ||
     pathname.startsWith("/magic/store/");
   const isDistributor = userType === "distributor";
   const isStoreSaleChannel = saleChannelType === "store";
