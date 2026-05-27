@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Suspense, useState, type FocusEvent, type MouseEvent } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { Suspense, useCallback, useRef, useState, type FocusEvent, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
 import {
   Boxes,
@@ -173,6 +173,26 @@ function navGroupActive(pathname: string, item: NavGroup) {
   return navActive(pathname, item.href) || item.children.some((child) => navActive(pathname, child.href));
 }
 
+function normalizePathname(pathname: string) {
+  if (pathname === "/") return pathname;
+  return pathname.replace(/\/+$/, "") || "/";
+}
+
+function isModifiedClick(event: MouseEvent<HTMLAnchorElement>) {
+  return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+}
+
+function isCurrentUrl(href: string) {
+  const currentUrl = new URL(window.location.href);
+  const targetUrl = new URL(href, currentUrl);
+
+  return (
+    normalizePathname(currentUrl.pathname) === normalizePathname(targetUrl.pathname) &&
+    currentUrl.search === targetUrl.search &&
+    currentUrl.hash === targetUrl.hash
+  );
+}
+
 function DefaultBrandLogo({
   isCollapsed,
   logoHueRotateDeg,
@@ -317,11 +337,13 @@ function CollapsedNavPreviewCard({ preview }: { preview: CollapsedNavPreview }) 
 
 function NavList({
   onNavigate,
+  onResetCurrentPage,
   className,
   isCollapsed,
   navItems = nav,
 }: {
   onNavigate?: () => void;
+  onResetCurrentPage?: (href: string) => void;
   className?: string;
   isCollapsed?: boolean;
   navItems?: readonly NavItem[];
@@ -361,9 +383,16 @@ function NavList({
 
   const hideCollapsedPreview = () => setCollapsedPreview(null);
 
-  const handleNavigate = () => {
+  const handleNavigate = (href: string, event: MouseEvent<HTMLAnchorElement>) => {
     hideCollapsedPreview();
     onNavigate?.();
+
+    if (isModifiedClick(event)) return;
+    if (!isCurrentUrl(href)) return;
+    if (!onResetCurrentPage) return;
+
+    event.preventDefault();
+    onResetCurrentPage(href);
   };
 
   return (
@@ -381,7 +410,7 @@ function NavList({
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={handleNavigate}
+                onClick={(event) => handleNavigate(item.href, event)}
                 aria-label={isCollapsed ? item.label : undefined}
                 onMouseEnter={(event) =>
                   showCollapsedPreview(item.label, item.icon, active, countByHref[item.href], event)
@@ -450,7 +479,7 @@ function NavList({
                 <DropdownMenuContent align="end" side="right" sideOffset={8} className="w-56">
                   <DropdownMenuItem
                     render={
-                      <Link href={item.href} onClick={handleNavigate}>
+                      <Link href={item.href} onClick={(event) => handleNavigate(item.href, event)}>
                         {item.label}
                       </Link>
                     }
@@ -459,7 +488,7 @@ function NavList({
                     <DropdownMenuItem
                       key={child.href}
                       render={
-                        <Link href={child.href} onClick={handleNavigate}>
+                        <Link href={child.href} onClick={(event) => handleNavigate(child.href, event)}>
                           {child.label}
                         </Link>
                       }
@@ -474,7 +503,7 @@ function NavList({
             <div key={item.href} className="space-y-0.5">
               <Link
                 href={item.href}
-                onClick={handleNavigate}
+                onClick={(event) => handleNavigate(item.href, event)}
                 className={cn(
                   "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   parentActive
@@ -504,7 +533,7 @@ function NavList({
                       <Link
                         key={child.href}
                         href={child.href}
-                        onClick={handleNavigate}
+                        onClick={(event) => handleNavigate(child.href, event)}
                         className={cn(
                           "group relative flex items-center rounded-md px-3 py-2 text-sm transition-colors",
                           childActive
@@ -611,8 +640,12 @@ export function AdminShell({
   logoHueRotateDeg: number;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const mainRef = useRef<HTMLElement | null>(null);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [pageResetKey, setPageResetKey] = useState(0);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("sidebar:collapsed") === "true";
@@ -630,6 +663,14 @@ export function AdminShell({
   const distributorName =
     isDistributor && saleChannelType === "distributor" ? saleChannelName : null;
   const navItems = isDistributor ? (saleChannelType === "store" ? storeNav : distributorNav) : nav;
+  const resetCurrentPage = useCallback(
+    () => {
+      setPageResetKey((key) => key + 1);
+      mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      router.refresh();
+    },
+    [router],
+  );
 
   if (!authenticated) {
     return (
@@ -679,7 +720,11 @@ export function AdminShell({
               subtitle={brandSubtitle}
             />
             <ScrollArea className="min-h-0 flex-1">
-              <NavList isCollapsed={isCollapsed} navItems={navItems} />
+              <NavList
+                isCollapsed={isCollapsed}
+                navItems={navItems}
+                onResetCurrentPage={resetCurrentPage}
+              />
             </ScrollArea>
             <SidebarFooter
               stores={stores}
@@ -756,6 +801,7 @@ export function AdminShell({
             <ScrollArea className="min-h-0 flex-1">
               <NavList
                 onNavigate={() => setMobileNavOpen(false)}
+                onResetCurrentPage={resetCurrentPage}
                 className="pb-6"
                 navItems={navItems}
               />
@@ -793,8 +839,11 @@ export function AdminShell({
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
+        <main ref={mainRef} className="min-h-0 flex-1 overflow-y-auto">
+          <div
+            key={`${pathname}:${pageResetKey}`}
+            className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-6 sm:py-8 lg:px-8"
+          >
             {children}
           </div>
         </main>
