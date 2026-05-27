@@ -12,21 +12,50 @@ import { ConfirmProvider } from "@/components/confirm-provider";
 
 function ReactQueryTopLoader() {
   const loader = useTopLoader();
-  const fetchingCount = useIsFetching();
+  const loaderRef = useRef(loader);
+  const fetchingCount = useIsFetching({
+    predicate: (query) => query.state.isInvalidated && query.state.data !== undefined,
+  });
   const mutatingCount = useIsMutating();
   const isBusy = fetchingCount + mutatingCount > 0;
   const wasBusyRef = useRef(false);
+  const startTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isVisibleRef = useRef(false);
+
+  useEffect(() => {
+    loaderRef.current = loader;
+  }, [loader]);
 
   useEffect(() => {
     if (isBusy === wasBusyRef.current) return;
 
     wasBusyRef.current = isBusy;
     if (isBusy) {
-      loader.start();
+      if (startTimerRef.current || isVisibleRef.current) return;
+
+      startTimerRef.current = setTimeout(() => {
+        startTimerRef.current = null;
+        isVisibleRef.current = true;
+        loaderRef.current.start();
+      }, 150);
     } else {
-      loader.done();
+      if (startTimerRef.current) {
+        clearTimeout(startTimerRef.current);
+        startTimerRef.current = null;
+      }
+      if (isVisibleRef.current) {
+        isVisibleRef.current = false;
+        loaderRef.current.done();
+      }
     }
-  }, [isBusy, loader]);
+  }, [isBusy]);
+
+  useEffect(() => {
+    return () => {
+      if (startTimerRef.current) clearTimeout(startTimerRef.current);
+      if (isVisibleRef.current) loaderRef.current.done();
+    };
+  }, []);
 
   return null;
 }

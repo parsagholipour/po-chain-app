@@ -193,6 +193,12 @@ function isCurrentUrl(href: string) {
   );
 }
 
+function scrollPageToTop(mainElement: HTMLElement | null) {
+  mainElement?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  document.scrollingElement?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+}
+
 function DefaultBrandLogo({
   isCollapsed,
   logoHueRotateDeg,
@@ -666,7 +672,10 @@ export function AdminShell({
   const resetCurrentPage = useCallback(
     () => {
       setPageResetKey((key) => key + 1);
-      mainRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      scrollPageToTop(mainRef.current);
+      window.requestAnimationFrame(() => {
+        scrollPageToTop(mainRef.current);
+      });
       router.refresh();
     },
     [router],
