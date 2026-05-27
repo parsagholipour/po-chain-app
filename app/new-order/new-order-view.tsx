@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CreditCard, Eye, Loader2, MapPinned, Pencil, Search, ShoppingCart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -120,6 +120,14 @@ type BackOrderReviewLine = BackOrderDraftLine & {
   isShort: boolean;
 };
 
+type UndoRedoHistory<T> = {
+  past: T[];
+  present: T;
+  future: T[];
+};
+
+const MAX_UNDO_HISTORY = 100;
+
 const NEW_ORDER_SELECTED_PRODUCTS_STORAGE_PREFIX = "po-new-order-selected-products";
 const PRODUCT_PICKER_SELECTION_STORAGE_PREFIX = "po-new-order-product-picker-selection";
 
@@ -139,6 +147,96 @@ function uniqueProductIds(values: unknown[]) {
       ),
     ),
   );
+}
+
+function resolveStateAction<T>(action: SetStateAction<T>, previous: T) {
+  return typeof action === "function"
+    ? (action as (previous: T) => T)(previous)
+    : action;
+}
+
+function createUndoRedoHistory<T>(present: T): UndoRedoHistory<T> {
+  return {
+    past: [],
+    present,
+    future: [],
+  };
+}
+
+function useUndoRedoState<T>(
+  initialState: T | (() => T),
+  isEqual: (left: T, right: T) => boolean,
+) {
+  const [history, setHistory] = useState<UndoRedoHistory<T>>(() =>
+    createUndoRedoHistory(
+      typeof initialState === "function"
+        ? (initialState as () => T)()
+        : initialState,
+    ),
+  );
+
+  const setState = useCallback(
+    (action: SetStateAction<T>) => {
+      setHistory((current) => {
+        const next = resolveStateAction(action, current.present);
+        if (isEqual(current.present, next)) return current;
+
+        return {
+          past: [...current.past.slice(-(MAX_UNDO_HISTORY - 1)), current.present],
+          present: next,
+          future: [],
+        };
+      });
+    },
+    [isEqual],
+  );
+
+  const replaceState = useCallback(
+    (action: SetStateAction<T>) => {
+      setHistory((current) => {
+        const next = resolveStateAction(action, current.present);
+        if (isEqual(current.present, next)) return current;
+        return createUndoRedoHistory(next);
+      });
+    },
+    [isEqual],
+  );
+
+  const undo = useCallback(() => {
+    setHistory((current) => {
+      const previous = current.past[current.past.length - 1];
+      if (previous == null) return current;
+
+      return {
+        past: current.past.slice(0, -1),
+        present: previous,
+        future: [current.present, ...current.future],
+      };
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    setHistory((current) => {
+      const [next, ...future] = current.future;
+      if (next == null) return current;
+
+      return {
+        past: [...current.past, current.present],
+        present: next,
+        future,
+      };
+    });
+  }, []);
+
+  return {
+    state: history.present,
+    setState,
+    replaceState,
+    undo,
+    redo,
+    canUndo: history.past.length > 0,
+    canRedo: history.future.length > 0,
+  };
 }
 
 function productIdsFromStoredValue(raw: string | null) {
@@ -204,6 +302,96 @@ function rowsFromStoredProductIds(
     );
 
   return ensureTrailingBlankRow(rows);
+}
+
+function areQuantityRecordsEqual(
+  left: Record<string, number>,
+  right: Record<string, number>,
+) {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  for (const key of keys) {
+    if ((left[key] ?? 0) !== (right[key] ?? 0)) return false;
+  }
+  return true;
+}
+
+function areOrderRowsEqual(left: OrderRow[], right: OrderRow[]) {
+  if (left.length !== right.length) return false;
+
+  return left.every((row, index) => {
+    const other = right[index];
+    return (
+      other != null &&
+      row.id === other.id &&
+      row.productId === other.productId &&
+      areQuantityRecordsEqual(row.quantities, other.quantities)
+    );
+  });
+}
+
+function areBackOrderDraftLinesEqual(
+  left: BackOrderDraftLine[],
+  right: BackOrderDraftLine[],
+) {
+  if (left.length !== right.length) return false;
+
+  return left.every((line, index) => {
+    const other = right[index];
+    return (
+      other != null &&
+      line.rowId === other.rowId &&
+      line.productId === other.productId &&
+      line.locationId === other.locationId &&
+      line.quantity === other.quantity &&
+      line.backOrder === other.backOrder
+    );
+  });
+}
+
+function areStringArraysEqual(left: string[], right: string[]) {
+  if (left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+}
+
+function areBackOrderReviewsEqual(
+  left: BackOrderReview | null,
+  right: BackOrderReview | null,
+) {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return (
+    areBackOrderDraftLinesEqual(left.lines, right.lines) &&
+    areStringArraysEqual(left.visibleLineKeys, right.visibleLineKeys)
+  );
+}
+
+function undoRedoKeyboardIntent(event: KeyboardEvent) {
+  if (event.defaultPrevented || event.altKey || !(event.ctrlKey || event.metaKey)) {
+    return null;
+  }
+
+  const key = event.key.toLowerCase();
+  if (key === "z" && !event.shiftKey) return "undo";
+  if (key === "y" || (key === "z" && event.shiftKey)) return "redo";
+  return null;
+}
+
+function shouldUseNativeUndoRedo(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  const editable = target.closest("input, textarea, select, [contenteditable='true']");
+  if (!(editable instanceof HTMLElement)) return false;
+  if (editable.isContentEditable) return true;
+  if (editable instanceof HTMLTextAreaElement || editable instanceof HTMLSelectElement) {
+    return true;
+  }
+  if (editable instanceof HTMLInputElement) {
+    return (
+      editable.type !== "number" &&
+      editable.type !== "checkbox" &&
+      editable.type !== "radio"
+    );
+  }
+  return true;
 }
 
 function quantityValue(row: OrderRow, locationId: string) {
@@ -479,7 +667,15 @@ function LocationPurchaseOrderDetails({
 }
 
 export function NewOrderView() {
-  const [rows, setRows] = useState<OrderRow[]>(() => [newRow("row-1")]);
+  const {
+    state: rows,
+    setState: setRows,
+    replaceState: replaceRows,
+    undo: undoRows,
+    redo: redoRows,
+    canUndo: canUndoRows,
+    canRedo: canRedoRows,
+  } = useUndoRedoState<OrderRow[]>(() => [newRow("row-1")], areOrderRowsEqual);
   const [purchaseOrderNamesByLocationId, setPurchaseOrderNamesByLocationId] =
     useState<Record<string, string>>({});
   const [documentsByLocationId, setDocumentsByLocationId] = useState<Record<string, string | null>>({});
@@ -493,7 +689,13 @@ export function NewOrderView() {
     useState<string | null>(null);
   const [sessionLocationOpen, setSessionLocationOpen] = useState(false);
   const [editingSessionLocation, setEditingSessionLocation] = useState<SaleChannelLocation | null>(null);
-  const [backOrderReview, setBackOrderReview] = useState<BackOrderReview | null>(null);
+  const {
+    state: backOrderReview,
+    setState: setBackOrderReview,
+    replaceState: replaceBackOrderReview,
+    undo: undoBackOrderReview,
+    redo: redoBackOrderReview,
+  } = useUndoRedoState<BackOrderReview | null>(null, areBackOrderReviewsEqual);
 
   const { data: saleChannels = [], isLoading: saleChannelsLoading } = useQuery({
     queryKey: ["sale-channels"],
@@ -620,7 +822,7 @@ export function NewOrderView() {
     queueMicrotask(() => {
       if (cancelled) return;
       const productIds = readStoredProductIds(sessionProductSelectionStorageKey);
-      setRows((current) => rowsFromStoredProductIds(productIds, productById, current));
+      replaceRows((current) => rowsFromStoredProductIds(productIds, productById, current));
       setLoadedSessionProductSelectionKey(sessionProductSelectionStorageKey);
     });
 
@@ -631,6 +833,7 @@ export function NewOrderView() {
     loadedSessionProductSelectionKey,
     productById,
     productsPending,
+    replaceRows,
     saleChannelsLoading,
     sessionProductSelectionStorageKey,
   ]);
@@ -665,7 +868,7 @@ export function NewOrderView() {
 
     queueMicrotask(() => {
       if (cancelled) return;
-      setRows((current) => {
+      replaceRows((current) => {
         const availableRows = current.filter(
           (row) => !row.productId || productById.has(row.productId),
         );
@@ -687,6 +890,7 @@ export function NewOrderView() {
     loadedSessionProductSelectionKey,
     productById,
     productsPending,
+    replaceRows,
     sessionProductSelectionStorageKey,
   ]);
 
@@ -707,7 +911,7 @@ export function NewOrderView() {
         return;
       }
       const productIds = productIdsFromStoredValue(readBrowserStorageEventItem(event));
-      setRows((current) => rowsFromStoredProductIds(productIds, productById, current));
+      replaceRows((current) => rowsFromStoredProductIds(productIds, productById, current));
     }
 
     window.addEventListener("storage", handleStorage);
@@ -716,6 +920,7 @@ export function NewOrderView() {
     loadedSessionProductSelectionKey,
     productById,
     productsPending,
+    replaceRows,
     sessionProductSelectionStorageKey,
   ]);
 
@@ -932,7 +1137,7 @@ export function NewOrderView() {
 
   function deleteSessionLocation(locationId: string) {
     setSessionLocations((current) => current.filter((location) => location.id !== locationId));
-    setRows((current) =>
+    replaceRows((current) =>
       current.map((row) => {
         const quantities = { ...row.quantities };
         delete quantities[locationId];
@@ -1136,7 +1341,7 @@ export function NewOrderView() {
   function requestSubmitOrder() {
     const review = getBackOrderReview();
     if (review) {
-      setBackOrderReview(review);
+      replaceBackOrderReview(review);
       return;
     }
     submitOrder.mutate({ lines: [] });
@@ -1144,7 +1349,7 @@ export function NewOrderView() {
 
   function submitBackOrderResolution(review: BackOrderReview) {
     applyBackOrderDraftToRows(review.lines);
-    setBackOrderReview(null);
+    replaceBackOrderReview(null);
     submitOrder.mutate({ lines: review.lines });
   }
 
@@ -1238,6 +1443,50 @@ export function NewOrderView() {
     !saleChannelsLoading &&
     !locationsPending &&
     !productsLoading;
+  const isBackOrderReviewOpen = backOrderReview != null;
+  const hasNonBackOrderDialogOpen =
+    productPickerOpen || productDetailRowId != null || sessionLocationOpen;
+
+  useEffect(() => {
+    function handleUndoRedoKeyDown(event: KeyboardEvent) {
+      const intent = undoRedoKeyboardIntent(event);
+      if (!intent || shouldUseNativeUndoRedo(event.target)) return;
+
+      if (isBackOrderReviewOpen) {
+        event.preventDefault();
+        if (intent === "undo") {
+          undoBackOrderReview();
+        } else {
+          redoBackOrderReview();
+        }
+        return;
+      }
+
+      if (hasNonBackOrderDialogOpen) return;
+
+      const canHandle = intent === "undo" ? canUndoRows : canRedoRows;
+      if (!canHandle) return;
+
+      event.preventDefault();
+      if (intent === "undo") {
+        undoRows();
+      } else {
+        redoRows();
+      }
+    }
+
+    window.addEventListener("keydown", handleUndoRedoKeyDown);
+    return () => window.removeEventListener("keydown", handleUndoRedoKeyDown);
+  }, [
+    canRedoRows,
+    canUndoRows,
+    hasNonBackOrderDialogOpen,
+    isBackOrderReviewOpen,
+    redoBackOrderReview,
+    redoRows,
+    undoBackOrderReview,
+    undoRows,
+  ]);
 
   const activeLocations = locations.filter((location) => activeLocationIdSet.has(location.id));
   const backOrderReviewLines = backOrderReview
@@ -1676,7 +1925,7 @@ export function NewOrderView() {
       <Dialog
         open={backOrderReview != null}
         onOpenChange={(open) => {
-          if (!open) setBackOrderReview(null);
+          if (!open) replaceBackOrderReview(null);
         }}
       >
         <DialogContent size="7xl" showCloseButton={false}>
@@ -1855,7 +2104,7 @@ export function NewOrderView() {
               type="button"
               variant="outline"
               disabled={submitOrder.isPending}
-              onClick={() => setBackOrderReview(null)}
+              onClick={() => replaceBackOrderReview(null)}
             >
               Cancel
             </Button>

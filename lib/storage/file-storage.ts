@@ -149,12 +149,14 @@ export async function getPresignedPutUrl(key: string, contentType: string): Prom
 export async function getPresignedGetUrl(
   key: string,
   expiresInSeconds?: number,
+  options: { responseContentDisposition?: string } = {},
 ): Promise<string> {
   const cfg = getObjectStorageConfig();
   const objectKey = s3ObjectKeyFromStoredValue(key);
   const command = new GetObjectCommand({
     Bucket: cfg.bucket,
     Key: objectKey,
+    ResponseContentDisposition: options.responseContentDisposition,
   });
 
   return getSignedUrl(getPresignS3Client(), command, {

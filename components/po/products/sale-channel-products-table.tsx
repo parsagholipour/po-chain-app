@@ -5,6 +5,7 @@ import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PriceView } from "@/components/ui/price-view";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
+import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import {
   TableBody,
   TableCell,
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import type { SaleChannelProduct } from "@/lib/types/api";
 import { productEditingStatusLabels } from "@/lib/product-editing-status";
+import { storageDownloadUrl } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -22,7 +24,7 @@ type Props = {
   emptyMessage?: string;
 };
 
-const columnCount = 17;
+const columnCount = 18;
 const stickySkuColumnClassName = "w-36 min-w-36 max-w-36";
 const stickyProductNameColumnClassName = "w-72 min-w-72 max-w-72";
 const stickySkuClassName =
@@ -52,6 +54,7 @@ const saleChannelProductHeaders: {
     className: stickyProductNameClassName,
     scrollingClassName: stickyProductNameColumnClassName,
   },
+  { key: "image", label: "Image", className: "w-16" },
   { key: "upcGtin", label: "UPC/GTIN" },
   { key: "collection", label: "Collection" },
   { key: "msrp", label: "MSRP", className: "text-end" },
@@ -255,6 +258,90 @@ function ImageLinkCell({ value }: { value: string }) {
   );
 }
 
+function ProductImageCell({ product }: { product: SaleChannelProduct }) {
+  const [imageLinkFailed, setImageLinkFailed] = useState(false);
+  const canShowImageLink = canOpenLink(product.imageLink) && !imageLinkFailed;
+
+  if (product.imageKey) {
+    return (
+      <StorageObjectImage
+        reference={product.imageKey}
+        alt={product.name}
+        className="size-12 shrink-0 bg-muted/30"
+        objectFit="cover"
+        previewWidth={192}
+        fallback="No image"
+      />
+    );
+  }
+
+  return (
+    <div className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted/30 text-center text-xs text-muted-foreground">
+      {canShowImageLink ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={product.imageLink}
+          alt={product.name}
+          loading="lazy"
+          decoding="async"
+          className="absolute inset-0 size-full object-cover"
+          onError={() => setImageLinkFailed(true)}
+        />
+      ) : (
+        "No image"
+      )}
+    </div>
+  );
+}
+
+function barcodeDownloadFileName(product: SaleChannelProduct) {
+  const displayName = storageObjectDisplayName(product.barcodeKey);
+  const ext = displayName?.match(/\.[a-zA-Z0-9]+$/)?.[0] ?? ".png";
+  const sku = product.sku
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `${sku || "product"}-barcode${ext}`;
+}
+
+function BarcodeImageDownload({ product }: { product: SaleChannelProduct }) {
+  if (!product.barcodeKey) {
+    return (
+      <StorageObjectImage
+        reference={null}
+        className="h-10 w-24 shrink-0"
+        aspectFallback="3 / 1"
+        objectFit="contain"
+        fallback={<span className="text-muted-foreground">None</span>}
+      />
+    );
+  }
+
+  const fileName = barcodeDownloadFileName(product);
+
+  return (
+    <a
+      href={storageDownloadUrl(product.barcodeKey, fileName)}
+      download={fileName}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      aria-label={`Download barcode for ${product.name}`}
+      title="Download barcode"
+    >
+      <StorageObjectImage
+        reference={product.barcodeKey}
+        alt={`${product.name} barcode`}
+        className="h-10 w-24 shrink-0 bg-background"
+        aspectFallback="3 / 1"
+        objectFit="contain"
+        previewWidth={256}
+      />
+    </a>
+  );
+}
+
 export function SaleChannelProductsTable({
   rows,
   isPending,
@@ -403,6 +490,9 @@ export function SaleChannelProductsTable({
                   >
                     {row.name}
                   </TableCell>
+                  <TableCell>
+                    <ProductImageCell product={row} />
+                  </TableCell>
                   <TableCell className="font-mono text-xs">{emptyValue(row.upcGtin)}</TableCell>
                   <TableCell className="max-w-44 truncate" title={row.collection?.name ?? undefined}>
                     {row.collection?.name ?? <span className="text-muted-foreground">None</span>}
@@ -421,13 +511,7 @@ export function SaleChannelProductsTable({
                     <ImageLinkCell value={row.imageLink} />
                   </TableCell>
                   <TableCell>
-                    <StorageObjectImage
-                      reference={row.barcodeKey}
-                      className="h-10 w-24 shrink-0"
-                      aspectFallback="3 / 1"
-                      objectFit="contain"
-                      previewWidth={256}
-                    />
+                    <BarcodeImageDownload product={row} />
                   </TableCell>
                   <TableCell>
                     <StockStatus stockCount={row.stockCount} />

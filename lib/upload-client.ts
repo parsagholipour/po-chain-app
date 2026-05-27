@@ -35,6 +35,18 @@ export async function presignedFileUrl(key: string): Promise<string> {
   return data.url;
 }
 
+export function storageDownloadUrl(key: string, fileName?: string | null): string {
+  const params = new URLSearchParams({
+    key,
+    redirect: "1",
+    download: "1",
+  });
+
+  if (fileName) params.set("filename", fileName);
+
+  return `/api/storage/url?${params.toString()}`;
+}
+
 export function storageImagePreviewUrl(
   key: string,
   options: { width?: number; quality?: number } = {},
