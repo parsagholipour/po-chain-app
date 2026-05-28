@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { api } from "@/lib/axios";
 import type { SaleChannelProduct } from "@/lib/types/api";
 import { SaleChannelProductsTable } from "@/components/po/products/sale-channel-products-table";
@@ -257,6 +257,7 @@ export function SaleChannelProductsView() {
   const productFilters = useListFilterState({ initialFilters: filterDefaults });
   const debouncedSearch = useDebouncedValue(productFilters.search);
   const [selectedCategoryIdState, setSelectedCategoryId] = useState<string | null>(null);
+  const categoryButtonRefs = useRef(new Map<string, HTMLButtonElement>());
 
   const { data = [], isPending } = useQuery({
     queryKey: saleChannelProductsKey,
@@ -306,6 +307,25 @@ export function SaleChannelProductsView() {
     categoryOptions.find((category) => category.id === selectedCategoryIdState)?.id ??
     categoryOptions[0]?.id ??
     null;
+  const selectedCategoryIndex = selectedCategoryId
+    ? categoryOptions.findIndex((category) => category.id === selectedCategoryId)
+    : -1;
+  const canGoToPreviousCategory = selectedCategoryIndex > 0;
+  const canGoToNextCategory =
+    selectedCategoryIndex >= 0 && selectedCategoryIndex < categoryOptions.length - 1;
+
+  useEffect(() => {
+    if (!selectedCategoryId) return;
+    categoryButtonRefs.current
+      .get(selectedCategoryId)
+      ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [selectedCategoryId]);
+
+  function selectCategoryByOffset(offset: number) {
+    const nextCategory = categoryOptions[selectedCategoryIndex + offset];
+    if (!nextCategory) return;
+    setSelectedCategoryId(nextCategory.id);
+  }
 
   const filteredRows = useMemo(() => {
     const q = normalizeListFilterText(debouncedSearch);
@@ -347,38 +367,69 @@ export function SaleChannelProductsView() {
       </div>
 
       {categoryOptions.length > 0 ? (
-        <div className="-mx-1 overflow-x-auto px-1 pb-1">
-          <div className="flex w-max gap-2">
-            {categoryOptions.map((category) => {
-              const selected = category.id === selectedCategoryId;
+        <div className="relative">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            className="absolute -left-9 top-1/2 z-10 -translate-y-1/2 bg-background shadow-sm active:not-aria-[haspopup]:-translate-y-1/2"
+            onClick={() => selectCategoryByOffset(-1)}
+            disabled={!canGoToPreviousCategory}
+            aria-label="Previous product category"
+          >
+            <ChevronLeft className="size-4" aria-hidden />
+          </Button>
+          <div className="-mx-1 overflow-x-auto px-1 pb-1">
+            <div className="flex w-max gap-2">
+              {categoryOptions.map((category) => {
+                const selected = category.id === selectedCategoryId;
 
-              return (
-                <Button
-                  key={category.id}
-                  type="button"
-                  size="sm"
-                  variant={selected ? "default" : "outline"}
-                  className={cn(
-                    "h-9 shrink-0 gap-2 px-3",
-                    !selected && "bg-background",
-                  )}
-                  onClick={() => setSelectedCategoryId(category.id)}
-                >
-                  <span className="max-w-[220px] truncate">{category.name}</span>
-                  <span
+                return (
+                  <Button
+                    key={category.id}
+                    ref={(node) => {
+                      if (node) {
+                        categoryButtonRefs.current.set(category.id, node);
+                      } else {
+                        categoryButtonRefs.current.delete(category.id);
+                      }
+                    }}
+                    type="button"
+                    size="sm"
+                    variant={selected ? "default" : "outline"}
                     className={cn(
-                      "rounded-full px-1.5 text-[11px] tabular-nums",
-                      selected
-                        ? "bg-primary-foreground/20 text-primary-foreground"
-                        : "bg-muted text-muted-foreground",
+                      "h-9 shrink-0 gap-2 px-3",
+                      !selected && "bg-background",
                     )}
+                    onClick={() => setSelectedCategoryId(category.id)}
                   >
-                    {category.count}
-                  </span>
-                </Button>
-              );
-            })}
+                    <span className="max-w-[220px] truncate">{category.name}</span>
+                    <span
+                      className={cn(
+                        "rounded-full px-1.5 text-[11px] tabular-nums",
+                        selected
+                          ? "bg-primary-foreground/20 text-primary-foreground"
+                          : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {category.count}
+                    </span>
+                  </Button>
+                );
+              })}
+            </div>
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            className="absolute -right-9 top-1/2 z-10 -translate-y-1/2 bg-background shadow-sm active:not-aria-[haspopup]:-translate-y-1/2"
+            onClick={() => selectCategoryByOffset(1)}
+            disabled={!canGoToNextCategory}
+            aria-label="Next product category"
+          >
+            <ChevronRight className="size-4" aria-hidden />
+          </Button>
         </div>
       ) : null}
 
