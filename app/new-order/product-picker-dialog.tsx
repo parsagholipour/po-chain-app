@@ -211,12 +211,13 @@ function ProductPickerRow({
   const checkboxId = `product-picker-${product.id}`;
 
   return (
-    <div
+    <label
+      htmlFor={checkboxId}
       className={cn(
         "flex gap-3 rounded-lg border border-border/80 p-3 transition-colors",
         alreadyAdded
-          ? "bg-muted/40 opacity-75"
-          : "hover:border-primary/30 hover:bg-muted/30",
+          ? "cursor-not-allowed bg-muted/40 opacity-75"
+          : "cursor-pointer hover:border-primary/30 hover:bg-muted/30",
         checked && "border-primary/50 bg-primary/5",
       )}
     >
@@ -225,15 +226,9 @@ function ProductPickerRow({
         checked={checked}
         disabled={alreadyAdded}
         onCheckedChange={(value) => onToggle(product.id, value === true)}
-        className="mt-1"
+        className="mt-1 shrink-0"
       />
-      <label
-        htmlFor={checkboxId}
-        className={cn(
-          "flex min-w-0 flex-1 cursor-pointer flex-col gap-3 sm:flex-row",
-          alreadyAdded && "cursor-not-allowed",
-        )}
-      >
+      <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row">
         <ProductImage product={product} className="size-16 sm:size-20" />
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-start justify-between gap-2">
@@ -296,8 +291,8 @@ function ProductPickerRow({
             </p>
           ) : null}
         </div>
-      </label>
-    </div>
+      </div>
+    </label>
   );
 }
 
