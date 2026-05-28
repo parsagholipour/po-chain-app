@@ -42,6 +42,7 @@ import { ProductPickerDialog } from "./product-picker-dialog";
 import {
   readBrowserStorageEventItem,
   readBrowserStorageItem,
+  removeBrowserStorageItem,
   writeBrowserStorageItem,
 } from "./browser-storage";
 
@@ -943,6 +944,15 @@ export function NewOrderView() {
     [rows],
   );
 
+  const clearStoredNewOrderDraft = useCallback(() => {
+    if (sessionProductSelectionStorageKey) {
+      removeBrowserStorageItem(sessionProductSelectionStorageKey);
+    }
+    if (pickerProductSelectionStorageKey) {
+      removeBrowserStorageItem(pickerProductSelectionStorageKey);
+    }
+  }, [pickerProductSelectionStorageKey, sessionProductSelectionStorageKey]);
+
   const rowsWithActiveQuantity = useMemo(
     () => rows.filter((row) => row.productId && rowQuantityTotal(row) > 0),
     [rows],
@@ -1427,6 +1437,7 @@ export function NewOrderView() {
         window.location.assign(result.checkoutUrl);
         return;
       }
+      clearStoredNewOrderDraft();
       const purchaseOrderIds = encodeURIComponent(result.purchaseOrderIds.join(","));
       window.location.assign(`/new-order/success?purchaseOrderIds=${purchaseOrderIds}`);
     },

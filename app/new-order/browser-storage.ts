@@ -40,7 +40,7 @@ function readStoredRecord(raw: string | null) {
   return { value: raw, expired: false, legacy: true };
 }
 
-function removeBrowserStorageItem(storageKey: string) {
+export function removeBrowserStorageItem(storageKey: string) {
   try {
     window.localStorage.removeItem(storageKey);
   } catch {
