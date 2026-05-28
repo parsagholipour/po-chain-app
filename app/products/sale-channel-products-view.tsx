@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Download } from "lucide-react";
 import { api } from "@/lib/axios";
 import type { SaleChannelProduct } from "@/lib/types/api";
 import { SaleChannelProductsTable } from "@/components/po/products/sale-channel-products-table";
@@ -18,6 +19,7 @@ import {
   useListFilterState,
 } from "@/hooks/use-list-filters";
 import { productEditingStatusLabels } from "@/lib/product-editing-status";
+import { storageDownloadUrl } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 
 const saleChannelProductsKey = ["sale-channel-products"] as const;
@@ -25,6 +27,214 @@ const uncollectedFilterValue = "__uncollected__";
 const filterDefaults = {
   collection: LIST_FILTER_ALL_VALUE,
 };
+const noCategorySheetName = "No category";
+
+type WorkbookCellValue = string | number | null | undefined;
+
+type SaleChannelProductExportColumn = {
+  label: string;
+  value: (row: SaleChannelProduct) => WorkbookCellValue;
+  width: number;
+};
+
+function numericExportValue(value: string | number | null | undefined): WorkbookCellValue {
+  if (value == null || value === "") return null;
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : String(value);
+}
+
+function formatExportDate(value: string | null): string | null {
+  if (!value) return null;
+  const dateOnly = value.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  if (dateOnly) return dateOnly;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toISOString().slice(0, 10);
+}
+
+function stockStatusLabel(stockCount: number | null) {
+  if (stockCount == null) return "Unknown";
+  return stockCount > 0 ? "In stock" : "Out of stock";
+}
+
+function absoluteAppUrl(path: string) {
+  return new URL(path, window.location.origin).toString();
+}
+
+function barcodeDownloadUrl(row: SaleChannelProduct) {
+  if (!row.barcodeKey) return null;
+  return absoluteAppUrl(storageDownloadUrl(row.barcodeKey));
+}
+
+const saleChannelProductExportColumns: SaleChannelProductExportColumn[] = [
+  { label: "SKU", value: (row) => row.sku, width: 120 },
+  { label: "Product Name", value: (row) => row.name, width: 260 },
+  { label: "UPC/GTIN", value: (row) => row.upcGtin, width: 140 },
+  { label: "Product Category", value: (row) => row.category?.name, width: 160 },
+  { label: "Collection", value: (row) => row.collection?.name, width: 160 },
+  { label: "MSRP", value: (row) => numericExportValue(row.msrp), width: 90 },
+  { label: "MAP", value: (row) => numericExportValue(row.map), width: 90 },
+  {
+    label: "Wholesale Price",
+    value: (row) => numericExportValue(row.wholesalePrice),
+    width: 110,
+  },
+  { label: "MOQ", value: (row) => numericExportValue(row.moq), width: 70 },
+  { label: "Image Link", value: (row) => row.imageLink, width: 260 },
+  { label: "Barcode Image", value: barcodeDownloadUrl, width: 260 },
+  { label: "Stock Status", value: (row) => stockStatusLabel(row.stockCount), width: 110 },
+  { label: "Stock Count", value: (row) => numericExportValue(row.stockCount), width: 90 },
+  {
+    label: "Qty/Carton",
+    value: (row) => numericExportValue(row.quantityPerCarton),
+    width: 90,
+  },
+  { label: "Description", value: (row) => row.description, width: 360 },
+  { label: "Order By Date", value: (row) => formatExportDate(row.orderByDate), width: 110 },
+  {
+    label: "Release Date (Ships From)",
+    value: (row) => formatExportDate(row.releaseDateShipsFrom),
+    width: 170,
+  },
+  {
+    label: "Edition Status",
+    value: (row) => productEditingStatusLabels[row.editionStatus],
+    width: 120,
+  },
+];
+
+function escapeXml(value: string) {
+  return value.replace(/[<>&"']/g, (char) => {
+    switch (char) {
+      case "<":
+        return "&lt;";
+      case ">":
+        return "&gt;";
+      case "&":
+        return "&amp;";
+      case "\"":
+        return "&quot;";
+      default:
+        return "&apos;";
+    }
+  });
+}
+
+function sanitizeSheetName(value: string) {
+  const cleaned = value
+    .trim()
+    .replace(/[\[\]:*?/\\]+/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^'+|'+$/g, "");
+
+  return cleaned.length > 0 ? cleaned : noCategorySheetName;
+}
+
+function uniqueSheetName(value: string, usedSheetNames: Set<string>) {
+  const baseName = sanitizeSheetName(value).slice(0, 31).trim() || noCategorySheetName;
+  let candidate = baseName;
+  let suffix = 2;
+
+  while (usedSheetNames.has(candidate.toLowerCase())) {
+    const suffixText = ` ${suffix}`;
+    candidate = `${baseName.slice(0, 31 - suffixText.length).trim()}${suffixText}`;
+    suffix += 1;
+  }
+
+  usedSheetNames.add(candidate.toLowerCase());
+  return candidate;
+}
+
+function workbookCell(value: WorkbookCellValue, styleId?: string) {
+  const style = styleId ? ` ss:StyleID="${styleId}"` : "";
+
+  if (value == null || value === "") {
+    return `<Cell${style}/>`;
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `<Cell${style}><Data ss:Type="Number">${value}</Data></Cell>`;
+  }
+
+  return `<Cell${style}><Data ss:Type="String">${escapeXml(String(value))}</Data></Cell>`;
+}
+
+function workbookRow(values: WorkbookCellValue[], styleId?: string) {
+  return `<Row>${values.map((value) => workbookCell(value, styleId)).join("")}</Row>`;
+}
+
+function categoryProductGroups(rows: SaleChannelProduct[]) {
+  const groups = new Map<string, { name: string; rows: SaleChannelProduct[] }>();
+
+  for (const row of rows) {
+    const key = row.category?.id ?? noCategorySheetName;
+    const current = groups.get(key);
+
+    if (current) {
+      current.rows.push(row);
+    } else {
+      groups.set(key, {
+        name: row.category?.name ?? noCategorySheetName,
+        rows: [row],
+      });
+    }
+  }
+
+  return Array.from(groups.values()).sort((a, b) => {
+    if (a.name === noCategorySheetName) return 1;
+    if (b.name === noCategorySheetName) return -1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function buildSaleChannelProductsWorkbook(rows: SaleChannelProduct[]) {
+  const usedSheetNames = new Set<string>();
+  const columns = saleChannelProductExportColumns
+    .map((column) => `<Column ss:AutoFitWidth="0" ss:Width="${column.width}"/>`)
+    .join("");
+  const headerRow = workbookRow(
+    saleChannelProductExportColumns.map((column) => column.label),
+    "Header",
+  );
+  const worksheets = categoryProductGroups(rows)
+    .map((group) => {
+      const sheetName = uniqueSheetName(group.name, usedSheetNames);
+      const productRows = group.rows
+        .map((row) =>
+          workbookRow(saleChannelProductExportColumns.map((column) => column.value(row))),
+        )
+        .join("");
+
+      return `<Worksheet ss:Name="${escapeXml(sheetName)}"><Table>${columns}${headerRow}${productRows}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane></WorksheetOptions></Worksheet>`;
+    })
+    .join("");
+
+  return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40">
+<Styles><Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#F3F4F6" ss:Pattern="Solid"/></Style></Styles>
+${worksheets}
+</Workbook>`;
+}
+
+function downloadSaleChannelProductsWorkbook(rows: SaleChannelProduct[]) {
+  if (rows.length === 0) return;
+
+  const workbook = buildSaleChannelProductsWorkbook(rows);
+  const blob = new Blob([workbook], {
+    type: "application/vnd.ms-excel;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `sale-channel-products-${new Date().toISOString().slice(0, 10)}.xls`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 function searchHaystack(row: SaleChannelProduct) {
   return [
@@ -119,9 +329,21 @@ export function SaleChannelProductsView() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
-        <p className="text-sm text-muted-foreground">Browse catalog SKUs and release details.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
+          <p className="text-sm text-muted-foreground">Browse catalog SKUs and release details.</p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => downloadSaleChannelProductsWorkbook(data)}
+          disabled={isPending || data.length === 0}
+          className="w-fit"
+        >
+          <Download data-icon="inline-start" className="size-4" />
+          Download CSV
+        </Button>
       </div>
 
       {categoryOptions.length > 0 ? (

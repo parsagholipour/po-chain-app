@@ -24,7 +24,7 @@ type Props = {
   emptyMessage?: string;
 };
 
-const columnCount = 18;
+const columnCount = 17;
 const stickySkuColumnClassName = "w-36 min-w-36 max-w-36";
 const stickyProductNameColumnClassName = "w-72 min-w-72 max-w-72";
 const stickySkuClassName =
@@ -54,7 +54,6 @@ const saleChannelProductHeaders: {
     className: stickyProductNameClassName,
     scrollingClassName: stickyProductNameColumnClassName,
   },
-  { key: "image", label: "Image", className: "w-16" },
   { key: "upcGtin", label: "UPC/GTIN" },
   { key: "collection", label: "Collection" },
   { key: "msrp", label: "MSRP", className: "text-end" },
@@ -488,10 +487,10 @@ export function SaleChannelProductsTable({
                       "whitespace-normal font-medium leading-snug",
                     )}
                   >
-                    {row.name}
-                  </TableCell>
-                  <TableCell>
-                    <ProductImageCell product={row} />
+                    <div className="flex min-w-0 items-center gap-3">
+                      <ProductImageCell product={row} />
+                      <span className="min-w-0">{row.name}</span>
+                    </div>
                   </TableCell>
                   <TableCell className="font-mono text-xs">{emptyValue(row.upcGtin)}</TableCell>
                   <TableCell className="max-w-44 truncate" title={row.collection?.name ?? undefined}>

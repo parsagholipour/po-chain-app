@@ -80,9 +80,10 @@ function productMatchesSearch(product: SaleChannelProduct, tokens: string[]) {
   return tokens.every((token) => fields.some((field) => field.includes(token)));
 }
 
-const ESTIMATED_PRODUCT_ROW_HEIGHT = 180;
-const PRODUCT_LIST_INITIAL_HEIGHT = 544;
 const DEFAULT_PICKER_STORAGE_KEY = "po-new-order-product-picker-selection";
+const ESTIMATED_PRODUCT_ROW_HEIGHT = 184;
+const PRODUCT_ROW_GAP = 12;
+const PRODUCT_LIST_INITIAL_HEIGHT = 544;
 
 function uniqueProductIds(values: unknown[]) {
   return Array.from(
@@ -105,6 +106,19 @@ function productIdsFromStoredValue(raw: string | null) {
 
 function readStoredProductIds(storageKey: string) {
   return productIdsFromStoredValue(readBrowserStorageItem(storageKey));
+}
+
+function selectableProductIds(
+  productIds: Iterable<string>,
+  selectedProductIds: Set<string>,
+  productIdSet: Set<string>,
+  productCount: number,
+) {
+  return Array.from(productIds).filter(
+    (productId) =>
+      !selectedProductIds.has(productId) &&
+      (productCount === 0 || productIdSet.has(productId)),
+  );
 }
 
 function writeStoredProductIds(storageKey: string, productIds: Iterable<string>) {
@@ -312,14 +326,24 @@ export function ProductPickerDialog({
   onAddProducts: (productIds: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [checkedProductIds, setCheckedProductIds] = useState<Set<string>>(() => new Set());
-  const [loadedStorageKey, setLoadedStorageKey] = useState<string | null>(null);
   const productListRef = useRef<HTMLDivElement>(null);
   const checkedProductStorageKey = storageKey ?? DEFAULT_PICKER_STORAGE_KEY;
   const productIdSet = useMemo(
     () => new Set(products.map((product) => product.id)),
     [products],
   );
+  const [checkedProductIds, setCheckedProductIds] = useState<Set<string>>(
+    () =>
+      new Set(
+        selectableProductIds(
+          readStoredProductIds(checkedProductStorageKey),
+          selectedProductIds,
+          productIdSet,
+          products.length,
+        ),
+      ),
+  );
+  const checkedProductIdsRef = useRef(checkedProductIds);
 
   const visibleProducts = useMemo(() => {
     const searchTokens = parseSearchTokens(query);
@@ -332,17 +356,6 @@ export function ProductPickerDialog({
     );
   }, [products, query]);
 
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const productVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: visibleProducts.length,
-    getScrollElement: () => productListRef.current,
-    estimateSize: () => ESTIMATED_PRODUCT_ROW_HEIGHT,
-    initialRect: { width: 0, height: PRODUCT_LIST_INITIAL_HEIGHT },
-    gap: 12,
-    overscan: 5,
-    getItemKey: (index) => visibleProducts[index]?.id ?? index,
-  });
-
   const addableCheckedProductIds = useMemo(
     () =>
       Array.from(checkedProductIds).filter(
@@ -350,7 +363,29 @@ export function ProductPickerDialog({
       ),
     [checkedProductIds, productIdSet, selectedProductIds],
   );
+  const addableCheckedProductIdSet = useMemo(
+    () => new Set(addableCheckedProductIds),
+    [addableCheckedProductIds],
+  );
   const checkedCount = addableCheckedProductIds.length;
+
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const productVirtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
+    count: visibleProducts.length,
+    getScrollElement: () => productListRef.current,
+    estimateSize: () => ESTIMATED_PRODUCT_ROW_HEIGHT,
+    initialRect: { width: 0, height: PRODUCT_LIST_INITIAL_HEIGHT },
+    gap: PRODUCT_ROW_GAP,
+    overscan: 5,
+    getItemKey: (index) => visibleProducts[index]?.id ?? index,
+  });
+  const virtualProducts = productVirtualizer.getVirtualItems();
+  const firstVirtualProduct = virtualProducts[0];
+  const lastVirtualProduct = virtualProducts[virtualProducts.length - 1];
+  const topSpacerHeight = firstVirtualProduct?.start ?? 0;
+  const bottomSpacerHeight = lastVirtualProduct
+    ? Math.max(0, productVirtualizer.getTotalSize() - lastVirtualProduct.end)
+    : 0;
 
   useEffect(() => {
     productVirtualizer.scrollToOffset(0);
@@ -359,40 +394,6 @@ export function ProductPickerDialog({
   useEffect(() => {
     if (!open) return;
 
-    const storedProductIds = readStoredProductIds(checkedProductStorageKey);
-    setCheckedProductIds(
-      new Set(
-        storedProductIds.filter(
-          (productId) =>
-            !selectedProductIds.has(productId) &&
-            (products.length === 0 || productIdSet.has(productId)),
-        ),
-      ),
-    );
-    setLoadedStorageKey(checkedProductStorageKey);
-  }, [checkedProductStorageKey, open, productIdSet, products.length, selectedProductIds]);
-
-  useEffect(() => {
-    setCheckedProductIds((current) => {
-      const next = new Set(
-        Array.from(current).filter(
-          (productId) =>
-            !selectedProductIds.has(productId) &&
-            (products.length === 0 || productIdSet.has(productId)),
-        ),
-      );
-      return sameProductIdSet(current, next) ? current : next;
-    });
-  }, [productIdSet, products.length, selectedProductIds]);
-
-  useEffect(() => {
-    if (loadedStorageKey !== checkedProductStorageKey) return;
-    writeStoredProductIds(checkedProductStorageKey, checkedProductIds);
-  }, [checkedProductIds, checkedProductStorageKey, loadedStorageKey]);
-
-  useEffect(() => {
-    if (!open || loadedStorageKey !== checkedProductStorageKey) return;
-
     function handleStorage(event: StorageEvent) {
       if (
         event.storageArea !== window.localStorage ||
@@ -400,36 +401,51 @@ export function ProductPickerDialog({
       ) {
         return;
       }
-      setCheckedProductIds(
-        new Set(
-          productIdsFromStoredValue(readBrowserStorageEventItem(event)).filter(
-            (productId) =>
-              !selectedProductIds.has(productId) &&
-              (products.length === 0 || productIdSet.has(productId)),
-          ),
+      const nextProductIds = new Set(
+        selectableProductIds(
+          productIdsFromStoredValue(readBrowserStorageEventItem(event)),
+          selectedProductIds,
+          productIdSet,
+          products.length,
         ),
       );
+      if (sameProductIdSet(checkedProductIdsRef.current, nextProductIds)) return;
+      checkedProductIdsRef.current = nextProductIds;
+      setCheckedProductIds(nextProductIds);
     }
 
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, [
     checkedProductStorageKey,
-    loadedStorageKey,
     open,
     productIdSet,
     products.length,
     selectedProductIds,
   ]);
 
+  function commitCheckedProductIds(nextProductIds: Set<string>) {
+    if (sameProductIdSet(checkedProductIdsRef.current, nextProductIds)) return;
+    checkedProductIdsRef.current = nextProductIds;
+    setCheckedProductIds(nextProductIds);
+    writeStoredProductIds(checkedProductStorageKey, nextProductIds);
+  }
+
   function toggleProduct(productId: string, checked: boolean) {
     if (selectedProductIds.has(productId)) return;
-    setCheckedProductIds((current) => {
-      const next = new Set(current);
-      if (checked) next.add(productId);
-      else next.delete(productId);
-      return next;
-    });
+    const nextProductIds = new Set(checkedProductIdsRef.current);
+    if (checked) nextProductIds.add(productId);
+    else nextProductIds.delete(productId);
+    commitCheckedProductIds(
+      new Set(
+        selectableProductIds(
+          nextProductIds,
+          selectedProductIds,
+          productIdSet,
+          products.length,
+        ),
+      ),
+    );
   }
 
   function handleAddProducts() {
@@ -439,8 +455,7 @@ export function ProductPickerDialog({
     const remainingProductIds = new Set(
       Array.from(checkedProductIds).filter((productId) => !addedProductIds.has(productId)),
     );
-    setCheckedProductIds(remainingProductIds);
-    writeStoredProductIds(checkedProductStorageKey, remainingProductIds);
+    commitCheckedProductIds(remainingProductIds);
     onAddProducts(productIds);
     onOpenChange(false);
   }
@@ -473,20 +488,22 @@ export function ProductPickerDialog({
           ) : (
             <div
               ref={productListRef}
-              className="h-[min(52dvh,34rem)] pt-1 overflow-y-auto pr-1"
+              className="h-[min(52dvh,34rem)] overflow-y-auto pr-1"
             >
               <div
                 role="list"
                 aria-label="Product search results"
-                className="relative w-full"
-                style={{ height: `${productVirtualizer.getTotalSize()}px` }}
+                className="pt-1 pb-1"
               >
-                {productVirtualizer.getVirtualItems().map((virtualProduct) => {
+                {topSpacerHeight > 0 ? (
+                  <div aria-hidden style={{ height: `${topSpacerHeight}px` }} />
+                ) : null}
+                {virtualProducts.map((virtualProduct, virtualIndex) => {
                   const product = visibleProducts[virtualProduct.index];
                   if (!product) return null;
 
                   const alreadyAdded = selectedProductIds.has(product.id);
-                  const checked = checkedProductIds.has(product.id);
+                  const checked = addableCheckedProductIdSet.has(product.id);
 
                   return (
                     <div
@@ -494,8 +511,10 @@ export function ProductPickerDialog({
                       ref={productVirtualizer.measureElement}
                       data-index={virtualProduct.index}
                       role="listitem"
-                      className="absolute left-0 top-0 w-full"
-                      style={{ transform: `translateY(${virtualProduct.start}px)` }}
+                      style={{
+                        marginTop:
+                          virtualIndex === 0 ? undefined : `${PRODUCT_ROW_GAP}px`,
+                      }}
                     >
                       <ProductPickerRow
                         product={product}
@@ -506,6 +525,9 @@ export function ProductPickerDialog({
                     </div>
                   );
                 })}
+                {bottomSpacerHeight > 0 ? (
+                  <div aria-hidden style={{ height: `${bottomSpacerHeight}px` }} />
+                ) : null}
               </div>
             </div>
           )}
