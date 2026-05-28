@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CreditCard, Eye, Loader2, MapPinned, Pencil, Search, ShoppingCart, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/confirm-provider";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { useWizardDocumentUpload } from "@/lib/use-wizard-document-upload";
@@ -668,6 +669,7 @@ function LocationPurchaseOrderDetails({
 }
 
 export function NewOrderView() {
+  const confirm = useConfirm();
   const {
     state: rows,
     setState: setRows,
@@ -952,6 +954,37 @@ export function NewOrderView() {
       removeBrowserStorageItem(pickerProductSelectionStorageKey);
     }
   }, [pickerProductSelectionStorageKey, sessionProductSelectionStorageKey]);
+
+  const hasOrderDraftContent = useMemo(
+    () =>
+      rows.some((row) => row.productId || rowQuantityTotal(row) > 0) ||
+      Object.keys(purchaseOrderNamesByLocationId).length > 0 ||
+      Object.values(documentsByLocationId).some(Boolean),
+    [documentsByLocationId, purchaseOrderNamesByLocationId, rows],
+  );
+
+  function clearAllOrderDraft() {
+    setProductDetailRowId(null);
+    setProductPickerOpen(false);
+    setProductPickerRowId(null);
+    replaceBackOrderReview(null);
+    replaceRows([newRow("row-1")]);
+    setPurchaseOrderNamesByLocationId({});
+    setDocumentsByLocationId({});
+    setUploadingByLocationId({});
+    clearStoredNewOrderDraft();
+  }
+
+  async function requestRemoveAllOrderDraft() {
+    const ok = await confirm({
+      title: "Remove all order details?",
+      description:
+        "This removes all products, quantities, PO names, and documents from this draft. Locations will stay available.",
+      confirmLabel: "Remove all",
+      variant: "destructive",
+    });
+    if (ok) clearAllOrderDraft();
+  }
 
   const rowsWithActiveQuantity = useMemo(
     () => rows.filter((row) => row.productId && rowQuantityTotal(row) > 0),
@@ -1544,27 +1577,41 @@ export function NewOrderView() {
               : "Select products, enter quantities by location, then place your order."}
           </p>
         </div>
-        <Button
-          type="button"
-          onClick={requestSubmitOrder}
-          disabled={!canSubmit}
-          className="w-full sm:w-auto"
-        >
-          {submitOrder.isPending ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : isStoreSaleChannel ? (
-            <CreditCard className="size-4" />
-          ) : (
-            <ShoppingCart className="size-4" />
-          )}
-          {isStoreSaleChannel ? (
-            <>
-              Pay {grandTotalCents > 0 ? <PriceView value={grandTotalCents / 100} /> : null}
-            </>
-          ) : (
-            "Place order"
-          )}
-        </Button>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void requestRemoveAllOrderDraft();
+            }}
+            disabled={!hasOrderDraftContent || submitOrder.isPending}
+            className="w-full sm:w-auto"
+          >
+            <Trash2 className="size-4" />
+            Remove all
+          </Button>
+          <Button
+            type="button"
+            onClick={requestSubmitOrder}
+            disabled={!canSubmit}
+            className="w-full sm:w-auto"
+          >
+            {submitOrder.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : isStoreSaleChannel ? (
+              <CreditCard className="size-4" />
+            ) : (
+              <ShoppingCart className="size-4" />
+            )}
+            {isStoreSaleChannel ? (
+              <>
+                Pay {grandTotalCents > 0 ? <PriceView value={grandTotalCents / 100} /> : null}
+              </>
+            ) : (
+              "Place order"
+            )}
+          </Button>
+        </div>
       </div>
 
       <Card className="border-border/80">
