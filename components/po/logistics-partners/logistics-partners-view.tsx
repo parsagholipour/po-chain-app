@@ -113,21 +113,14 @@ export function LogisticsPartnersView() {
           onValueChange={(value) => setActiveTab(value as LogisticsPartnerType)}
           className="gap-0"
         >
-          <TabsList
-            variant="line"
-            className="h-auto min-h-12 w-full justify-start gap-8 rounded-none border-0 border-b border-border bg-muted/30 px-4"
-          >
+          <TabsList variant="underline">
             {Object.entries(logisticsPartnerTypeLabels).map(([value, label]) => (
-              <TabsTrigger
-                key={value}
-                value={value}
-                className="rounded-none border-0 bg-transparent px-0 py-3 shadow-none data-active:bg-transparent data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-transparent"
-              >
+              <TabsTrigger key={value} value={value}>
                 {label}s
               </TabsTrigger>
             ))}
           </TabsList>
-          <TabsContent value={activeTab} className="mt-0 outline-none">
+          <TabsContent value={activeTab} className="mt-0">
             <div className="p-5 pt-4">
               <LogisticsPartnersTable
                 partners={pagedRows}

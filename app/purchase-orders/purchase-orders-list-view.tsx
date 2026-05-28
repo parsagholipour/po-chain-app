@@ -556,25 +556,12 @@ export function PurchaseOrdersListView() {
           }}
           className="gap-0"
         >
-          <TabsList
-            variant="line"
-            className="h-auto min-h-12 w-full justify-start gap-4 rounded-none border-0 border-b border-border bg-muted/30 px-3 sm:gap-8 sm:px-4"
-          >
-            <TabsTrigger
-              value="sale_channels"
-              className="rounded-none border-0 bg-transparent px-0 py-3 shadow-none data-active:bg-transparent data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-transparent"
-            >
-              By sale channel
-            </TabsTrigger>
-            <TabsTrigger
-              value="manufacturers"
-              className="rounded-none border-0 bg-transparent px-0 py-3 shadow-none data-active:bg-transparent data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-transparent"
-            >
-              By manufacturer
-            </TabsTrigger>
+          <TabsList variant="underline">
+            <TabsTrigger value="sale_channels">By sale channel</TabsTrigger>
+            <TabsTrigger value="manufacturers">By manufacturer</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="sale_channels" className="mt-0 outline-none">
+          <TabsContent value="sale_channels" className="mt-0">
             <div className="space-y-5 p-3 pt-4 sm:p-5 sm:pt-4">
               <EntityTabRow
                 items={saleChannelItems}
@@ -606,7 +593,7 @@ export function PurchaseOrdersListView() {
             </div>
           </TabsContent>
 
-          <TabsContent value="manufacturers" className="mt-0 outline-none">
+          <TabsContent value="manufacturers" className="mt-0">
             <div className="space-y-5 p-3 pt-4 sm:p-5 sm:pt-4">
               <EntityTabRow
                 items={manufacturerItems}

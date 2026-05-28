@@ -10,7 +10,7 @@ import {
   shippingTypeLabels,
   type ShippingType,
 } from "@/lib/shipping";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TableContainer } from "@/components/ui/table-container";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { ShippingTable } from "./shipping-table";
@@ -180,16 +180,9 @@ export function ShippingView() {
           </div>
         ) : (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-0">
-            <TabsList
-              variant="line"
-            className="h-auto min-h-12 w-full justify-start gap-4 rounded-none border-0 border-b border-border bg-muted/30 px-3 sm:gap-8 sm:px-4"
-            >
+            <TabsList variant="underline">
               {Object.entries(shippingTypeLabels).map(([value, label]) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="rounded-none border-0 bg-transparent px-0 py-3 shadow-none data-active:bg-transparent data-active:shadow-none dark:data-active:border-transparent dark:data-active:bg-transparent"
-                >
+                <TabsTrigger key={value} value={value}>
                   <span className="inline-flex items-center gap-2">
                     {label}
                     {(shippingCounts?.[value as ShippingType] ?? 0) > 0 ? (
@@ -204,7 +197,7 @@ export function ShippingView() {
                 </TabsTrigger>
               ))}
             </TabsList>
-            <TabsContent value={activeTab} className="mt-0 outline-none">
+            <TabsContent value={activeTab} className="mt-0">
               <div className="p-3 pt-4 sm:p-5 sm:pt-4">
                 <ShippingTable
                   shippings={pagedRows}
