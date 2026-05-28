@@ -6,7 +6,7 @@ import { allCountries, US } from "country-region-data"
 import {
   SearchableSelect,
   type SearchableSelectItem,
-  type SearchableSelectProps,
+  type SearchableSelectSingleProps,
 } from "@/components/ui/searchable-select"
 
 export const UNITED_STATES_COUNTRY = "United States"
@@ -53,7 +53,7 @@ export const usStateSelectItems: readonly SearchableSelectItem[] = US[2].map(
   }),
 )
 
-type CountryStateSelectProps = Omit<SearchableSelectProps, "items">
+type CountryStateSelectProps = Omit<SearchableSelectSingleProps, "items">
 
 function withCurrentOption(
   items: readonly SearchableSelectItem[],

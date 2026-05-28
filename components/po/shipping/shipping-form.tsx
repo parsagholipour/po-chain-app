@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { PriceField } from "@/components/ui/price-field";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
   SelectContent,
@@ -211,6 +212,29 @@ function locationContact(location: SaleChannelLocationOption) {
     .join(" - ");
 }
 
+function orderSelectLabel(order: OrderOption, isRequired: boolean) {
+  return `#${order.number} - ${order.name}${isRequired ? " (Current order)" : ""}`;
+}
+
+function orderSelectedLabel(order: OrderOption, isRequired: boolean) {
+  const compactName = order.name.replace(/^(distributor|stock) order\s+/i, "");
+  return `#${order.number} - ${compactName}${isRequired ? " (Current order)" : ""}`;
+}
+
+function orderSelectKeywords(order: OrderOption) {
+  return [
+    order.number,
+    order.name,
+    order.saleChannel?.name,
+    order.saleChannelLocation?.name,
+    order.shipToLocationName,
+    order.shipToRecipientName,
+    order.shipToCompanyName,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
 export function ShippingForm({
   defaultValues,
   editingId,
@@ -318,6 +342,20 @@ export function ShippingForm({
     })),
   ];
   const showDestination = type === "purchase_order" || type === "stock_order";
+  const purchaseOrderSelectItems = useMemo(
+    () =>
+      availablePurchaseOrders.map((order) => {
+        const isRequired = requiredPurchaseOrderIds.includes(order.id);
+
+        return {
+          value: order.id,
+          label: orderSelectLabel(order, isRequired),
+          selectedLabel: orderSelectedLabel(order, isRequired),
+          keywords: orderSelectKeywords(order),
+        };
+      }),
+    [availablePurchaseOrders, requiredPurchaseOrderIds],
+  );
   const selectedPurchaseOrders = useMemo(
     () => availablePurchaseOrders.filter((order) => selectedPurchaseOrderIds.includes(order.id)),
     [availablePurchaseOrders, selectedPurchaseOrderIds],
@@ -831,44 +869,31 @@ export function ShippingForm({
           <Field className="md:col-span-2">
             <FieldLabel>{type === "stock_order" ? "Stock Orders" : "Purchase Orders"}</FieldLabel>
             <FieldContent>
-              <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-2">
-                {availablePurchaseOrders.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No orders available</p>
-                ) : (
-                  availablePurchaseOrders.map((order) => {
-                    const isRequired = requiredPurchaseOrderIds.includes(order.id);
-                    const checked = selectedPurchaseOrderIds.includes(order.id) || isRequired;
-
-                    return (
-                      <div key={order.id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`po-${order.id}`}
-                          checked={checked}
-                          disabled={isRequired}
-                          label={
-                            <span className="text-sm">
-                              #{order.number} - {order.name}
-                              {isRequired ? " (Current order)" : ""}
-                            </span>
-                          }
-                          onCheckedChange={(checkedValue) => {
-                            form.setValue(
-                              "purchaseOrderIds",
-                              toggleIds(
-                                selectedPurchaseOrderIds,
-                                order.id,
-                                checkedValue === true,
-                                requiredPurchaseOrderIds,
-                              ),
-                              { shouldDirty: true, shouldValidate: true },
-                            );
-                          }}
-                        />
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+              <SearchableSelect
+                multiple
+                className="w-full"
+                items={purchaseOrderSelectItems}
+                value={selectedPurchaseOrderIds}
+                fixedValues={requiredPurchaseOrderIds}
+                disabled={
+                  availablePurchaseOrders.length === 0 && selectedPurchaseOrderIds.length === 0
+                }
+                placeholder={
+                  availablePurchaseOrders.length === 0
+                    ? "No orders available"
+                    : type === "stock_order"
+                      ? "Search stock orders"
+                      : "Search purchase orders"
+                }
+                emptyMessage="No orders found."
+                onValueChange={(nextIds) => {
+                  form.setValue(
+                    "purchaseOrderIds",
+                    uniqueIds([...nextIds, ...requiredPurchaseOrderIds]),
+                    { shouldDirty: true, shouldValidate: true },
+                  );
+                }}
+              />
             </FieldContent>
             <FieldError>{form.formState.errors.purchaseOrderIds?.message}</FieldError>
           </Field>

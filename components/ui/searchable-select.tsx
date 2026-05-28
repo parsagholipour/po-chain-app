@@ -3,13 +3,15 @@
 import * as React from "react"
 import { Combobox } from "@base-ui/react/combobox"
 import { useVirtualizer } from "@tanstack/react-virtual"
-import { CheckIcon, ChevronDownIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 export type SearchableSelectItem = {
   value: string
   label: string
+  /** Shorter text used for selected chips in multi-select mode. */
+  selectedLabel?: string
   /** Extra text included in search (for example SKU). */
   keywords?: string
 }
@@ -33,6 +35,15 @@ const itemClassName =
 
 const inputClassName =
   "h-8 min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm shadow-none outline-none ring-0 placeholder:text-muted-foreground focus-visible:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
+
+const chipClassName =
+  "inline-flex h-6 max-w-[11rem] min-w-0 items-center gap-1 rounded-md border border-border bg-muted px-1.5 text-xs leading-none text-foreground"
+
+const chipRemoveClassName =
+  "inline-flex size-4 items-center justify-center rounded-sm text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40"
+
+const chipsClassName =
+  "flex min-w-0 flex-1 flex-nowrap items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 
 function defaultFilter(item: SearchableSelectItem, query: string) {
   const q = query.trim().toLowerCase()
@@ -62,9 +73,11 @@ type VirtualListHandle = {
 function SearchableSelectVirtualList({
   open,
   listRef,
+  isItemDisabled,
 }: {
   open: boolean
   listRef: React.RefObject<VirtualListHandle | null>
+  isItemDisabled?: (item: SearchableSelectItem) => boolean
 }) {
   const filteredItems = Combobox.useFilteredItems<SearchableSelectItem>()
   const scrollElementRef = React.useRef<HTMLDivElement | null>(null)
@@ -130,6 +143,7 @@ function SearchableSelectVirtualList({
                 <Combobox.Item
                   value={item}
                   index={virtualRow.index}
+                  disabled={isItemDisabled?.(item)}
                   className={itemClassName}
                 >
                   <SearchableSelectItemRow item={item} />
@@ -143,10 +157,8 @@ function SearchableSelectVirtualList({
   )
 }
 
-export type SearchableSelectProps = {
+type SearchableSelectBaseProps = {
   items: readonly SearchableSelectItem[]
-  value: string
-  onValueChange: (value: string) => void
   placeholder?: string
   disabled?: boolean
   "aria-invalid"?: boolean
@@ -157,7 +169,53 @@ export type SearchableSelectProps = {
   name?: string
 }
 
-export function SearchableSelect({
+export type SearchableSelectSingleProps = SearchableSelectBaseProps & {
+  multiple?: false
+  value: string
+  onValueChange: (value: string) => void
+}
+
+export type SearchableSelectMultipleProps = SearchableSelectBaseProps & {
+  multiple: true
+  value: readonly string[]
+  onValueChange: (value: string[]) => void
+  fixedValues?: readonly string[]
+}
+
+export type SearchableSelectProps =
+  | SearchableSelectSingleProps
+  | SearchableSelectMultipleProps
+
+function uniqueValues(values: readonly string[]) {
+  return [...new Set(values)]
+}
+
+function selectedItemsFromValues(
+  items: readonly SearchableSelectItem[],
+  values: readonly string[],
+) {
+  const itemByValue = new Map(items.map((item) => [item.value, item]))
+
+  return values.map((value) => itemByValue.get(value) ?? { value, label: value })
+}
+
+function focusInputSoon(input: HTMLInputElement | null) {
+  queueMicrotask(() => {
+    input?.focus()
+  })
+  requestAnimationFrame(() => {
+    input?.focus()
+  })
+}
+
+function shouldIgnoreGroupFocus(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(target.closest("input, textarea, button, [contenteditable='true']"))
+  )
+}
+
+function SearchableSelectSingle({
   items,
   value,
   onValueChange,
@@ -169,10 +227,24 @@ export function SearchableSelect({
   filter = defaultFilter,
   id,
   name,
-}: SearchableSelectProps) {
+}: SearchableSelectSingleProps) {
   const [open, setOpen] = React.useState(false)
+  const inputRef = React.useRef<HTMLInputElement | null>(null)
   const virtualListRef = React.useRef<VirtualListHandle | null>(null)
   const shouldVirtualize = items.length >= VIRTUALIZE_THRESHOLD
+
+  const handleOpenChange = React.useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen)
+    if (nextOpen) focusInputSoon(inputRef.current)
+  }, [])
+
+  const handleInputGroupFocus = React.useCallback(
+    (event: React.SyntheticEvent<HTMLDivElement>) => {
+      if (disabled || shouldIgnoreGroupFocus(event.target)) return
+      focusInputSoon(inputRef.current)
+    },
+    [disabled],
+  )
 
   const selected = React.useMemo(
     () => items.find((i) => i.value === value) ?? null,
@@ -220,15 +292,18 @@ export function SearchableSelect({
       }
       id={id}
       name={name}
-      onOpenChange={setOpen}
+      onOpenChange={handleOpenChange}
       onItemHighlighted={shouldVirtualize ? handleItemHighlighted : undefined}
     >
       <Combobox.InputGroup
         data-slot="searchable-select-trigger"
         aria-invalid={ariaInvalid}
+        onPointerDownCapture={handleInputGroupFocus}
+        onClick={handleInputGroupFocus}
         className={cn(inputGroupClassName, className)}
       >
         <Combobox.Input
+          ref={inputRef}
           id={id}
           placeholder={placeholder}
           className={inputClassName}
@@ -270,4 +345,200 @@ export function SearchableSelect({
       </Combobox.Portal>
     </Combobox.Root>
   )
+}
+
+function SearchableSelectMultiple({
+  items,
+  value,
+  fixedValues = [],
+  onValueChange,
+  placeholder = "Select…",
+  disabled = false,
+  "aria-invalid": ariaInvalid,
+  className,
+  emptyMessage = "No results.",
+  filter = defaultFilter,
+  id,
+  name,
+}: SearchableSelectMultipleProps) {
+  const [open, setOpen] = React.useState(false)
+  const inputRef = React.useRef<HTMLInputElement | null>(null)
+  const virtualListRef = React.useRef<VirtualListHandle | null>(null)
+  const shouldVirtualize = items.length >= VIRTUALIZE_THRESHOLD
+
+  const selectedValueIds = React.useMemo(
+    () => uniqueValues([...fixedValues, ...value]),
+    [fixedValues, value],
+  )
+  const selectedItems = React.useMemo(
+    () => selectedItemsFromValues(items, selectedValueIds),
+    [items, selectedValueIds],
+  )
+  const fixedValueSet = React.useMemo(() => new Set(fixedValues), [fixedValues])
+
+  const emitValueChange = React.useCallback(
+    (nextItems: SearchableSelectItem[]) => {
+      const nextIds = nextItems.map((item) => item.value)
+      onValueChange(uniqueValues([...fixedValues, ...nextIds]))
+    },
+    [fixedValues, onValueChange],
+  )
+
+  const isItemDisabled = React.useCallback(
+    (item: SearchableSelectItem) => fixedValueSet.has(item.value),
+    [fixedValueSet],
+  )
+
+  const handleItemHighlighted = React.useCallback(
+    (
+      highlighted: SearchableSelectItem | undefined,
+      details: Combobox.Root.HighlightEventDetails,
+    ) => {
+      if (!shouldVirtualize || !highlighted || !virtualListRef.current) return
+
+      const { filteredItems, scrollToIndex } = virtualListRef.current
+      const index = filteredItems.findIndex((item) => item.value === highlighted.value)
+      if (index === -1) return
+
+      const isStart = index === 0
+      const isEnd = index === filteredItems.length - 1
+      const shouldScroll =
+        details.reason === "none" ||
+        (details.reason === "keyboard" && (isStart || isEnd))
+
+      if (shouldScroll) {
+        queueMicrotask(() => {
+          scrollToIndex(index, isEnd ? "start" : "end")
+        })
+      }
+    },
+    [shouldVirtualize],
+  )
+
+  const handleOpenChange = React.useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen)
+    if (nextOpen) focusInputSoon(inputRef.current)
+  }, [])
+
+  const handleInputGroupFocus = React.useCallback(
+    (event: React.SyntheticEvent<HTMLDivElement>) => {
+      if (disabled || shouldIgnoreGroupFocus(event.target)) return
+      focusInputSoon(inputRef.current)
+    },
+    [disabled],
+  )
+
+  return (
+    <Combobox.Root
+      multiple
+      items={items}
+      value={selectedItems}
+      onValueChange={emitValueChange}
+      disabled={disabled}
+      filter={filter}
+      virtualized={shouldVirtualize}
+      isItemEqualToValue={(a: SearchableSelectItem, b: SearchableSelectItem) =>
+        a.value === b.value
+      }
+      id={id}
+      name={name}
+      onOpenChange={handleOpenChange}
+      onItemHighlighted={shouldVirtualize ? handleItemHighlighted : undefined}
+    >
+      <Combobox.InputGroup
+        data-slot="searchable-select-trigger"
+        aria-invalid={ariaInvalid}
+        onPointerDownCapture={handleInputGroupFocus}
+        onClick={handleInputGroupFocus}
+        className={cn(
+          inputGroupClassName,
+          "h-9 items-center py-1.5",
+          className,
+        )}
+      >
+        <Combobox.Chips className={chipsClassName}>
+          {selectedItems.map((item) => {
+            const fixed = fixedValueSet.has(item.value)
+            const selectedLabel = item.selectedLabel ?? item.label
+
+            return (
+              <Combobox.Chip key={item.value} className={chipClassName} title={item.label}>
+                <span className="min-w-0 flex-1 truncate">{selectedLabel}</span>
+                <Combobox.ChipRemove
+                  type="button"
+                  disabled={fixed}
+                  aria-label={`Remove ${item.label}`}
+                  className={chipRemoveClassName}
+                >
+                  <XIcon className="size-3" />
+                </Combobox.ChipRemove>
+              </Combobox.Chip>
+            )
+          })}
+          <Combobox.Input
+            ref={inputRef}
+            id={id}
+            placeholder={selectedItems.length > 0 ? "" : placeholder}
+            className={cn(
+              inputClassName,
+              selectedItems.length > 0
+                ? "h-6 min-w-6 flex-[0_0_1.5rem]"
+                : "h-6 min-w-[8rem] flex-1",
+            )}
+          />
+        </Combobox.Chips>
+        <Combobox.Icon className="pointer-events-none shrink-0 text-muted-foreground">
+          <ChevronDownIcon className="size-4" />
+        </Combobox.Icon>
+      </Combobox.InputGroup>
+      <Combobox.Portal>
+        <Combobox.Positioner
+          className="isolate z-50 outline-none"
+          side="bottom"
+          sideOffset={4}
+          align="center"
+        >
+          <Combobox.Popup
+            data-slot="searchable-select-content"
+            className={cn(
+              popupClassName,
+              shouldVirtualize ? "overflow-hidden" : "overflow-y-auto",
+            )}
+          >
+            {shouldVirtualize ? (
+              <SearchableSelectVirtualList
+                open={open}
+                listRef={virtualListRef}
+                isItemDisabled={isItemDisabled}
+              />
+            ) : (
+              <Combobox.List className={listClassName}>
+                {(item: SearchableSelectItem) => (
+                  <Combobox.Item
+                    key={item.value}
+                    value={item}
+                    disabled={isItemDisabled(item)}
+                    className={itemClassName}
+                  >
+                    <SearchableSelectItemRow item={item} />
+                  </Combobox.Item>
+                )}
+              </Combobox.List>
+            )}
+            <Combobox.Empty className="empty:hidden px-2 py-2 text-center text-sm text-muted-foreground">
+              {emptyMessage}
+            </Combobox.Empty>
+          </Combobox.Popup>
+        </Combobox.Positioner>
+      </Combobox.Portal>
+    </Combobox.Root>
+  )
+}
+
+export function SearchableSelect(props: SearchableSelectProps) {
+  if (props.multiple) {
+    return <SearchableSelectMultiple {...props} />
+  }
+
+  return <SearchableSelectSingle {...props} />
 }
