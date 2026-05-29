@@ -26,6 +26,24 @@ type InventoryBySkuResponse = {
         nodes: Array<{
           id: string;
           isActive: boolean;
+          location: {
+            id: string;
+            name: string;
+            isActive: boolean;
+            fulfillsOnlineOrders: boolean;
+            hasActiveInventory: boolean;
+            shipsInventory: boolean;
+            address: {
+              address1: string | null;
+              address2: string | null;
+              city: string | null;
+              province: string | null;
+              country: string | null;
+              countryCode: string | null;
+              zip: string | null;
+              phone: string | null;
+            };
+          };
           quantities: Array<{ name: string; quantity: number }>;
         }>;
         pageInfo: { hasNextPage: boolean; endCursor: string | null };
@@ -33,6 +51,18 @@ type InventoryBySkuResponse = {
     }>;
     pageInfo: { hasNextPage: boolean; endCursor: string | null };
   };
+};
+
+type InventoryLevelLocation =
+  InventoryBySkuResponse["inventoryItems"]["nodes"][number]["inventoryLevels"]["nodes"][number]["location"];
+
+type InventoryLocationAccumulator = {
+  location: InventoryLevelLocation;
+  onHand: number;
+  inventoryItemGids: Set<string>;
+  inventoryLevelGids: Set<string>;
+  itemTrackedValues: Set<boolean>;
+  levelActiveValues: Set<boolean>;
 };
 
 const VALIDATE_ACCESS_QUERY = /* GraphQL */ `
@@ -67,6 +97,24 @@ const INVENTORY_BY_SKU_QUERY = /* GraphQL */ `
           nodes {
             id
             isActive
+            location {
+              id
+              name
+              isActive
+              fulfillsOnlineOrders
+              hasActiveInventory
+              shipsInventory
+              address {
+                address1
+                address2
+                city
+                province
+                country
+                countryCode
+                zip
+                phone
+              }
+            }
             quantities(names: ["on_hand"]) {
               name
               quantity
@@ -131,6 +179,14 @@ function userErrorsMessage(userErrors: UserError[] | undefined) {
 
 function escapeSearchValue(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+function singleOrNull(values: Set<string>) {
+  return values.size === 1 ? [...values][0] : null;
+}
+
+function singleBooleanOrNull(values: Set<boolean>) {
+  return values.size === 1 ? [...values][0] : null;
 }
 
 export async function shopifyGraphql<T>({
@@ -276,6 +332,7 @@ export async function readOnHandInventoryForSku(input: {
   let after: string | null = null;
   let quantity = 0;
   let itemCount = 0;
+  const levelsByLocation = new Map<string, InventoryLocationAccumulator>();
 
   do {
     const data: InventoryBySkuResponse = await shopifyGraphql<InventoryBySkuResponse>({
@@ -289,9 +346,33 @@ export async function readOnHandInventoryForSku(input: {
       if (item.sku?.trim() !== searchSku) continue;
       itemCount += 1;
       for (const level of item.inventoryLevels.nodes) {
-        if (!level.isActive) continue;
-        quantity +=
+        const onHand =
           level.quantities.find((entry) => entry.name === "on_hand")?.quantity ?? 0;
+        if (!level.isActive) continue;
+        quantity += onHand;
+      }
+
+      for (const level of item.inventoryLevels.nodes) {
+        const onHand =
+          level.quantities.find((entry) => entry.name === "on_hand")?.quantity ?? 0;
+        const current =
+          levelsByLocation.get(level.location.id) ??
+          {
+            location: level.location,
+            onHand: 0,
+            inventoryItemGids: new Set<string>(),
+            inventoryLevelGids: new Set<string>(),
+            itemTrackedValues: new Set<boolean>(),
+            levelActiveValues: new Set<boolean>(),
+          };
+
+        current.location = level.location;
+        current.onHand += onHand;
+        current.inventoryItemGids.add(item.id);
+        current.inventoryLevelGids.add(level.id);
+        current.itemTrackedValues.add(item.tracked);
+        current.levelActiveValues.add(level.isActive);
+        levelsByLocation.set(level.location.id, current);
       }
     }
 
@@ -300,5 +381,32 @@ export async function readOnHandInventoryForSku(input: {
       : null;
   } while (after);
 
-  return { sku: searchSku, quantity, itemCount };
+  return {
+    sku: searchSku,
+    quantity,
+    itemCount,
+    levels: [...levelsByLocation.values()].map((level) => ({
+      location: {
+        shopifyLocationGid: level.location.id,
+        name: level.location.name,
+        isActive: level.location.isActive,
+        fulfillsOnlineOrders: level.location.fulfillsOnlineOrders,
+        hasActiveInventory: level.location.hasActiveInventory,
+        shipsInventory: level.location.shipsInventory,
+        address1: level.location.address.address1,
+        address2: level.location.address.address2,
+        city: level.location.address.city,
+        province: level.location.address.province,
+        country: level.location.address.country,
+        countryCode: level.location.address.countryCode,
+        zip: level.location.address.zip,
+        phone: level.location.address.phone,
+      },
+      onHand: level.onHand,
+      shopifyInventoryItemGid: singleOrNull(level.inventoryItemGids),
+      shopifyInventoryLevelGid: singleOrNull(level.inventoryLevelGids),
+      shopifyInventoryItemTracked: singleBooleanOrNull(level.itemTrackedValues),
+      inventoryLevelActive: singleBooleanOrNull(level.levelActiveValues),
+    })),
+  };
 }

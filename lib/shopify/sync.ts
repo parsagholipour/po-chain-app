@@ -1,5 +1,7 @@
 import "server-only";
 
+import { randomUUID } from "crypto";
+import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   decryptShopifySecret,
@@ -20,7 +22,19 @@ export type ShopifySyncResult = {
   syncedProductCount: number;
   matchedSkuCount: number;
   unmatchedLocalSkuCount: number;
+  syncedLocationCount: number;
+  syncedInventoryCount: number;
+  movementCount: number;
 };
+
+type LocalProduct = {
+  id: string;
+  name: string;
+  sku: string;
+};
+
+type ShopifyInventoryForSku = Awaited<ReturnType<typeof readOnHandInventoryForSku>>;
+type ShopifyInventoryLevel = ShopifyInventoryForSku["levels"][number];
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
@@ -34,6 +48,313 @@ function lockReason(lockUntil: Date | null) {
   return lockUntil
     ? `A Shopify inventory sync is already running until ${lockUntil.toISOString()}`
     : "A Shopify inventory sync is already running";
+}
+
+function emptySyncResult(
+  integrationId: string,
+  overrides: Partial<ShopifySyncResult> = {},
+): ShopifySyncResult {
+  return {
+    integrationId,
+    skipped: true,
+    syncedProductCount: 0,
+    matchedSkuCount: 0,
+    unmatchedLocalSkuCount: 0,
+    syncedLocationCount: 0,
+    syncedInventoryCount: 0,
+    movementCount: 0,
+    ...overrides,
+  };
+}
+
+function locationData(level: ShopifyInventoryLevel, observedAt: Date) {
+  return {
+    shopifyLocationGid: level.location.shopifyLocationGid,
+    name: level.location.name,
+    isActive: level.location.isActive,
+    fulfillsOnlineOrders: level.location.fulfillsOnlineOrders,
+    hasActiveInventory: level.location.hasActiveInventory,
+    shipsInventory: level.location.shipsInventory,
+    address1: level.location.address1,
+    address2: level.location.address2,
+    city: level.location.city,
+    province: level.location.province,
+    country: level.location.country,
+    countryCode: level.location.countryCode,
+    zip: level.location.zip,
+    phone: level.location.phone,
+    lastSeenAt: observedAt,
+  };
+}
+
+function countData({
+  storeId,
+  productId,
+  shopifyLocationId,
+  level,
+  trigger,
+  observedAt,
+}: {
+  storeId: string;
+  productId: string;
+  shopifyLocationId: string;
+  level: ShopifyInventoryLevel;
+  trigger: ShopifySyncTrigger;
+  observedAt: Date;
+}) {
+  return {
+    storeId,
+    productId,
+    shopifyLocationId,
+    shopifyInventoryItemGid: level.shopifyInventoryItemGid,
+    shopifyInventoryLevelGid: level.shopifyInventoryLevelGid,
+    shopifyInventoryItemTracked: level.shopifyInventoryItemTracked,
+    inventoryLevelActive: level.inventoryLevelActive,
+    onHand: level.onHand,
+    lastSyncedAt: observedAt,
+    lastSyncTrigger: trigger,
+  };
+}
+
+async function createMovement({
+  tx,
+  storeId,
+  product,
+  shopifyLocationId,
+  shopifyLocationName,
+  shopifyLocationGid,
+  shopifyInventoryItemGid,
+  shopifyInventoryLevelGid,
+  previousOnHand,
+  newOnHand,
+  trigger,
+  syncRunId,
+  observedAt,
+}: {
+  tx: Prisma.TransactionClient;
+  storeId: string;
+  product: LocalProduct;
+  shopifyLocationId: string | null;
+  shopifyLocationName: string;
+  shopifyLocationGid: string;
+  shopifyInventoryItemGid: string | null;
+  shopifyInventoryLevelGid: string | null;
+  previousOnHand: number | null;
+  newOnHand: number;
+  trigger: ShopifySyncTrigger;
+  syncRunId: string;
+  observedAt: Date;
+}) {
+  await tx.shopifyInventoryMovement.create({
+    data: {
+      storeId,
+      productId: product.id,
+      shopifyLocationId,
+      productName: product.name,
+      sku: product.sku,
+      shopifyLocationName,
+      shopifyLocationGid,
+      shopifyInventoryItemGid,
+      shopifyInventoryLevelGid,
+      previousOnHand,
+      newOnHand,
+      delta: newOnHand - (previousOnHand ?? 0),
+      trigger,
+      syncRunId,
+      observedAt,
+    },
+  });
+}
+
+async function syncInventoryMirrorForProduct({
+  tx,
+  storeId,
+  product,
+  inventory,
+  trigger,
+  syncRunId,
+  observedAt,
+  syncedLocationGids,
+}: {
+  tx: Prisma.TransactionClient;
+  storeId: string;
+  product: LocalProduct;
+  inventory: ShopifyInventoryForSku;
+  trigger: ShopifySyncTrigger;
+  syncRunId: string;
+  observedAt: Date;
+  syncedLocationGids: Set<string>;
+}) {
+  let syncedInventoryCount = 0;
+  let movementCount = 0;
+  const locationRowsByGid = new Map<string, { id: string; name: string; shopifyLocationGid: string }>();
+
+  for (const level of inventory.levels) {
+    const row = await tx.shopifyLocation.upsert({
+      where: {
+        storeId_shopifyLocationGid: {
+          storeId,
+          shopifyLocationGid: level.location.shopifyLocationGid,
+        },
+      },
+      create: {
+        storeId,
+        ...locationData(level, observedAt),
+      },
+      update: locationData(level, observedAt),
+      select: {
+        id: true,
+        name: true,
+        shopifyLocationGid: true,
+      },
+    });
+    locationRowsByGid.set(row.shopifyLocationGid, row);
+    syncedLocationGids.add(row.shopifyLocationGid);
+  }
+
+  const seenLocationIds = new Set<string>();
+
+  for (const level of inventory.levels) {
+    const location = locationRowsByGid.get(level.location.shopifyLocationGid);
+    if (!location) continue;
+    seenLocationIds.add(location.id);
+
+    const existing = await tx.shopifyInventoryCount.findUnique({
+      where: {
+        productId_shopifyLocationId: {
+          productId: product.id,
+          shopifyLocationId: location.id,
+        },
+      },
+      select: {
+        id: true,
+        onHand: true,
+      },
+    });
+
+    if (!existing) {
+      await tx.shopifyInventoryCount.create({
+        data: countData({
+          storeId,
+          productId: product.id,
+          shopifyLocationId: location.id,
+          level,
+          trigger,
+          observedAt,
+        }),
+      });
+      await createMovement({
+        tx,
+        storeId,
+        product,
+        shopifyLocationId: location.id,
+        shopifyLocationName: location.name,
+        shopifyLocationGid: location.shopifyLocationGid,
+        shopifyInventoryItemGid: level.shopifyInventoryItemGid,
+        shopifyInventoryLevelGid: level.shopifyInventoryLevelGid,
+        previousOnHand: null,
+        newOnHand: level.onHand,
+        trigger,
+        syncRunId,
+        observedAt,
+      });
+      syncedInventoryCount += 1;
+      movementCount += 1;
+      continue;
+    }
+
+    await tx.shopifyInventoryCount.update({
+      where: { id: existing.id },
+      data: countData({
+        storeId,
+        productId: product.id,
+        shopifyLocationId: location.id,
+        level,
+        trigger,
+        observedAt,
+      }),
+    });
+    syncedInventoryCount += 1;
+
+    if (existing.onHand !== level.onHand) {
+      await createMovement({
+        tx,
+        storeId,
+        product,
+        shopifyLocationId: location.id,
+        shopifyLocationName: location.name,
+        shopifyLocationGid: location.shopifyLocationGid,
+        shopifyInventoryItemGid: level.shopifyInventoryItemGid,
+        shopifyInventoryLevelGid: level.shopifyInventoryLevelGid,
+        previousOnHand: existing.onHand,
+        newOnHand: level.onHand,
+        trigger,
+        syncRunId,
+        observedAt,
+      });
+      movementCount += 1;
+    }
+  }
+
+  const disappearedCounts = await tx.shopifyInventoryCount.findMany({
+    where: {
+      storeId,
+      productId: product.id,
+      ...(seenLocationIds.size > 0
+        ? { shopifyLocationId: { notIn: [...seenLocationIds] } }
+        : {}),
+    },
+    select: {
+      id: true,
+      onHand: true,
+      shopifyInventoryItemGid: true,
+      shopifyInventoryLevelGid: true,
+      shopifyLocationId: true,
+      shopifyLocation: {
+        select: {
+          name: true,
+          shopifyLocationGid: true,
+        },
+      },
+    },
+  });
+
+  for (const count of disappearedCounts) {
+    await tx.shopifyInventoryCount.update({
+      where: { id: count.id },
+      data: {
+        shopifyInventoryItemGid: null,
+        shopifyInventoryLevelGid: null,
+        shopifyInventoryItemTracked: null,
+        inventoryLevelActive: false,
+        onHand: 0,
+        lastSyncedAt: observedAt,
+        lastSyncTrigger: trigger,
+      },
+    });
+    syncedInventoryCount += 1;
+
+    if (count.onHand !== 0) {
+      await createMovement({
+        tx,
+        storeId,
+        product,
+        shopifyLocationId: count.shopifyLocationId,
+        shopifyLocationName: count.shopifyLocation.name,
+        shopifyLocationGid: count.shopifyLocation.shopifyLocationGid,
+        shopifyInventoryItemGid: count.shopifyInventoryItemGid,
+        shopifyInventoryLevelGid: count.shopifyInventoryLevelGid,
+        previousOnHand: count.onHand,
+        newOnHand: 0,
+        trigger,
+        syncRunId,
+        observedAt,
+      });
+      movementCount += 1;
+    }
+  }
+
+  return { syncedInventoryCount, movementCount };
 }
 
 async function acquireSyncLock(integrationId: string) {
@@ -101,12 +422,8 @@ export async function syncShopifyIntegrationById(
       durationMs: elapsedMs(startedAt),
     });
     return {
-      integrationId,
-      skipped: true,
+      ...emptySyncResult(integrationId),
       reason: "Shopify integration was not found",
-      syncedProductCount: 0,
-      matchedSkuCount: 0,
-      unmatchedLocalSkuCount: 0,
     };
   }
 
@@ -121,13 +438,9 @@ export async function syncShopifyIntegrationById(
       durationMs: elapsedMs(startedAt),
     });
     return {
-      integrationId,
-      skipped: true,
+      ...emptySyncResult(integrationId),
       reason: lockReason(lock.lockUntil),
       lockExpiresAt: lock.lockUntil?.toISOString() ?? null,
-      syncedProductCount: 0,
-      matchedSkuCount: 0,
-      unmatchedLocalSkuCount: 0,
     };
   }
 
@@ -156,12 +469,8 @@ export async function syncShopifyIntegrationById(
         durationMs: elapsedMs(startedAt),
       });
       return {
-        integrationId,
-        skipped: true,
+        ...emptySyncResult(integrationId),
         reason: "Shopify integration was not found",
-        syncedProductCount: 0,
-        matchedSkuCount: 0,
-        unmatchedLocalSkuCount: 0,
       };
     }
 
@@ -177,12 +486,8 @@ export async function syncShopifyIntegrationById(
         data: { syncLockUntil: null },
       });
       return {
-        integrationId,
-        skipped: true,
+        ...emptySyncResult(integrationId),
         reason: "Shopify integration is disabled",
-        syncedProductCount: 0,
-        matchedSkuCount: 0,
-        unmatchedLocalSkuCount: 0,
       };
     }
 
@@ -208,20 +513,20 @@ export async function syncShopifyIntegrationById(
     }
     const products = await prisma.product.findMany({
       where: { storeId: integration.storeId },
-      select: { id: true, sku: true },
+      select: { id: true, name: true, sku: true },
       orderBy: { sku: "asc" },
     });
 
-    const productIdsBySku = new Map<string, string[]>();
+    const productsBySku = new Map<string, LocalProduct[]>();
     for (const product of products) {
       const sku = product.sku.trim();
       if (!sku) continue;
-      const ids = productIdsBySku.get(sku) ?? [];
-      ids.push(product.id);
-      productIdsBySku.set(sku, ids);
+      const rows = productsBySku.get(sku) ?? [];
+      rows.push(product);
+      productsBySku.set(sku, rows);
     }
 
-    const skuCount = productIdsBySku.size;
+    const skuCount = productsBySku.size;
     console.info("[shopify-sync] local products loaded", {
       integrationId,
       storeId: integration.storeId,
@@ -234,8 +539,13 @@ export async function syncShopifyIntegrationById(
     let syncedProductCount = 0;
     let matchedSkuCount = 0;
     let checkedSkuCount = 0;
+    let syncedInventoryCount = 0;
+    let movementCount = 0;
+    const syncRunId = randomUUID();
+    const observedAt = new Date();
+    const syncedLocationGids = new Set<string>();
 
-    for (const sku of productIdsBySku.keys()) {
+    for (const sku of productsBySku.keys()) {
       const inventory = await readOnHandInventoryForSku({
         shopDomain: integration.shopDomain,
         accessToken,
@@ -249,17 +559,39 @@ export async function syncShopifyIntegrationById(
 
       if (inventory.itemCount > 0) {
         matchedSkuCount += 1;
-        const productIds = productIdsBySku.get(sku) ?? [];
-        syncedProductCount += productIds.length;
+        const productRows = productsBySku.get(sku) ?? [];
+        syncedProductCount += productRows.length;
 
-        await prisma.$transaction(
-          productIds.map((id) =>
-            prisma.product.updateMany({
-              where: { id, storeId: integration.storeId },
+        const stats = await prisma.$transaction(async (tx) => {
+          let transactionSyncedInventoryCount = 0;
+          let transactionMovementCount = 0;
+
+          for (const product of productRows) {
+            await tx.product.updateMany({
+              where: { id: product.id, storeId: integration.storeId },
               data: { stockCount: inventory.quantity },
-            }),
-          ),
-        );
+            });
+            const mirrorStats = await syncInventoryMirrorForProduct({
+              tx,
+              storeId: integration.storeId,
+              product,
+              inventory,
+              trigger,
+              syncRunId,
+              observedAt,
+              syncedLocationGids,
+            });
+            transactionSyncedInventoryCount += mirrorStats.syncedInventoryCount;
+            transactionMovementCount += mirrorStats.movementCount;
+          }
+
+          return {
+            syncedInventoryCount: transactionSyncedInventoryCount,
+            movementCount: transactionMovementCount,
+          };
+        });
+        syncedInventoryCount += stats.syncedInventoryCount;
+        movementCount += stats.movementCount;
       }
 
       if (shouldLogProgress) {
@@ -270,6 +602,9 @@ export async function syncShopifyIntegrationById(
           skuCount,
           matchedSkuCount,
           syncedProductCount,
+          syncedLocationCount: syncedLocationGids.size,
+          syncedInventoryCount,
+          movementCount,
         });
       }
     }
@@ -279,7 +614,10 @@ export async function syncShopifyIntegrationById(
       skipped: false,
       syncedProductCount,
       matchedSkuCount,
-      unmatchedLocalSkuCount: productIdsBySku.size - matchedSkuCount,
+      unmatchedLocalSkuCount: productsBySku.size - matchedSkuCount,
+      syncedLocationCount: syncedLocationGids.size,
+      syncedInventoryCount,
+      movementCount,
     };
 
     await prisma.shopifyIntegration.update({
@@ -303,6 +641,9 @@ export async function syncShopifyIntegrationById(
       syncedProductCount: result.syncedProductCount,
       matchedSkuCount: result.matchedSkuCount,
       unmatchedLocalSkuCount: result.unmatchedLocalSkuCount,
+      syncedLocationCount: result.syncedLocationCount,
+      syncedInventoryCount: result.syncedInventoryCount,
+      movementCount: result.movementCount,
     });
 
     return result;
@@ -328,12 +669,8 @@ export async function syncShopifyIntegrationForStore(
   });
   if (!integration) {
     return {
-      integrationId: "",
-      skipped: true,
+      ...emptySyncResult(""),
       reason: "Shopify integration is not configured",
-      syncedProductCount: 0,
-      matchedSkuCount: 0,
-      unmatchedLocalSkuCount: 0,
     };
   }
   return syncShopifyIntegrationById(integration.id, trigger);

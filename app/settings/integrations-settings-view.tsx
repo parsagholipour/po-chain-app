@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import type {
   ProductStockSnapshotBackup,
+  ShopifyInventoryCountsResponse,
+  ShopifyInventoryLocationOption,
+  ShopifyInventoryMovementsResponse,
   ShopifyIntegrationSettings,
   ShopifySyncResult,
   StripeIntegrationSettings,
@@ -22,10 +25,21 @@ import {
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const shopifyIntegrationKey = ["shopify-integration"] as const;
 const stripeIntegrationKey = ["stripe-integration"] as const;
 const productStockBackupsKey = ["product-stock-snapshot-backups"] as const;
+const shopifyInventoryCountsKey = ["shopify-inventory-counts"] as const;
+const shopifyInventoryMovementsKey = ["shopify-inventory-movements"] as const;
+const allLocationsValue = "__all_locations__";
+const inventoryPageSize = 8;
 
 function formatDate(value: string | null) {
   if (!value) return "Never";
@@ -65,6 +79,277 @@ function formatBytes(bytes: number) {
   }
   const digits = value >= 10 || unitIndex === 0 ? 0 : 1;
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+function buildInventoryQuery({
+  page,
+  q,
+  locationId,
+}: {
+  page: number;
+  q: string;
+  locationId: string;
+}) {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(inventoryPageSize));
+  const search = q.trim();
+  if (search) params.set("q", search);
+  if (locationId !== allLocationsValue) params.set("locationId", locationId);
+  return params.toString();
+}
+
+function formatSignedNumber(value: number) {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+function triggerLabel(value: string) {
+  return statusLabel(value).replace(" sync", "");
+}
+
+function locationLabel(location: ShopifyInventoryLocationOption) {
+  return location.isActive ? location.name : `${location.name} (inactive)`;
+}
+
+function InventoryPagination({
+  page,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const pageCount = Math.max(Math.ceil(total / inventoryPageSize), 1);
+  const start = total === 0 ? 0 : (page - 1) * inventoryPageSize + 1;
+  const end = Math.min(page * inventoryPageSize, total);
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t px-3 py-2 text-sm">
+      <span className="text-muted-foreground">
+        {start}-{end} of {total}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(Math.max(page - 1, 1))}
+          disabled={page <= 1}
+          aria-label="Previous page"
+        >
+          <ChevronLeft className="size-4" />
+        </Button>
+        <span className="min-w-16 text-center text-xs text-muted-foreground">
+          {page} / {pageCount}
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onPageChange(Math.min(page + 1, pageCount))}
+          disabled={page >= pageCount}
+          aria-label="Next page"
+        >
+          <ChevronRight className="size-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ShopifyInventoryMirrorCard() {
+  const [search, setSearch] = useState("");
+  const [locationId, setLocationId] = useState(allLocationsValue);
+  const [countsPage, setCountsPage] = useState(1);
+  const [movementsPage, setMovementsPage] = useState(1);
+
+  const countsQuery = buildInventoryQuery({ page: countsPage, q: search, locationId });
+  const movementsQuery = buildInventoryQuery({ page: movementsPage, q: search, locationId });
+
+  const counts = useQuery({
+    queryKey: [...shopifyInventoryCountsKey, countsQuery],
+    queryFn: async () => {
+      const { data } = await api.get<ShopifyInventoryCountsResponse>(
+        `/api/integrations/shopify/inventory-counts?${countsQuery}`,
+      );
+      return data;
+    },
+  });
+  const movements = useQuery({
+    queryKey: [...shopifyInventoryMovementsKey, movementsQuery],
+    queryFn: async () => {
+      const { data } = await api.get<ShopifyInventoryMovementsResponse>(
+        `/api/integrations/shopify/inventory-movements?${movementsQuery}`,
+      );
+      return data;
+    },
+  });
+
+  const locations = counts.data?.locations ?? movements.data?.locations ?? [];
+  const countRows = counts.data?.rows ?? [];
+  const movementRows = movements.data?.rows ?? [];
+
+  function updateSearch(value: string) {
+    setSearch(value);
+    setCountsPage(1);
+    setMovementsPage(1);
+  }
+
+  function updateLocation(value: unknown) {
+    setLocationId(typeof value === "string" ? value : allLocationsValue);
+    setCountsPage(1);
+    setMovementsPage(1);
+  }
+
+  return (
+    <div className="rounded-lg border bg-background p-4 sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold">Shopify inventory mirror</h2>
+          <p className="text-sm text-muted-foreground">
+            Read-only per-location counts and observed Shopify deltas.
+          </p>
+        </div>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[28rem] sm:flex-row">
+          <Input
+            value={search}
+            onChange={(event) => updateSearch(event.target.value)}
+            placeholder="Search product, SKU, or location"
+            className="sm:flex-1"
+          />
+          <Select value={locationId} onValueChange={updateLocation}>
+            <SelectTrigger className="w-full sm:w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={allLocationsValue}>All locations</SelectItem>
+              {locations.map((location) => (
+                <SelectItem key={location.id} value={location.id}>
+                  {locationLabel(location)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="overflow-hidden rounded-md border">
+          <div className="border-b bg-muted/40 px-3 py-2">
+            <h3 className="text-sm font-medium">Current counts</h3>
+          </div>
+          {counts.isPending ? (
+            <p className="p-4 text-sm text-muted-foreground">Loading counts...</p>
+          ) : counts.isError ? (
+            <p className="m-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {apiErrorMessage(counts.error)}
+            </p>
+          ) : countRows.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">No mirrored counts yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[680px] text-sm">
+                <thead className="border-b bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Product</th>
+                    <th className="px-3 py-2 text-left font-medium">Location</th>
+                    <th className="px-3 py-2 text-right font-medium">On hand</th>
+                    <th className="px-3 py-2 text-left font-medium">Last sync</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {countRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2">
+                        <p className="font-medium">{row.productName}</p>
+                        <p className="text-xs text-muted-foreground">{row.sku}</p>
+                      </td>
+                      <td className="px-3 py-2">
+                        <p>{row.shopifyLocationName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {row.inventoryLevelActive === false ? "Inactive level" : "Active level"}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{row.onHand}</td>
+                      <td className="px-3 py-2">
+                        <p>{formatDate(row.lastSyncedAt)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {triggerLabel(row.lastSyncTrigger)}
+                        </p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <InventoryPagination
+            page={countsPage}
+            total={counts.data?.total ?? 0}
+            onPageChange={setCountsPage}
+          />
+        </div>
+
+        <div className="overflow-hidden rounded-md border">
+          <div className="border-b bg-muted/40 px-3 py-2">
+            <h3 className="text-sm font-medium">Movements</h3>
+          </div>
+          {movements.isPending ? (
+            <p className="p-4 text-sm text-muted-foreground">Loading movements...</p>
+          ) : movements.isError ? (
+            <p className="m-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {apiErrorMessage(movements.error)}
+            </p>
+          ) : movementRows.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">No movements yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-sm">
+                <thead className="border-b bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Observed</th>
+                    <th className="px-3 py-2 text-left font-medium">Product</th>
+                    <th className="px-3 py-2 text-left font-medium">Location</th>
+                    <th className="px-3 py-2 text-right font-medium">Before</th>
+                    <th className="px-3 py-2 text-right font-medium">After</th>
+                    <th className="px-3 py-2 text-right font-medium">Delta</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {movementRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2">
+                        <p>{formatDate(row.observedAt)}</p>
+                        <p className="text-xs text-muted-foreground">{triggerLabel(row.trigger)}</p>
+                      </td>
+                      <td className="px-3 py-2">
+                        <p className="font-medium">{row.productName}</p>
+                        <p className="text-xs text-muted-foreground">{row.sku}</p>
+                      </td>
+                      <td className="px-3 py-2">{row.shopifyLocationName}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {row.previousOnHand ?? "-"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">{row.newOnHand}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {formatSignedNumber(row.delta)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <InventoryPagination
+            page={movementsPage}
+            total={movements.data?.total ?? 0}
+            onPageChange={setMovementsPage}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function ProductStockBackupsCard() {
@@ -317,6 +602,9 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
           syncedProductCount: result.syncedProductCount,
           matchedSkuCount: result.matchedSkuCount,
           unmatchedLocalSkuCount: result.unmatchedLocalSkuCount,
+          syncedLocationCount: result.syncedLocationCount,
+          syncedInventoryCount: result.syncedInventoryCount,
+          movementCount: result.movementCount,
           durationMs: Date.now() - startedAt,
         });
         return result;
@@ -332,11 +620,15 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
     onSuccess: (result) => {
       qc.invalidateQueries({ queryKey: shopifyIntegrationKey });
       qc.invalidateQueries({ queryKey: productStockBackupsKey });
+      qc.invalidateQueries({ queryKey: shopifyInventoryCountsKey });
+      qc.invalidateQueries({ queryKey: shopifyInventoryMovementsKey });
       qc.invalidateQueries({ queryKey: ["products"] });
       if (result.skipped) {
         toast.info(result.reason ?? "Shopify sync skipped");
       } else {
-        toast.success(`Synced ${result.syncedProductCount} product stock count(s)`);
+        toast.success(
+          `Synced ${result.syncedProductCount} product stock count(s), ${result.movementCount} movement(s)`,
+        );
       }
     },
     onError: (error: unknown) => toast.error(apiErrorMessage(error)),
@@ -435,7 +727,7 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
       </div>
 
       <div className="rounded-lg border bg-background p-4 sm:p-5">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Status
@@ -470,6 +762,14 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
               </span>
             </p>
           </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Mirror
+            </p>
+            <p className="mt-1 text-sm tabular-nums">
+              {data.lastSyncAt ? "Ready" : "Waiting"}
+            </p>
+          </div>
         </div>
         {data.lastSyncError ? (
           <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -478,6 +778,7 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
         ) : null}
       </div>
 
+      <ShopifyInventoryMirrorCard />
       <ProductStockBackupsCard />
     </div>
   );

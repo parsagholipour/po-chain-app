@@ -221,6 +221,9 @@ model Store {
   customFieldDefinitions               CustomFieldDefinition[]
   customFieldValues                    CustomFieldValue[]
   shopifyIntegration                   ShopifyIntegration?
+  shopifyLocations                     ShopifyLocation[]
+  shopifyInventoryCounts               ShopifyInventoryCount[]
+  shopifyInventoryMovements            ShopifyInventoryMovement[]
   paymentProviderSettings              StorePaymentProviderSetting[]
   productStockSnapshotBackups          ProductStockSnapshotBackup[]
   productCategories                    ProductCategory[]
@@ -260,6 +263,89 @@ model ShopifyIntegration {
 
   @@index([enabled])
   @@index([syncLockUntil])
+}
+
+model ShopifyLocation {
+  id                   String   @id @default(uuid()) @db.Uuid
+  storeId              String   @db.Uuid
+  store                Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shopifyLocationGid   String
+  name                 String
+  isActive             Boolean  @default(true)
+  fulfillsOnlineOrders Boolean?
+  hasActiveInventory   Boolean?
+  shipsInventory       Boolean?
+  address1             String?
+  address2             String?
+  city                 String?
+  province             String?
+  country              String?
+  countryCode          String?
+  zip                  String?
+  phone                String?
+  lastSeenAt           DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  inventoryCounts    ShopifyInventoryCount[]
+  inventoryMovements ShopifyInventoryMovement[]
+
+  @@unique([storeId, shopifyLocationGid])
+  @@index([storeId, name])
+  @@index([storeId, isActive])
+  @@index([storeId, lastSeenAt])
+}
+
+model ShopifyInventoryCount {
+  id                          String          @id @default(uuid()) @db.Uuid
+  storeId                     String          @db.Uuid
+  store                       Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId                   String          @db.Uuid
+  product                     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  shopifyLocationId           String          @db.Uuid
+  shopifyLocation             ShopifyLocation @relation(fields: [shopifyLocationId], references: [id], onDelete: Cascade)
+  shopifyInventoryItemGid     String?
+  shopifyInventoryLevelGid    String?
+  shopifyInventoryItemTracked Boolean?
+  inventoryLevelActive        Boolean?
+  onHand                      Int
+  lastSyncedAt                DateTime
+  lastSyncTrigger             String
+  createdAt                   DateTime        @default(now())
+  updatedAt                   DateTime        @updatedAt
+
+  @@unique([productId, shopifyLocationId])
+  @@index([storeId, shopifyLocationId])
+  @@index([storeId, productId])
+  @@index([storeId, lastSyncedAt])
+}
+
+model ShopifyInventoryMovement {
+  id                       String           @id @default(uuid()) @db.Uuid
+  storeId                  String           @db.Uuid
+  store                    Store            @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId                String?          @db.Uuid
+  product                  Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  shopifyLocationId        String?          @db.Uuid
+  shopifyLocation          ShopifyLocation? @relation(fields: [shopifyLocationId], references: [id], onDelete: SetNull)
+  productName              String
+  sku                      String
+  shopifyLocationName      String
+  shopifyLocationGid       String
+  shopifyInventoryItemGid  String?
+  shopifyInventoryLevelGid String?
+  previousOnHand           Int?
+  newOnHand                Int
+  delta                    Int
+  trigger                  String
+  syncRunId                String
+  observedAt               DateTime
+  createdAt                DateTime         @default(now())
+
+  @@index([storeId, observedAt])
+  @@index([storeId, productId, observedAt])
+  @@index([storeId, shopifyLocationId, observedAt])
+  @@index([storeId, syncRunId])
 }
 
 model StorePaymentProviderSetting {
@@ -538,8 +624,10 @@ model Product {
   createdById           String               @db.Uuid
   createdBy             User                 @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  purchaseOrderLines      PurchaseOrderLine[]
-  draftPurchaseOrderLines DraftPurchaseOrderLine[]
+  purchaseOrderLines        PurchaseOrderLine[]
+  draftPurchaseOrderLines   DraftPurchaseOrderLine[]
+  shopifyInventoryCounts    ShopifyInventoryCount[]
+  shopifyInventoryMovements ShopifyInventoryMovement[]
 
   @@unique([storeId, sku])
   @@index([storeId, name])

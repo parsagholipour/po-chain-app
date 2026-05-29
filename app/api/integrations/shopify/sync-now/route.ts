@@ -23,6 +23,9 @@ export async function POST() {
       syncedProductCount: result.syncedProductCount,
       matchedSkuCount: result.matchedSkuCount,
       unmatchedLocalSkuCount: result.unmatchedLocalSkuCount,
+      syncedLocationCount: result.syncedLocationCount,
+      syncedInventoryCount: result.syncedInventoryCount,
+      movementCount: result.movementCount,
       durationMs: Date.now() - startedAt,
     });
     return NextResponse.json(result);

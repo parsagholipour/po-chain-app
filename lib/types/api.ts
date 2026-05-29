@@ -124,6 +124,55 @@ export type ShopifySyncResult = {
   syncedProductCount: number;
   matchedSkuCount: number;
   unmatchedLocalSkuCount: number;
+  syncedLocationCount: number;
+  syncedInventoryCount: number;
+  movementCount: number;
+};
+
+export type ShopifyInventoryLocationOption = {
+  id: string;
+  shopifyLocationGid: string;
+  name: string;
+  isActive: boolean;
+};
+
+export type ShopifyInventoryCountRow = {
+  id: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  shopifyLocationId: string;
+  shopifyLocationGid: string;
+  shopifyLocationName: string;
+  shopifyLocationIsActive: boolean;
+  inventoryLevelActive: boolean | null;
+  onHand: number;
+  lastSyncedAt: string;
+  lastSyncTrigger: string;
+};
+
+export type ShopifyInventoryCountsResponse = PaginatedResponse<ShopifyInventoryCountRow> & {
+  locations: ShopifyInventoryLocationOption[];
+};
+
+export type ShopifyInventoryMovementRow = {
+  id: string;
+  productId: string | null;
+  productName: string;
+  sku: string;
+  shopifyLocationId: string | null;
+  shopifyLocationName: string;
+  shopifyLocationGid: string;
+  previousOnHand: number | null;
+  newOnHand: number;
+  delta: number;
+  trigger: string;
+  syncRunId: string;
+  observedAt: string;
+};
+
+export type ShopifyInventoryMovementsResponse = PaginatedResponse<ShopifyInventoryMovementRow> & {
+  locations: ShopifyInventoryLocationOption[];
 };
 
 export type ProductStockSnapshotBackup = {

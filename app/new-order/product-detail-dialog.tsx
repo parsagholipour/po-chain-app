@@ -177,7 +177,7 @@ export function ProductDetailDialog({
             </div>
           ) : null}
 
-          <div className="space-y-3 rounded-lg border border-border/80 p-4">
+          <div className="space-y-3 rounded-lg border border-border/80 p-4 mb-4">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <h3 className="text-sm font-medium">Order line quantities</h3>
               <div className="text-sm text-muted-foreground">

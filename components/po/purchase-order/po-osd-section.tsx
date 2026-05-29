@@ -30,15 +30,25 @@ const resolutionLabels: Record<PoOsd["resolution"], string> = {
 
 type Props = {
   osds: PoOsd[];
-  onNew: () => void;
-  onEdit: (osd: PoOsd) => void;
-  onDelete: (osdId: string) => void;
+  onNew?: () => void;
+  onEdit?: (osd: PoOsd) => void;
+  onDelete?: (osdId: string) => void;
   busy?: boolean;
+  readOnly?: boolean;
 };
 
-export function PoOsdSection({ osds, onNew, onEdit, onDelete, busy }: Props) {
+export function PoOsdSection({
+  osds,
+  onNew,
+  onEdit,
+  onDelete,
+  busy,
+  readOnly = false,
+}: Props) {
   const confirm = useConfirm();
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const canCreate = !readOnly && onNew != null;
+  const canMutate = !readOnly && (onEdit != null || onDelete != null);
 
   return (
     <section className="space-y-4" aria-labelledby="po-osd-heading">
@@ -46,10 +56,12 @@ export function PoOsdSection({ osds, onNew, onEdit, onDelete, busy }: Props) {
         <h2 id="po-osd-heading" className="text-lg font-semibold">
           OS&amp;D
         </h2>
-        <Button type="button" size="sm" onClick={onNew} disabled={busy}>
-          <Plus className="size-4" />
-          New OS&amp;D
-        </Button>
+        {canCreate ? (
+          <Button type="button" size="sm" onClick={onNew} disabled={busy}>
+            <Plus className="size-4" />
+            New OS&amp;D
+          </Button>
+        ) : null}
       </div>
 
       {osds.length === 0 ? (
@@ -75,47 +87,56 @@ export function PoOsdSection({ osds, onNew, onEdit, onDelete, busy }: Props) {
                     </p>
                   ) : null}
                 </div>
-                <DropdownMenu
-                  open={menuOpenId === osd.id}
-                  onOpenChange={(o) => setMenuOpenId(o ? osd.id : null)}
-                >
-                  <DropdownMenuTrigger
-                    type="button"
-                    className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }), "shrink-0")}
-                    disabled={busy}
-                    aria-label="OS&D actions"
+                {canMutate ? (
+                  <DropdownMenu
+                    open={menuOpenId === osd.id}
+                    onOpenChange={(o) => setMenuOpenId(o ? osd.id : null)}
                   >
-                    <MoreHorizontal className="size-4" />
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setMenuOpenId(null);
-                        onEdit(osd);
-                      }}
+                    <DropdownMenuTrigger
+                      type="button"
+                      className={cn(
+                        buttonVariants({ variant: "ghost", size: "icon-sm" }),
+                        "shrink-0",
+                      )}
+                      disabled={busy}
+                      aria-label="OS&D actions"
                     >
-                      <Pencil className="size-4" />
-                      Edit
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      variant="destructive"
-                      onClick={() => {
-                        void (async () => {
-                          setMenuOpenId(null);
-                          const ok = await confirm({
-                            title: "Delete this OS&D?",
-                            confirmLabel: "Delete",
-                            variant: "destructive",
-                          });
-                          if (ok) onDelete(osd.id);
-                        })();
-                      }}
-                    >
-                      <Trash2 className="size-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                      <MoreHorizontal className="size-4" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {onEdit ? (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setMenuOpenId(null);
+                            onEdit(osd);
+                          }}
+                        >
+                          <Pencil className="size-4" />
+                          Edit
+                        </DropdownMenuItem>
+                      ) : null}
+                      {onDelete ? (
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onClick={() => {
+                            void (async () => {
+                              setMenuOpenId(null);
+                              const ok = await confirm({
+                                title: "Delete this OS&D?",
+                                confirmLabel: "Delete",
+                                variant: "destructive",
+                              });
+                              if (ok) onDelete(osd.id);
+                            })();
+                          }}
+                        >
+                          <Trash2 className="size-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      ) : null}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                ) : null}
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <ul className="list-inside list-disc space-y-1 text-muted-foreground">

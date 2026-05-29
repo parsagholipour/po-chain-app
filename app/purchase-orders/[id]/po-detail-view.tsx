@@ -542,21 +542,30 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         />
       ) : null}
 
-      {!isDistributor ? (
+      {!isDistributor || po.osds.length > 0 ? (
         <PoOsdSection
           osds={po.osds}
-          onNew={() => {
-            setOsdDialogMode("create");
-            setEditingOsd(null);
-            setOsdDialogOpen(true);
-          }}
-          onEdit={(osd) => {
-            setOsdDialogMode("edit");
-            setEditingOsd(osd);
-            setOsdDialogOpen(true);
-          }}
-          onDelete={(id) => deleteOsd.mutate(id)}
+          onNew={
+            !isDistributor
+              ? () => {
+                  setOsdDialogMode("create");
+                  setEditingOsd(null);
+                  setOsdDialogOpen(true);
+                }
+              : undefined
+          }
+          onEdit={
+            !isDistributor
+              ? (osd) => {
+                  setOsdDialogMode("edit");
+                  setEditingOsd(osd);
+                  setOsdDialogOpen(true);
+                }
+              : undefined
+          }
+          onDelete={!isDistributor ? (id) => deleteOsd.mutate(id) : undefined}
           busy={deleteOsd.isPending || patchOsd.isPending || createOsd.isPending}
+          readOnly={isDistributor}
         />
       ) : null}
 
