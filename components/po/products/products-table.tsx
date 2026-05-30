@@ -28,7 +28,7 @@ type Props = {
 
 const columnCount = 23;
 const headerSurfaceClassName = "bg-card shadow-[inset_0_-1px_0_var(--border)]";
-const headerClassName = `sticky top-0 z-40 ${headerSurfaceClassName}`;
+const headerClassName = `sticky top-0 z-5 ${headerSurfaceClassName}`;
 const productHeaders: { key: string; label: string; className?: string }[] = [
   { key: "image", label: "Image", className: "w-14" },
   { key: "name", label: "Name" },
