@@ -51,6 +51,7 @@ type AssistantToolName =
   | "get_warehouse_order"
   | "get_shipping"
   | "search_master_data"
+  | "get_product_data_quality"
   | "get_current_page_record";
 
 type AssistantToolContext = {
@@ -95,6 +96,22 @@ const searchOrdersArgsSchema = z.object({
 const searchMasterDataArgsSchema = z.object({
   kind: z.enum(["product", "manufacturer", "sale_channel", "logistics_partner", "any"]),
   query: z.string(),
+});
+
+const productDataQualityFields = [
+  "packaging",
+  "barcode",
+  "upcGtin",
+  "cost",
+  "price",
+  "verified",
+] as const;
+
+const productDataQualityArgsSchema = z.object({
+  query: z.string(),
+  fields: z.array(z.enum(productDataQualityFields)),
+  match: z.enum(["any", "all"]),
+  limit: z.number().int().min(1).max(100),
 });
 
 const idArgsSchema = z.object({ id: z.uuid() });
@@ -240,7 +257,7 @@ export const assistantToolDefinitions: AssistantToolDefinition[] = [
     function: {
       name: "search_master_data",
       description:
-        "Search products, manufacturers, sale channels, or logistics partners. Use kind=any to search across all master data.",
+        "Search products, manufacturers, sale channels, or logistics partners by name/SKU/region. Use kind=any to search across all master data. This is shallow search only; for products missing barcode, packaging, UPC/GTIN, pricing, or verification, use get_product_data_quality instead.",
       strict: true,
       parameters: {
         type: "object",
@@ -253,6 +270,46 @@ export const assistantToolDefinitions: AssistantToolDefinition[] = [
           query: { type: "string", description: "Name, SKU, region, or other search text." },
         },
         required: ["kind", "query"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_product_data_quality",
+      description:
+        "Find store-scoped products missing product master-data fields. Use whenever the user asks which products are missing packaging, barcode/barcodes, UPC/GTIN, cost, price, pricing, or verification. Return exact missing fields per product.",
+      strict: true,
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description:
+              "Optional product name/SKU/manufacturer/category/type/collection search text. Use an empty string for all products.",
+          },
+          fields: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: ["packaging", "barcode", "upcGtin", "cost", "price", "verified"],
+            },
+            description:
+              "Fields to check. Use packaging, barcode, and upcGtin for packaging/barcode/UPC-GTIN questions.",
+          },
+          match: {
+            type: "string",
+            enum: ["any", "all"],
+            description:
+              "Use any when the user wants products missing one or more requested fields; use all only when they explicitly ask for products missing every requested field.",
+          },
+          limit: {
+            type: "number",
+            description: "Maximum products to return, from 1 to 100.",
+          },
+        },
+        required: ["query", "fields", "match", "limit"],
         additionalProperties: false,
       },
     },
@@ -295,6 +352,10 @@ function buildSource(kind: AssistantSource["kind"], id: string, label: string, h
 
 function cleanText(value: string) {
   return value.trim();
+}
+
+function hasText(value: string | null | undefined) {
+  return Boolean(value?.trim());
 }
 
 function parseToolArguments<T extends z.ZodTypeAny>(schema: T, rawArguments: string) {
@@ -1257,6 +1318,165 @@ async function searchMasterDataTool(
   };
 }
 
+type ProductDataQualityField = (typeof productDataQualityFields)[number];
+
+function productMissingWhere(field: ProductDataQualityField): Prisma.ProductWhereInput {
+  switch (field) {
+    case "packaging":
+      return { OR: [{ packagingKey: null }, { packagingKey: "" }] };
+    case "barcode":
+      return { OR: [{ barcodeKey: null }, { barcodeKey: "" }] };
+    case "upcGtin":
+      return { OR: [{ upcGtin: null }, { upcGtin: "" }] };
+    case "cost":
+      return { cost: null };
+    case "price":
+      return { price: null };
+    case "verified":
+      return { verified: false };
+  }
+}
+
+function productBaseSearchWhere(
+  storeId: string,
+  query: string,
+): Prisma.ProductWhereInput {
+  if (!query) {
+    return { storeId };
+  }
+
+  return {
+    storeId,
+    OR: [
+      { name: { contains: query, mode: "insensitive" } },
+      { sku: { contains: query, mode: "insensitive" } },
+      { upcGtin: { contains: query, mode: "insensitive" } },
+      { description: { contains: query, mode: "insensitive" } },
+      { defaultManufacturer: { name: { contains: query, mode: "insensitive" } } },
+      { category: { name: { contains: query, mode: "insensitive" } } },
+      { type: { name: { contains: query, mode: "insensitive" } } },
+      { collection: { name: { contains: query, mode: "insensitive" } } },
+    ],
+  };
+}
+
+function productCompletenessWhere(
+  fields: ProductDataQualityField[],
+  match: "any" | "all",
+): Prisma.ProductWhereInput {
+  const clauses = fields.map(productMissingWhere);
+  return match === "all" ? { AND: clauses } : { OR: clauses };
+}
+
+function missingFieldsForProduct(product: {
+  packagingKey: string | null;
+  barcodeKey: string | null;
+  upcGtin: string | null;
+  cost: unknown | null;
+  price: unknown | null;
+  verified: boolean;
+}) {
+  const missing: ProductDataQualityField[] = [];
+  if (!hasText(product.packagingKey)) missing.push("packaging");
+  if (!hasText(product.barcodeKey)) missing.push("barcode");
+  if (!hasText(product.upcGtin)) missing.push("upcGtin");
+  if (product.cost == null) missing.push("cost");
+  if (product.price == null) missing.push("price");
+  if (!product.verified) missing.push("verified");
+  return missing;
+}
+
+async function getProductDataQualityTool(
+  args: z.infer<typeof productDataQualityArgsSchema>,
+  context: AssistantToolContext,
+): Promise<ToolExecutionResult> {
+  const query = cleanText(args.query);
+  const fields =
+    args.fields.length > 0
+      ? args.fields
+      : (["packaging", "barcode", "upcGtin"] satisfies ProductDataQualityField[]);
+  const limit = Math.min(Math.max(args.limit, 1), 100);
+  const baseWhere = productBaseSearchWhere(context.storeId, query);
+  const completenessWhere = productCompletenessWhere(fields, args.match);
+  const where: Prisma.ProductWhereInput = { AND: [baseWhere, completenessWhere] };
+
+  const [totalProductsInScope, totalMissing, rows, fieldCounts] = await Promise.all([
+    prisma.product.count({ where: baseWhere }),
+    prisma.product.count({ where }),
+    prisma.product.findMany({
+      where,
+      orderBy: { name: "asc" },
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        upcGtin: true,
+        cost: true,
+        price: true,
+        verified: true,
+        barcodeKey: true,
+        packagingKey: true,
+        defaultManufacturer: { select: { name: true } },
+        category: { select: { name: true } },
+        type: { select: { name: true } },
+        collection: { select: { name: true } },
+      },
+    }),
+    Promise.all(
+      fields.map(async (field) => [
+        field,
+        await prisma.product.count({
+          where: { AND: [baseWhere, productMissingWhere(field)] },
+        }),
+      ] as const),
+    ),
+  ]);
+
+  const countsByMissingField = Object.fromEntries(fieldCounts) as Record<
+    ProductDataQualityField,
+    number
+  >;
+
+  const products = rows.map((row) => {
+    const allMissingFields = missingFieldsForProduct(row);
+    return {
+      id: row.id,
+      name: row.name,
+      sku: row.sku,
+      missingFields: allMissingFields.filter((field) => fields.includes(field)),
+      allMissingFields,
+      upcGtinPresent: hasText(row.upcGtin),
+      barcodePresent: hasText(row.barcodeKey),
+      packagingPresent: hasText(row.packagingKey),
+      verified: row.verified,
+      defaultManufacturerName: row.defaultManufacturer.name,
+      categoryName: row.category?.name ?? null,
+      typeName: row.type?.name ?? null,
+      collectionName: row.collection?.name ?? null,
+    };
+  });
+
+  return {
+    result: {
+      query,
+      fields,
+      match: args.match,
+      limit,
+      totalProductsInScope,
+      totalMissing,
+      truncated: totalMissing > products.length,
+      countsByMissingField,
+      products,
+    },
+    sources: products
+      .slice(0, 20)
+      .map((product) =>
+        buildSource("product", product.id, `${product.name} (${product.sku})`, `/products?id=${product.id}`),
+      ),
+  };
+}
+
 async function getCurrentPageRecordTool(context: AssistantToolContext): Promise<ToolExecutionResult> {
   const pageContext = context.pageContext;
   if (!pageContext) {
@@ -1446,6 +1666,13 @@ export async function executeAssistantToolCall({
         return { result: { ok: false, error: "Invalid search_master_data arguments." }, sources: [] };
       }
       return searchMasterDataTool(parsed.data, context);
+    }
+    case "get_product_data_quality": {
+      const parsed = parseToolArguments(productDataQualityArgsSchema, rawArguments);
+      if (!parsed.success) {
+        return { result: { ok: false, error: "Invalid get_product_data_quality arguments." }, sources: [] };
+      }
+      return getProductDataQualityTool(parsed.data, context);
     }
     case "get_current_page_record":
       return getCurrentPageRecordTool(context);

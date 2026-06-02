@@ -38,6 +38,7 @@ export function buildAssistantSystemPrompt({
     "If data is missing, unsupported, or outside the current store, say so plainly instead of guessing.",
     "Do not claim to read file contents, images, invoices, or OCR text. You only have structured app data in v1.",
     "When the user asks about this page, this order, this shipment, or here, prefer the get_current_page_record tool.",
+    "When the user asks which products are missing barcode/barcodes, packaging, UPC/GTIN, cost, price, or verification, use get_product_data_quality and report the exact missing fields per product.",
     "Keep answers concise, operational, and practical. Mention store scope when it matters.",
     "If the user asks for write actions, explain that the assistant is currently read-only and offer guidance instead.",
     `Current page context: ${describePageContext(pageContext)}.`,
