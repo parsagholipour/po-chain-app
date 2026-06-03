@@ -55,6 +55,7 @@ export function ExpandableOrderSummaryRow({
   apiScope,
   onEditProduct,
   viewOnly = false,
+  hideManufacturingDetails = false,
   onDelete,
   isDeleting = false,
 }: {
@@ -62,6 +63,7 @@ export function ExpandableOrderSummaryRow({
   apiScope: OrderListLinesApiScope;
   onEditProduct?: (product: Product) => void;
   viewOnly?: boolean;
+  hideManufacturingDetails?: boolean;
   onDelete?: (id: string) => Promise<void>;
   isDeleting?: boolean;
 }) {
@@ -71,6 +73,16 @@ export function ExpandableOrderSummaryRow({
   const isStockList = apiScope === "stock-orders";
   const orderKindLabel = isStockList ? "stock order" : "purchase order";
   const locationName = row.saleChannelLocation?.name ?? row.shipToLocationName ?? null;
+
+  function lineItemSubtitle(line: PoLineRow) {
+    if (hideManufacturingDetails) {
+      return `Ordered: ${line.orderedQuantity}`;
+    }
+    if (line.quantity !== line.orderedQuantity) {
+      return `Ordered ${line.orderedQuantity} · Effective ${line.quantity} · ${line.product.defaultManufacturer.name}`;
+    }
+    return `Qty ${line.quantity} · ${line.product.defaultManufacturer.name}`;
+  }
 
   const { data: lines, isPending, isError } = useQuery({
     queryKey: ["order-lines", "list-expand", apiScope, row.id] as const,
@@ -277,11 +289,7 @@ export function ExpandableOrderSummaryRow({
                       compact
                       imageKey={line.product.imageKey}
                       title={line.product.name}
-                      subtitle={
-                        line.quantity !== line.orderedQuantity
-                          ? `Ordered ${line.orderedQuantity} · Effective ${line.quantity} · ${line.product.defaultManufacturer.name}`
-                          : `Qty ${line.quantity} · ${line.product.defaultManufacturer.name}`
-                      }
+                      subtitle={lineItemSubtitle(line)}
                       onEditProduct={onEditProduct ? () => onEditProduct(line.product) : undefined}
                       viewOnly={viewOnly}
                       footer={

@@ -25,6 +25,7 @@ type Props = {
   busy: boolean;
   onEditProduct?: (product: Product) => void;
   readOnly?: boolean;
+  hideManufacturingDetails?: boolean;
 };
 
 function moneyInputValue(value: string | number | null | undefined) {
@@ -47,6 +48,7 @@ export function PoLineGridCard({
   busy,
   onEditProduct,
   readOnly = false,
+  hideManufacturingDetails = false,
 }: Props) {
   const [orderedQty, setOrderedQty] = useState(line.orderedQuantity);
   const [pricingOpen, setPricingOpen] = useState(false);
@@ -54,15 +56,17 @@ export function PoLineGridCard({
   const [priceValue, setPriceValue] = useState("");
   const [pricingError, setPricingError] = useState<string | null>(null);
 
-  const qtyMismatch = line.quantity !== line.orderedQuantity;
+  const qtyMismatch = !hideManufacturingDetails && line.quantity !== line.orderedQuantity;
   const manufacturingQuantity = line.allocations.reduce((sum, row) => sum + row.quantity, 0);
   const warehouseQuantity = line.warehouseAllocations.reduce((sum, row) => sum + row.quantity, 0);
   const fulfilledQuantity = manufacturingQuantity + warehouseQuantity;
   const remainingQuantity = Math.max(0, line.quantity - fulfilledQuantity);
   const showCost = !readOnly;
-  const subtitle = `${line.product.defaultManufacturer.name} - Ordered: ${orderedQty}${
-    qtyMismatch ? ` - Effective: ${line.quantity}` : ""
-  }`;
+  const subtitle = hideManufacturingDetails
+    ? `Ordered: ${line.orderedQuantity}`
+    : `${line.product.defaultManufacturer.name} - Ordered: ${orderedQty}${
+        qtyMismatch ? ` - Effective: ${line.quantity}` : ""
+      }`;
 
   function openPricingEditor() {
     setCostValue(moneyInputValue(line.unitCost));
@@ -118,23 +122,27 @@ export function PoLineGridCard({
                 </Badge>
               </p>
             ) : null}
-            <p className="text-xs text-muted-foreground">
-              Default manufacturer:{" "}
-              <span className="font-medium text-foreground">
-                {line.product.defaultManufacturer.name}
-              </span>
-            </p>
-            <div className="grid grid-cols-3 gap-1 text-xs">
-              <Badge variant="outline" className="justify-center font-normal">
-                MO {manufacturingQuantity}
-              </Badge>
-              <Badge variant="outline" className="justify-center font-normal">
-                WO {warehouseQuantity}
-              </Badge>
-              <Badge variant="secondary" className="justify-center font-normal">
-                Left {remainingQuantity}
-              </Badge>
-            </div>
+            {!hideManufacturingDetails ? (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Default manufacturer:{" "}
+                  <span className="font-medium text-foreground">
+                    {line.product.defaultManufacturer.name}
+                  </span>
+                </p>
+                <div className="grid grid-cols-3 gap-1 text-xs">
+                  <Badge variant="outline" className="justify-center font-normal">
+                    MO {manufacturingQuantity}
+                  </Badge>
+                  <Badge variant="outline" className="justify-center font-normal">
+                    WO {warehouseQuantity}
+                  </Badge>
+                  <Badge variant="secondary" className="justify-center font-normal">
+                    Left {remainingQuantity}
+                  </Badge>
+                </div>
+              </>
+            ) : null}
             <div className="rounded-md border border-border/60 bg-muted/20 p-2">
               <div
                 className={`grid ${

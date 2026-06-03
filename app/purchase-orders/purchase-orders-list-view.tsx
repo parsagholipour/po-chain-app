@@ -211,6 +211,7 @@ function PoListFiltersAndTable({
   emptyFilteredMessage,
   onEditProduct,
   viewOnly = false,
+  hideManufacturingDetails = false,
   onDeleteOrder,
   deletingOrderId,
 }: {
@@ -225,6 +226,7 @@ function PoListFiltersAndTable({
   emptyFilteredMessage: string;
   onEditProduct?: (product: Product) => void;
   viewOnly?: boolean;
+  hideManufacturingDetails?: boolean;
   onDeleteOrder?: (id: string) => Promise<void>;
   deletingOrderId?: string | undefined;
 }) {
@@ -306,6 +308,7 @@ function PoListFiltersAndTable({
                   apiScope="purchase-orders"
                   onEditProduct={onEditProduct}
                   viewOnly={viewOnly}
+                  hideManufacturingDetails={hideManufacturingDetails}
                   onDelete={onDeleteOrder}
                   isDeleting={deletingOrderId === row.id}
                 />
@@ -535,6 +538,7 @@ export function PurchaseOrdersListView() {
               emptyFilteredMessage="No purchase orders match your filters."
               onEditProduct={onEditProduct}
               viewOnly
+              hideManufacturingDetails
             />
           </div>
         </TableContainer>
@@ -640,6 +644,7 @@ export function PurchaseOrdersListView() {
             : manufacturers
         }
         readOnly={isDistributor}
+        hideManufacturingDetails={isDistributor}
         onSave={isDistributor ? undefined : saveProduct}
       />
     </div>

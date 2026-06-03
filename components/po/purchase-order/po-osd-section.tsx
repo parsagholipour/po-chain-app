@@ -35,6 +35,7 @@ type Props = {
   onDelete?: (osdId: string) => void;
   busy?: boolean;
   readOnly?: boolean;
+  hideManufacturingDetails?: boolean;
 };
 
 export function PoOsdSection({
@@ -44,6 +45,7 @@ export function PoOsdSection({
   onDelete,
   busy,
   readOnly = false,
+  hideManufacturingDetails = false,
 }: Props) {
   const confirm = useConfirm();
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
@@ -81,9 +83,9 @@ export function PoOsdSection({
                       {resolutionLabels[osd.resolution]}
                     </Badge>
                   </CardTitle>
-                  {osd.manufacturingOrder ? (
+                  {!hideManufacturingDetails && osd.manufacturingOrder ? (
                     <p className="text-xs text-muted-foreground">
-                      MO #{osd.manufacturingOrder.number} — {osd.manufacturingOrder.name}
+                      MO #{osd.manufacturingOrder.number} - {osd.manufacturingOrder.name}
                     </p>
                   ) : null}
                 </div>

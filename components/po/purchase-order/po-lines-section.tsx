@@ -15,6 +15,7 @@ type Props = {
   lineMutationPending: boolean;
   onEditProduct?: (product: Product) => void;
   readOnly?: boolean;
+  hideManufacturingDetails?: boolean;
 };
 
 export function PoLinesSection({
@@ -25,6 +26,7 @@ export function PoLinesSection({
   lineMutationPending,
   onEditProduct,
   readOnly = false,
+  hideManufacturingDetails = false,
 }: Props) {
   const confirm = useConfirm();
   const canMutateLines =
@@ -71,6 +73,7 @@ export function PoLinesSection({
               busy={lineMutationPending}
               onEditProduct={onEditProduct}
               readOnly={readOnly}
+              hideManufacturingDetails={hideManufacturingDetails}
             />
           ))}
         </LineItemsGrid>

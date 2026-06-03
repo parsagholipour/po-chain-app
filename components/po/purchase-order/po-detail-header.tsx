@@ -36,7 +36,7 @@ import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { OrderStatusLogsDialog } from "@/components/po/order-status-logs-dialog";
 import { PoDocumentLink } from "./po-document-link";
-import { Check, ChevronLeft, FileStack, Factory, Loader2, Pencil, X } from "lucide-react";
+import { Check, ChevronLeft, FileStack, Factory, Loader2, Pencil, Truck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const poOrderStatusSelectItems = distributorPoStatuses.map((s) => ({
@@ -77,6 +77,7 @@ type Props = {
   isActualizing?: boolean;
   onDelete?: () => Promise<void>;
   isDeleting?: boolean;
+  hideManufacturingDetails?: boolean;
 };
 
 export function PoDetailHeader({
@@ -97,6 +98,7 @@ export function PoDetailHeader({
   isActualizing = false,
   onDelete,
   isDeleting = false,
+  hideManufacturingDetails = false,
 }: Props) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
@@ -310,13 +312,16 @@ export function PoDetailHeader({
                   {lineCount} line {lineCount === 1 ? "item" : "items"}
                 </span>
               </span>
-              <span className="inline-flex items-center gap-1.5">
-                <Factory className="size-3.5 shrink-0 opacity-70" aria-hidden />
-                <span>
-                  {moCount} manufacturing order{moCount === 1 ? "" : "s"}
+              {!hideManufacturingDetails ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Factory className="size-3.5 shrink-0 opacity-70" aria-hidden />
+                  <span>
+                    {moCount} manufacturing order{moCount === 1 ? "" : "s"}
+                  </span>
                 </span>
-              </span>
+              ) : null}
               <span className="inline-flex items-center gap-1.5">
+                <Truck className="size-3.5 shrink-0 opacity-70" aria-hidden />
                 <span>
                   {shipCount} shipment{shipCount === 1 ? "" : "s"}
                 </span>

@@ -500,6 +500,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
         isActualizing={actualizeBackOrder.isPending}
         onDelete={!isDistributor ? () => deletePo.mutateAsync() : undefined}
         isDeleting={deletePo.isPending}
+        hideManufacturingDetails={isDistributor}
       />
 
       {!isDistributor ? (
@@ -525,6 +526,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
             : undefined
         }
         readOnly={isDistributor}
+        hideManufacturingDetails={isDistributor}
       />
 
       {isDistributor ? (
@@ -539,6 +541,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
             editingProduct ? [editingProduct.defaultManufacturer] : []
           }
           readOnly
+          hideManufacturingDetails
         />
       ) : null}
 
@@ -566,6 +569,7 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
           onDelete={!isDistributor ? (id) => deleteOsd.mutate(id) : undefined}
           busy={deleteOsd.isPending || patchOsd.isPending || createOsd.isPending}
           readOnly={isDistributor}
+          hideManufacturingDetails={isDistributor}
         />
       ) : null}
 

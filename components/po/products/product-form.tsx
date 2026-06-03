@@ -136,6 +136,7 @@ type Props = {
   ) => Promise<string>;
   onCancel: () => void;
   readOnly?: boolean;
+  hideManufacturingDetails?: boolean;
 };
 
 export function ProductForm({
@@ -149,6 +150,7 @@ export function ProductForm({
   onSubmit,
   onCancel,
   readOnly = false,
+  hideManufacturingDetails = false,
 }: Props) {
   const confirm = useConfirm();
   const customFieldsRef = useRef<CustomFieldsHandle>(null);
@@ -303,37 +305,39 @@ export function ProductForm({
               <FieldError errors={[form.formState.errors.price]} />
             </FieldContent>
           </Field>
-          <Field data-invalid={!!form.formState.errors.defaultManufacturerId} className="gap-1.5">
-            <FieldLabel required>Default manufacturer</FieldLabel>
-            <FieldContent>
-              <Controller
-                control={form.control}
-                name="defaultManufacturerId"
-                render={({ field }) => (
-                  <Select
-                    value={field.value}
-                    onValueChange={field.onChange}
-                    items={manufacturers.map((m) => ({
-                      value: m.id,
-                      label: m.name,
-                    }))}
-                  >
-                    <SelectTrigger className="w-full min-w-0">
-                      <SelectValue placeholder="Manufacturer" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {manufacturers.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-              <FieldError errors={[form.formState.errors.defaultManufacturerId]} />
-            </FieldContent>
-          </Field>
+          {!hideManufacturingDetails ? (
+            <Field data-invalid={!!form.formState.errors.defaultManufacturerId} className="gap-1.5">
+              <FieldLabel required>Default manufacturer</FieldLabel>
+              <FieldContent>
+                <Controller
+                  control={form.control}
+                  name="defaultManufacturerId"
+                  render={({ field }) => (
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      items={manufacturers.map((m) => ({
+                        value: m.id,
+                        label: m.name,
+                      }))}
+                    >
+                      <SelectTrigger className="w-full min-w-0">
+                        <SelectValue placeholder="Manufacturer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {manufacturers.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+                <FieldError errors={[form.formState.errors.defaultManufacturerId]} />
+              </FieldContent>
+            </Field>
+          ) : null}
           <Field data-invalid={!!form.formState.errors.categoryId} className="gap-1.5">
             <FieldLabel>Category</FieldLabel>
             <FieldContent>

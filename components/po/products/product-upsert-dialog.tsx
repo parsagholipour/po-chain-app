@@ -44,6 +44,7 @@ type Props = {
     patchPackagingKey: boolean;
   }) => Promise<string>;
   readOnly?: boolean;
+  hideManufacturingDetails?: boolean;
 };
 
 export function ProductUpsertDialog({
@@ -53,6 +54,7 @@ export function ProductUpsertDialog({
   manufacturers,
   onSave,
   readOnly = false,
+  hideManufacturingDetails = false,
 }: Props) {
   const { data: categories = [] } = useQuery({
     queryKey: ["product-categories"],
@@ -151,6 +153,7 @@ export function ProductUpsertDialog({
           stockCount={editing?.stockCount ?? null}
           editingId={editing?.id}
           readOnly={readOnly}
+          hideManufacturingDetails={hideManufacturingDetails}
           onCancel={() => onOpenChange(false)}
           onSubmit={
             readOnly || !onSave
