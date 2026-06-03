@@ -13,9 +13,11 @@ import {
 } from "@/lib/po/purchase-order-pdf";
 import { APP_NAME } from "@/lib/app-name";
 import { EmailService } from "@/lib/services/email";
+import { getPresignedGetUrl } from "@/lib/storage";
 
 const MAX_EMAIL_ATTEMPTS = 5;
 const DEFAULT_DISPATCH_LIMIT = 50;
+const EMAIL_LOGO_URL_EXPIRES_SECONDS = 7 * 24 * 60 * 60;
 
 export type NotificationEmailRecipient = {
   email?: string | null;
@@ -303,7 +305,7 @@ export async function dispatchNotificationEmails({
           entityType: true,
           entityId: true,
           storeId: true,
-          store: { select: { name: true } },
+          store: { select: { name: true, website: true, logoKey: true } },
         },
       },
     },
@@ -318,7 +320,10 @@ export async function dispatchNotificationEmails({
     if (!delivery.recipientEmail) continue;
 
     try {
-      const pdfLink = await purchaseOrderPdfLinkForNotification(delivery.notification);
+      const [pdfLink, branding] = await Promise.all([
+        purchaseOrderPdfLinkForNotification(delivery.notification),
+        emailStoreBranding(delivery.notification.store),
+      ]);
       const message = notificationEmailMessage({
         to: {
           email: delivery.recipientEmail,
@@ -326,6 +331,7 @@ export async function dispatchNotificationEmails({
         },
         notification: delivery.notification,
         pdfLink,
+        branding,
       });
       const result = await EmailService.send(message);
       await prisma.notificationEmailDelivery.update({
@@ -380,22 +386,27 @@ function notificationEmailMessage({
   to,
   notification,
   pdfLink,
+  branding,
 }: {
   to: { email: string; name?: string };
   notification: {
+    audience: NotificationAudience;
     title: string;
     body: string;
     href: string | null;
-    store: { name: string };
+    store: { name: string; website: string | null; logoKey: string | null };
   };
   pdfLink?: PurchaseOrderPdfEmailLink | null;
+  branding: NotificationEmailBranding;
 }) {
   const actionUrl = notification.href ? absoluteAppUrl(notification.href) : null;
+  const actionLabel = notification.audience === "distributor" ? "Distributor portal" : APP_NAME;
   const text = [
     notification.body,
     pdfLink ? `Purchase order PDF: ${pdfLink.url}` : null,
+    actionUrl ? `Open in ${actionLabel}: ${actionUrl}` : null,
     "",
-    actionUrl ? `Open in ${APP_NAME}: ${actionUrl}` : null,
+    ...notificationEmailFooterTextLines(branding),
   ]
     .filter((line): line is string => line != null)
     .join("\n");
@@ -406,8 +417,9 @@ function notificationEmailMessage({
       ? `<p><strong>Attachment:</strong> <a href="${escapeHtml(pdfLink.url)}">${escapeHtml(pdfLink.filename)}</a></p>`
       : "",
     actionUrl
-      ? `<p><a href="${escapeHtml(actionUrl)}">Open in ${escapeHtml(APP_NAME)}</a></p>`
+      ? `<p><a href="${escapeHtml(actionUrl)}">Open in ${escapeHtml(actionLabel)}</a></p>`
       : "",
+    notificationEmailFooterHtml(branding),
   ].join("");
 
   return {
@@ -420,6 +432,58 @@ function notificationEmailMessage({
       notificationType: "notification",
     },
   };
+}
+
+type NotificationEmailBranding = {
+  storeName: string;
+  websiteUrl: string | null;
+  websiteLabel: string | null;
+  logoUrl: string | null;
+};
+
+async function emailStoreBranding(store: {
+  name: string;
+  website: string | null;
+  logoKey: string | null;
+}): Promise<NotificationEmailBranding> {
+  const websiteUrl = normalizedWebsiteUrl(store.website);
+  return {
+    storeName: store.name,
+    websiteUrl,
+    websiteLabel: websiteUrl ? websiteDisplayLabel(websiteUrl) : null,
+    logoUrl: await storeLogoUrl(store.logoKey),
+  };
+}
+
+async function storeLogoUrl(logoKey: string | null) {
+  const key = logoKey?.trim();
+  if (!key) return null;
+
+  try {
+    return await getPresignedGetUrl(key, EMAIL_LOGO_URL_EXPIRES_SECONDS);
+  } catch (error) {
+    console.error("[notifications] store logo URL generation failed", error);
+    return null;
+  }
+}
+
+function notificationEmailFooterTextLines(branding: NotificationEmailBranding) {
+  return [
+    "--",
+    branding.storeName,
+    branding.websiteUrl ? `Website: ${branding.websiteUrl}` : null,
+  ];
+}
+
+function notificationEmailFooterHtml(branding: NotificationEmailBranding) {
+  const logoHtml = branding.logoUrl
+    ? `<td style="padding:0 14px 0 0;vertical-align:middle;"><img src="${escapeHtml(branding.logoUrl)}" width="64" alt="${escapeHtml(branding.storeName)} logo" style="display:block;width:64px;max-width:64px;height:auto;max-height:48px;border:0;border-radius:6px;outline:none;text-decoration:none;"></td>`
+    : "";
+  const websiteHtml = branding.websiteUrl
+    ? `<div style="margin-top:2px;font-family:Arial,sans-serif;font-size:12px;line-height:18px;"><a href="${escapeHtml(branding.websiteUrl)}" style="color:#2563eb;text-decoration:none;">${escapeHtml(branding.websiteLabel ?? branding.websiteUrl)}</a></div>`
+    : "";
+
+  return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:24px;border-top:1px solid #e5e7eb;"><tr><td style="padding-top:16px;"><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>${logoHtml}<td style="vertical-align:middle;"><div style="font-family:Arial,sans-serif;font-size:13px;line-height:18px;font-weight:700;color:#111827;">${escapeHtml(branding.storeName)}</div>${websiteHtml}</td></tr></table></td></tr></table>`;
 }
 
 async function purchaseOrderPdfLinkForNotification(notification: {
@@ -450,6 +514,23 @@ function absoluteAppUrl(href: string) {
     process.env.APP_URL?.replace(/\/$/, "") ??
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:4000");
   return `${base}${href.startsWith("/") ? href : `/${href}`}`;
+}
+
+function normalizedWebsiteUrl(website: string | null) {
+  const trimmed = website?.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed.replace(/^\/+/, "")}`;
+}
+
+function websiteDisplayLabel(websiteUrl: string) {
+  try {
+    const url = new URL(websiteUrl);
+    const pathname = url.pathname === "/" ? "" : url.pathname.replace(/\/$/, "");
+    return `${url.hostname.replace(/^www\./i, "")}${pathname}`;
+  } catch {
+    return websiteUrl;
+  }
 }
 
 function escapeHtml(value: string) {

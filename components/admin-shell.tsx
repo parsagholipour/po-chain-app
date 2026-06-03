@@ -572,11 +572,13 @@ function SidebarFooter({
   stores,
   activeStoreId,
   distributorName,
+  showStoreSwitcher,
   isCollapsed,
 }: {
   stores: StoreOption[];
   activeStoreId: string | null;
   distributorName?: string | null;
+  showStoreSwitcher: boolean;
   isCollapsed?: boolean;
 }) {
   return (
@@ -601,16 +603,18 @@ function SidebarFooter({
           )}
         </div>
       ) : null}
-      {activeStoreId ? (
-        <StoreSwitcher stores={stores} activeStoreId={activeStoreId} isCollapsed={isCollapsed} />
-      ) : (
-        <div className={cn("rounded-lg border border-dashed border-sidebar-border/80 bg-sidebar-accent/30 text-sm text-muted-foreground", isCollapsed ? "p-2" : "p-3")}>
-          <div className="flex items-center justify-center gap-2">
-            <Building2 className="size-4" />
-            {!isCollapsed && "No store assigned"}
+      {showStoreSwitcher ? (
+        activeStoreId ? (
+          <StoreSwitcher stores={stores} activeStoreId={activeStoreId} isCollapsed={isCollapsed} />
+        ) : (
+          <div className={cn("rounded-lg border border-dashed border-sidebar-border/80 bg-sidebar-accent/30 text-sm text-muted-foreground", isCollapsed ? "p-2" : "p-3")}>
+            <div className="flex items-center justify-center gap-2">
+              <Building2 className="size-4" />
+              {!isCollapsed && "No store assigned"}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      ) : null}
       <div className={cn("flex flex-wrap items-center gap-2", isCollapsed ? "justify-center" : "")}>
         <ModeToggle />
         {!isCollapsed && (
@@ -739,6 +743,7 @@ export function AdminShell({
               stores={stores}
               activeStoreId={activeStoreId}
               distributorName={distributorName}
+              showStoreSwitcher={!isDistributor}
               isCollapsed={isCollapsed}
             />
           </div>
@@ -819,6 +824,7 @@ export function AdminShell({
               stores={stores}
               activeStoreId={activeStoreId}
               distributorName={distributorName}
+              showStoreSwitcher={!isDistributor}
             />
           </SheetContent>
         </Sheet>
