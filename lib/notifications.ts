@@ -8,6 +8,7 @@ import type {
 } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
+  createDistributorOrderReceivedPdfEmailLink,
   createPurchaseOrderPdfEmailLink,
   type PurchaseOrderPdfEmailLink,
 } from "@/lib/po/purchase-order-pdf";
@@ -488,6 +489,7 @@ function notificationEmailFooterHtml(branding: NotificationEmailBranding) {
 
 async function purchaseOrderPdfLinkForNotification(notification: {
   type: string;
+  audience: NotificationAudience;
   entityType: string | null;
   entityId: string | null;
   storeId: string;
@@ -499,6 +501,16 @@ async function purchaseOrderPdfLinkForNotification(notification: {
       notification.type !== "external_order_created")
   ) {
     return null;
+  }
+
+  if (
+    notification.type === "external_order_created" &&
+    notification.audience === "distributor"
+  ) {
+    return createDistributorOrderReceivedPdfEmailLink({
+      purchaseOrderId: notification.entityId,
+      storeId: notification.storeId,
+    });
   }
 
   return createPurchaseOrderPdfEmailLink({

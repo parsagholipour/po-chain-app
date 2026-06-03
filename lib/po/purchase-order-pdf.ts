@@ -1,5 +1,7 @@
 import "server-only";
 
+import fs from "node:fs";
+import path from "node:path";
 import PDFDocument from "pdfkit";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { formatUsd } from "@/lib/format-usd";
@@ -9,6 +11,17 @@ import { getPresignedGetUrl, putObject } from "@/lib/storage";
 const PDF_CONTENT_TYPE = "application/pdf";
 const DEFAULT_EMAIL_LINK_EXPIRES_SECONDS = 7 * 24 * 60 * 60;
 const MAX_PRESIGNED_URL_EXPIRES_SECONDS = 7 * 24 * 60 * 60;
+const TEMPLATE_ASSET_DIR = path.join(process.cwd(), "public", "pdf-templates");
+const TEMPLATE_ARCANE_LOGO = "arcane-fortress-logo.png";
+const TEMPLATE_PHD_LOGO = "phd-logo.png";
+const TEMPLATE_PURPLE = "#6f24e8";
+const TEMPLATE_LIGHT_PURPLE = "#f2ecff";
+const TEMPLATE_DARK = "#17182a";
+const TEMPLATE_GRAY = "#667085";
+const TEMPLATE_BORDER = "#dfe3e8";
+const TEMPLATE_GREEN = "#009a67";
+const TEMPLATE_BILLING_EMAIL =
+  process.env.DISTRIBUTOR_PO_BILLING_EMAIL?.trim() || "general@arcane-fortress.com";
 
 const purchaseOrderPdfInclude = {
   store: { select: { name: true, email: true, website: true } },
@@ -122,6 +135,40 @@ export async function createPurchaseOrderPdfEmailLink({
   };
 }
 
+export async function createDistributorOrderReceivedPdfEmailLink({
+  purchaseOrderId,
+  storeId,
+}: {
+  purchaseOrderId: string;
+  storeId: string;
+}): Promise<PurchaseOrderPdfEmailLink> {
+  const purchaseOrder = await prisma.purchaseOrder.findFirst({
+    where: { id: purchaseOrderId, storeId, type: "distributor" },
+    include: purchaseOrderPdfInclude,
+  });
+
+  if (!purchaseOrder) {
+    throw new Error("Purchase order was not found for distributor PDF generation.");
+  }
+
+  const buffer = await renderDistributorOrderReceivedPdf(purchaseOrder);
+  const key = distributorOrderReceivedPdfObjectKey(purchaseOrder);
+  await putObject({
+    key,
+    body: buffer,
+    contentType: PDF_CONTENT_TYPE,
+    cacheControl: "private, max-age=0, no-store",
+  });
+
+  const expiresInSeconds = emailPdfLinkExpiresSeconds();
+  return {
+    filename: purchaseOrderPdfFilename(purchaseOrder),
+    key,
+    url: await getPresignedGetUrl(key, expiresInSeconds),
+    expiresInSeconds,
+  };
+}
+
 async function renderPurchaseOrderPdf(purchaseOrder: PurchaseOrderPdfData): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -144,6 +191,434 @@ async function renderPurchaseOrderPdf(purchaseOrder: PurchaseOrderPdfData): Prom
     addPageNumbers(doc);
     doc.end();
   });
+}
+
+async function renderDistributorOrderReceivedPdf(
+  purchaseOrder: PurchaseOrderPdfData,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    const doc = new PDFDocument({
+      size: "LETTER",
+      margin: 0,
+      bufferPages: false,
+      info: {
+        Title: `Purchase Order ${purchaseOrder.number}`,
+        Author: purchaseOrder.store.name,
+        Subject: distributorOrderNumber(purchaseOrder),
+      },
+    });
+
+    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    drawDistributorOrderReceivedTemplate(doc, purchaseOrder);
+    doc.end();
+  });
+}
+
+function drawDistributorOrderReceivedTemplate(
+  doc: PDFKit.PDFDocument,
+  po: PurchaseOrderPdfData,
+) {
+  drawDistributorTemplateHeader(doc, po);
+  drawDistributorTemplateSummary(doc, po);
+  drawDistributorTemplateContactBox(doc, po);
+
+  const tableEndY = drawDistributorTemplateLineItems(doc, po, 342);
+  const summaryY = ensureDistributorTemplatePageSpace(
+    doc,
+    Math.max(tableEndY + 40, 507),
+    116,
+    po,
+  );
+  drawDistributorTemplateFooterSummary(doc, po, summaryY);
+
+  const footerY = ensureDistributorTemplatePageSpace(
+    doc,
+    Math.max(summaryY + 82, 588),
+    42,
+    po,
+  );
+  drawDistributorTemplateFooter(doc, po, footerY);
+}
+
+function drawDistributorTemplateHeader(doc: PDFKit.PDFDocument, po: PurchaseOrderPdfData) {
+  const arcaneLogo = templateAssetBuffer(TEMPLATE_ARCANE_LOGO);
+  if (arcaneLogo) {
+    doc.image(arcaneLogo, 42, 56, { fit: [152, 42] });
+  } else {
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(20)
+      .fillColor(TEMPLATE_DARK)
+      .text(po.store.name, 42, 67, { width: 165 });
+  }
+
+  const saleChannelName = po.saleChannel?.name?.trim() ?? "";
+  const phdLogo = isPhdSaleChannel(saleChannelName) ? templateAssetBuffer(TEMPLATE_PHD_LOGO) : null;
+  if (phdLogo) {
+    doc.image(phdLogo, 458, 61, { fit: [112, 38] });
+  } else if (saleChannelName) {
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(16)
+      .fillColor(TEMPLATE_DARK)
+      .text(saleChannelName, 430, 72, { width: 140, align: "right" });
+  }
+
+  doc
+    .font("Helvetica")
+    .fontSize(10)
+    .fillColor(TEMPLATE_PURPLE)
+    .text("PURCHASE ORDER", 236, 54, { width: 140, align: "center" });
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(20)
+    .fillColor(TEMPLATE_DARK)
+    .text(`PO #${po.number}`, 236, 73, { width: 140, align: "center" });
+
+  doc
+    .moveTo(48, 108)
+    .lineTo(564, 108)
+    .strokeColor(TEMPLATE_PURPLE)
+    .lineWidth(2)
+    .stroke();
+}
+
+function drawDistributorContinuationHeader(
+  doc: PDFKit.PDFDocument,
+  po: PurchaseOrderPdfData,
+) {
+  drawDistributorTemplateHeader(doc, po);
+}
+
+function drawDistributorTemplateSummary(doc: PDFKit.PDFDocument, po: PurchaseOrderPdfData) {
+  const x = 72;
+  const y = 121;
+  const h = 48;
+  const widths = [72, 79, 79, 166, 72];
+  const cells = [
+    ["STATUS", titleCase(po.status), po.status === "open" ? TEMPLATE_GREEN : TEMPLATE_DARK],
+    ["ORDER TYPE", po.isBackOrder ? "Back Order" : "Standard Order", TEMPLATE_DARK],
+    ["PO DATE", formatTemplateDate(po.createdAt), TEMPLATE_DARK],
+    ["DISTRIBUTOR ORDER", distributorOrderNumber(po), TEMPLATE_DARK],
+    ["PLACED BY", po.saleChannel?.name ?? "", TEMPLATE_DARK],
+  ] as const;
+
+  doc.roundedRect(x, y, 468, h, 6).fillColor(TEMPLATE_LIGHT_PURPLE).fill();
+
+  let cellX = x;
+  for (let index = 0; index < cells.length; index += 1) {
+    if (index > 0) {
+      doc
+        .moveTo(cellX, y)
+        .lineTo(cellX, y + h)
+        .strokeColor("#ded6ef")
+        .lineWidth(0.7)
+        .stroke();
+    }
+
+    const [label, value, color] = cells[index];
+    const pad = index === 0 ? 14 : 10;
+    doc
+      .font("Helvetica")
+      .fontSize(8)
+      .fillColor(TEMPLATE_GRAY)
+      .text(label, cellX + pad, y + 13, { width: widths[index] - pad - 6 });
+    drawFittedText(doc, String(value), cellX + pad, y + 27, widths[index] - pad - 6, {
+      font: "Helvetica-Bold",
+      fontSize: 10,
+      minFontSize: 7,
+      color,
+    });
+
+    cellX += widths[index];
+  }
+}
+
+function drawDistributorTemplateContactBox(
+  doc: PDFKit.PDFDocument,
+  po: PurchaseOrderPdfData,
+) {
+  const x = 43;
+  const y = 185;
+  const w = 526;
+  const h = 137;
+  const midX = x + w / 2;
+
+  doc.rect(x, y, w, h).fillColor("#fbfcff").fill();
+  doc.rect(x, y, w, h).strokeColor(TEMPLATE_BORDER).lineWidth(0.7).stroke();
+  doc.moveTo(midX, y).lineTo(midX, y + h).strokeColor(TEMPLATE_BORDER).lineWidth(0.7).stroke();
+
+  doc
+    .font("Helvetica")
+    .fontSize(8)
+    .fillColor(TEMPLATE_GRAY)
+    .text("SHIP TO", x + 14, y + 17, { width: 220 });
+
+  let shipY = y + 32;
+  const shipTo = distributorShipTo(po);
+  if (shipTo.locationName) {
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(10)
+      .fillColor(TEMPLATE_DARK)
+      .text(shipTo.locationName, x + 14, shipY, { width: 240, lineGap: 1 });
+    shipY = doc.y + 2;
+  }
+  for (const line of shipTo.addressLines) {
+    doc
+      .font("Helvetica")
+      .fontSize(9)
+      .fillColor(TEMPLATE_DARK)
+      .text(line, x + 14, shipY, { width: 240, lineGap: 1 });
+    shipY = doc.y + 1;
+  }
+  shipY += 4;
+  for (const line of shipTo.contactLines) {
+    doc
+      .font("Helvetica")
+      .fontSize(9)
+      .fillColor(TEMPLATE_DARK)
+      .text(line, x + 14, shipY, { width: 240, lineGap: 1 });
+    shipY = doc.y + 1;
+  }
+  if (po.shipToNotes) {
+    doc
+      .font("Helvetica")
+      .fontSize(8)
+      .fillColor(TEMPLATE_GRAY)
+      .text(po.shipToNotes, x + 14, Math.max(shipY + 6, y + 114), {
+        width: 240,
+        height: 16,
+        ellipsis: true,
+      });
+  }
+
+  const rightX = midX + 14;
+  doc
+    .font("Helvetica")
+    .fontSize(8)
+    .fillColor(TEMPLATE_GRAY)
+    .text("SUPPLIER CONTACT", rightX, y + 17, { width: 220 });
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(10)
+    .fillColor(TEMPLATE_DARK)
+    .text(po.store.name, rightX, y + 32, { width: 220 });
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor(TEMPLATE_DARK)
+    .text(po.store.email ?? "", rightX, y + 46, { width: 220 });
+
+  doc
+    .font("Helvetica")
+    .fontSize(8)
+    .fillColor(TEMPLATE_GRAY)
+    .text("BILLING / AP", rightX, y + 65, { width: 220 });
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor(TEMPLATE_DARK)
+    .text(TEMPLATE_BILLING_EMAIL, rightX, y + 79, { width: 220 });
+}
+
+function drawDistributorTemplateLineItems(
+  doc: PDFKit.PDFDocument,
+  po: PurchaseOrderPdfData,
+  startY: number,
+) {
+  const rows = distributorTemplateLineRows(po);
+  const tableX = 56;
+  const tableW = 500;
+  let y = startY;
+
+  drawDistributorLineTableHeader(doc, tableX, y, tableW);
+  y += 29;
+
+  for (const row of rows) {
+    const rowHeight = distributorLineRowHeight(doc, row);
+    if (y + rowHeight + 258 > 752) {
+      doc.addPage();
+      drawDistributorContinuationHeader(doc, po);
+      y = 150;
+      drawDistributorLineTableHeader(doc, tableX, y, tableW);
+      y += 29;
+    }
+    drawDistributorLineRow(doc, row, tableX, y, tableW, rowHeight);
+    y += rowHeight;
+  }
+
+  drawDistributorTotalsBox(doc, po, y);
+  return y + 73;
+}
+
+function drawDistributorLineTableHeader(
+  doc: PDFKit.PDFDocument,
+  x: number,
+  y: number,
+  width: number,
+) {
+  doc.rect(x, y, width, 29).fillColor(TEMPLATE_PURPLE).fill();
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(8.5)
+    .fillColor("#ffffff")
+    .text("SKU", x + 10, y + 12, { width: 70 })
+    .text("PRODUCT", x + 89, y + 12, { width: 220 })
+    .text("QTY", x + 310, y + 12, { width: 42, align: "right" })
+    .text("UNIT PRICE", x + 361, y + 12, { width: 70, align: "right" })
+    .text("TOTAL", x + 441, y + 12, { width: 50, align: "right" });
+}
+
+function drawDistributorLineRow(
+  doc: PDFKit.PDFDocument,
+  row: DistributorTemplateLineRow,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  doc.rect(x, y, width, height).fillColor("#ffffff").fill();
+  doc.rect(x, y, width, height).strokeColor(TEMPLATE_BORDER).lineWidth(0.7).stroke();
+
+  const contentY = y + 14;
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(8.5)
+    .fillColor(TEMPLATE_PURPLE)
+    .text(row.sku, x + 10, contentY + 4, { width: 70 });
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(9.5)
+    .fillColor(TEMPLATE_DARK)
+    .text(row.productName, x + 89, contentY, { width: 220, lineGap: 1 });
+  if (row.productDetail) {
+    doc
+      .font("Helvetica")
+      .fontSize(7.5)
+      .fillColor(TEMPLATE_GRAY)
+      .text(row.productDetail, x + 89, doc.y + 2, {
+        width: 220,
+        height: 11,
+        ellipsis: true,
+      });
+  }
+  doc
+    .font("Helvetica")
+    .fontSize(10)
+    .fillColor(TEMPLATE_DARK)
+    .text(String(row.quantity), x + 310, contentY + 5, { width: 42, align: "right" })
+    .text(moneyOrDash(row.unitPrice), x + 361, contentY + 5, { width: 70, align: "right" })
+    .text(moneyOrDash(row.total), x + 441, contentY + 5, { width: 50, align: "right" });
+}
+
+function drawDistributorTotalsBox(
+  doc: PDFKit.PDFDocument,
+  po: PurchaseOrderPdfData,
+  y: number,
+) {
+  const x = 54;
+  const w = 504;
+  const subtotal = distributorSubtotal(po);
+
+  doc.rect(x, y, w, 48).fillColor("#fbfcff").fill();
+  doc.rect(x, y, w, 48).strokeColor(TEMPLATE_BORDER).lineWidth(0.7).stroke();
+  doc.moveTo(x, y + 24).lineTo(x + w, y + 24).strokeColor(TEMPLATE_BORDER).lineWidth(0.7).stroke();
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor(TEMPLATE_GRAY)
+    .text("Subtotal", x + 376, y + 10, { width: 70, align: "right" })
+    .text("Shipping", x + 376, y + 34, { width: 70, align: "right" });
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor(TEMPLATE_DARK)
+    .text(formatUsd(subtotal), x + 454, y + 10, { width: 42, align: "right" })
+    .fillColor(TEMPLATE_GRAY)
+    .text("TBD", x + 454, y + 34, { width: 42, align: "right" });
+
+  doc.rect(x, y + 48, w, 25).fillColor("#fbfcff").fill();
+  doc.rect(x, y + 48, w, 25).strokeColor(TEMPLATE_BORDER).lineWidth(0.7).stroke();
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(10.5)
+    .fillColor(TEMPLATE_DARK)
+    .text("Order Total", x + 354, y + 58, { width: 96, align: "right" });
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(10)
+    .fillColor(TEMPLATE_PURPLE)
+    .text(formatUsd(subtotal), x + 454, y + 58, { width: 42, align: "right" });
+}
+
+function drawDistributorTemplateFooterSummary(
+  doc: PDFKit.PDFDocument,
+  po: PurchaseOrderPdfData,
+  y: number,
+) {
+  const x = 54;
+  const w = 504;
+  const h = 56;
+  const headerH = 27;
+  const colW = w / 4;
+  const quantity = distributorItemsOrdered(po);
+  const values = [
+    unitLabel(quantity),
+    po.isBackOrder ? unitLabel(quantity) : unitLabel(0),
+    "TBD",
+    "Net 30",
+  ];
+  const labels = ["ITEMS ORDERED", "BACKORDER ITEMS", "ESTIMATED SHIP DATE", "PAYMENT TERMS"];
+
+  doc.rect(x, y, w, h).fillColor("#ffffff").fill();
+  doc.rect(x, y, w, h).strokeColor(TEMPLATE_BORDER).lineWidth(0.7).stroke();
+  doc.moveTo(x, y + headerH).lineTo(x + w, y + headerH).strokeColor(TEMPLATE_BORDER).lineWidth(0.7).stroke();
+
+  for (let index = 0; index < 4; index += 1) {
+    const cellX = x + index * colW;
+    doc
+      .font("Helvetica")
+      .fontSize(8.5)
+      .fillColor(TEMPLATE_GRAY)
+      .text(labels[index], cellX + 14, y + 10, { width: colW - 28 });
+    doc
+      .font("Helvetica")
+      .fontSize(10)
+      .fillColor(TEMPLATE_DARK)
+      .text(values[index], cellX + 14, y + 38, { width: colW - 28 });
+  }
+}
+
+function drawDistributorTemplateFooter(
+  doc: PDFKit.PDFDocument,
+  po: PurchaseOrderPdfData,
+  y: number,
+) {
+  const website = storeWebsiteLabel(po.store.website);
+  const firstLine = website
+    ? `This purchase order was generated by the ${po.store.name} Distributor Portal \u00b7 ${website}`
+    : `This purchase order was generated by the ${po.store.name} Distributor Portal`;
+  const secondLine = po.store.email ? `Questions? Contact us at ${po.store.email}` : "";
+
+  doc
+    .moveTo(49, y)
+    .lineTo(563, y)
+    .strokeColor(TEMPLATE_BORDER)
+    .lineWidth(0.7)
+    .stroke();
+  doc
+    .font("Helvetica")
+    .fontSize(7.5)
+    .fillColor(TEMPLATE_GRAY)
+    .text(firstLine, 90, y + 11, { width: 432, align: "center" });
+  if (secondLine) {
+    doc.text(secondLine, 90, y + 22, { width: 432, align: "center" });
+  }
 }
 
 function drawPurchaseOrder(doc: PDFKit.PDFDocument, po: PurchaseOrderPdfData) {
@@ -549,6 +1024,179 @@ function moneyOrDash(value: number | null) {
   return value == null ? "-" : formatUsd(value);
 }
 
+type DistributorTemplateLineRow = {
+  sku: string;
+  productName: string;
+  productDetail: string;
+  quantity: number;
+  unitPrice: number | null;
+  total: number | null;
+};
+
+function distributorTemplateLineRows(po: PurchaseOrderPdfData): DistributorTemplateLineRow[] {
+  return po.lines.map((line) => {
+    const unitPrice = decimalToNumber(line.unitPrice);
+    const quantity = line.orderedQuantity;
+    const detailParts = [
+      line.product.type?.name ?? line.product.category?.name ?? line.product.collection?.name,
+      line.product.upcGtin ? `UPC ${line.product.upcGtin}` : null,
+    ].filter((value): value is string => Boolean(value));
+
+    return {
+      sku: line.product.sku,
+      productName: line.product.name,
+      productDetail: detailParts.join(" \u00b7 "),
+      quantity,
+      unitPrice,
+      total: unitPrice == null ? null : unitPrice * quantity,
+    };
+  });
+}
+
+function distributorLineRowHeight(
+  doc: PDFKit.PDFDocument,
+  row: DistributorTemplateLineRow,
+) {
+  doc.font("Helvetica-Bold").fontSize(9.5);
+  const nameHeight = doc.heightOfString(row.productName, { width: 220, lineGap: 1 });
+  const detailHeight = row.productDetail ? 13 : 0;
+  return Math.max(44, Math.ceil(nameHeight + detailHeight + 22));
+}
+
+function distributorSubtotal(po: PurchaseOrderPdfData) {
+  return po.lines.reduce((sum, line) => {
+    const unitPrice = decimalToNumber(line.unitPrice);
+    return unitPrice == null ? sum : sum + unitPrice * line.orderedQuantity;
+  }, 0);
+}
+
+function distributorItemsOrdered(po: PurchaseOrderPdfData) {
+  return po.lines.reduce((sum, line) => sum + line.orderedQuantity, 0);
+}
+
+function unitLabel(quantity: number) {
+  return `${quantity} ${quantity === 1 ? "unit" : "units"}`;
+}
+
+function distributorOrderNumber(po: PurchaseOrderPdfData) {
+  return po.invoice?.invoiceNumber ?? extractDistributorOrderNumber(po.name) ?? po.name;
+}
+
+function extractDistributorOrderNumber(value: string) {
+  return /\bDO-\d{8}-[A-Z0-9]+\b/i.exec(value)?.[0].toUpperCase() ?? null;
+}
+
+function distributorShipTo(po: PurchaseOrderPdfData) {
+  return {
+    locationName: po.shipToLocationName,
+    addressLines: [
+      po.shipToAddressLine1,
+      po.shipToAddressLine2,
+      distributorCityStatePostal(po),
+      po.shipToCountry,
+    ].filter((line): line is string => Boolean(line)),
+    contactLines: [po.shipToEmail, po.shipToPhoneNumber].filter(
+      (line): line is string => Boolean(line),
+    ),
+  };
+}
+
+function distributorCityStatePostal(po: PurchaseOrderPdfData) {
+  const cityState = [po.shipToCity, po.shipToStateProvince].filter(Boolean).join(", ");
+  return [cityState, po.shipToPostalCode].filter(Boolean).join(" ");
+}
+
+function formatTemplateDate(value: Date) {
+  return value.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function storeWebsiteLabel(value: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    return url.hostname.replace(/^www\./i, "");
+  } catch {
+    return trimmed.replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
+  }
+}
+
+function isPhdSaleChannel(value: string) {
+  return value.trim().toLowerCase() === "phd";
+}
+
+const templateAssetCache = new Map<string, Buffer | null>();
+
+function templateAssetBuffer(filename: string) {
+  const cached = templateAssetCache.get(filename);
+  if (cached !== undefined) return cached;
+
+  try {
+    const buffer = fs.readFileSync(path.join(TEMPLATE_ASSET_DIR, filename));
+    templateAssetCache.set(filename, buffer);
+    return buffer;
+  } catch {
+    templateAssetCache.set(filename, null);
+    return null;
+  }
+}
+
+function ensureDistributorTemplatePageSpace(
+  doc: PDFKit.PDFDocument,
+  y: number,
+  height: number,
+  po: PurchaseOrderPdfData,
+) {
+  if (y + height <= 752) return y;
+  doc.addPage();
+  drawDistributorContinuationHeader(doc, po);
+  return 150;
+}
+
+function drawFittedText(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  x: number,
+  y: number,
+  width: number,
+  options: {
+    font: string;
+    fontSize: number;
+    minFontSize: number;
+    color: string;
+  },
+) {
+  let fontSize = options.fontSize;
+  doc.font(options.font).fontSize(fontSize);
+  while (fontSize > options.minFontSize && doc.widthOfString(text) > width) {
+    fontSize -= 0.5;
+    doc.fontSize(fontSize);
+  }
+
+  doc
+    .font(options.font)
+    .fontSize(fontSize)
+    .fillColor(options.color)
+    .text(truncateTextToWidth(doc, text, width), x, y, {
+      width,
+      lineBreak: false,
+    });
+}
+
+function truncateTextToWidth(doc: PDFKit.PDFDocument, text: string, width: number) {
+  if (doc.widthOfString(text) <= width) return text;
+  const ellipsis = "...";
+  let next = text;
+  while (next.length > 0 && doc.widthOfString(`${next}${ellipsis}`) > width) {
+    next = next.slice(0, -1);
+  }
+  return next ? `${next}${ellipsis}` : ellipsis;
+}
+
 function formatDate(value: Date) {
   return value.toLocaleDateString(undefined, {
     year: "numeric",
@@ -576,6 +1224,12 @@ function titleCase(value: string) {
 
 function purchaseOrderPdfObjectKey(po: Pick<PurchaseOrderPdfData, "storeId" | "id" | "number">) {
   return `generated/purchase-orders/${po.storeId}/${po.id}/po-${po.number}.pdf`;
+}
+
+function distributorOrderReceivedPdfObjectKey(
+  po: Pick<PurchaseOrderPdfData, "storeId" | "id" | "number">,
+) {
+  return `generated/distributor-order-received/${po.storeId}/${po.id}/po-${po.number}.pdf`;
 }
 
 function purchaseOrderPdfFilename(po: Pick<PurchaseOrderPdfData, "number">) {
