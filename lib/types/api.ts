@@ -10,6 +10,7 @@ export type PaginatedResponse<T> = {
 export type NotificationType =
   | "purchase_order_created"
   | "external_order_created"
+  | "sale_channel_account_created"
   | "payment_failed"
   | "payment_cancelled"
   | "po_status_changed"

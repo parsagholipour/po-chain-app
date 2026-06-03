@@ -31,6 +31,11 @@ type ShippingNotificationOrderTargets = {
   warehouseOrderIds?: string[];
 };
 
+type SaleChannelNotificationRef = {
+  id: string;
+  name: string;
+};
+
 function poLabel(po: { number: number; name: string }) {
   return `PO #${po.number} - ${po.name}`;
 }
@@ -41,6 +46,40 @@ function statusLabel(status: string, labels: Record<string, string>) {
 
 function uniqueNotificationIds(ids: string[]) {
   return [...new Set(ids)];
+}
+
+export async function createSaleChannelAccountNotification(
+  tx: NotificationTx,
+  {
+    storeId,
+    createdById,
+    saleChannel,
+  }: {
+    storeId: string;
+    createdById: string | null;
+    saleChannel: SaleChannelNotificationRef;
+  },
+) {
+  const distributors = await distributorEmailRecipients(tx, {
+    storeId,
+    saleChannelId: saleChannel.id,
+  });
+  const notification = await createNotification(tx, {
+    type: "sale_channel_account_created",
+    priority: "important",
+    audience: "distributor",
+    title: "Your account is ready",
+    body: `Your account for ${saleChannel.name} is ready. You can now sign in to place orders and view order updates.`,
+    href: "/",
+    entityType: "sale_channel",
+    entityId: saleChannel.id,
+    dedupeKey: `sale-channel-account-created:distributor:${saleChannel.id}`,
+    saleChannelId: saleChannel.id,
+    storeId,
+    createdById,
+    emailRecipients: distributors,
+  });
+  return [notification.id];
 }
 
 async function purchaseOrderIdsForShippingTargets(

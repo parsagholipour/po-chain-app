@@ -14,6 +14,8 @@ import {
   KeycloakAdminError,
   provisionDistributorKeycloakUser,
 } from "@/lib/keycloak-admin";
+import { createSaleChannelAccountNotification } from "@/lib/notification-events";
+import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 
@@ -162,7 +164,7 @@ export async function PATCH(
 ) {
   const authz = await requireInternalStoreContext();
   if (!authz.ok) return authz.response;
-  const { storeId } = authz.context;
+  const { userId, storeId } = authz.context;
 
   const { id } = await ctx.params;
   const pid = paramsSchema.safeParse({ id });
@@ -231,7 +233,7 @@ export async function PATCH(
       return jsonError("Keycloak returned a non-UUID user id", 502);
     }
 
-    const row = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       await tx.saleChannel.update({
         where: { id: pid.data.id },
         data: saleChannelData,
@@ -248,12 +250,26 @@ export async function PATCH(
         });
       }
 
-      return tx.saleChannel.findUniqueOrThrow({
+      const notificationIds =
+        keycloakSub?.success && !existing.loginUser
+          ? await createSaleChannelAccountNotification(tx, {
+              storeId,
+              createdById: userId,
+              saleChannel: { id: existing.id, name: nextName },
+            })
+          : [];
+
+      const row = await tx.saleChannel.findUniqueOrThrow({
         where: { id: pid.data.id },
         include: { loginUser: { select: { id: true } } },
       });
+
+      return { row, notificationIds };
     });
-    return NextResponse.json(saleChannelResponse(row));
+
+    await dispatchNotificationEmailsSafely(result.notificationIds);
+
+    return NextResponse.json(saleChannelResponse(result.row));
   } catch (e) {
     if (e instanceof KeycloakAdminConfigError) {
       return jsonError(e.message, 503);
