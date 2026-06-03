@@ -47,6 +47,11 @@ export async function POST(
             select: {
               saleChannelId: true,
               saleChannel: { select: { type: true } },
+              lines: {
+                select: {
+                  product: { select: { name: true, sku: true, editingStatus: true } },
+                },
+              },
             },
           },
         },
@@ -64,6 +69,12 @@ export async function POST(
       }
       if (invoice.draftPurchaseOrders.some((draft) => draft.saleChannel.type !== "distributor")) {
         throw new Error("SALE_CHANNEL_NOT_ALLOWED");
+      }
+      const discontinuedProduct = invoice.draftPurchaseOrders
+        .flatMap((draft) => draft.lines.map((line) => line.product))
+        .find((product) => product.editingStatus === "discontinued");
+      if (discontinuedProduct) {
+        throw new Error(`DISCONTINUED_PRODUCT:${discontinuedProduct.sku}:${discontinuedProduct.name}`);
       }
 
       const conversion = await convertPaidDistributorInvoiceDrafts({
@@ -95,6 +106,13 @@ export async function POST(
       }
       if (e.message === "SALE_CHANNEL_NOT_ALLOWED") {
         return jsonError("Only distributor sale channels can place orders without payment", 400);
+      }
+      if (e.message.startsWith("DISCONTINUED_PRODUCT:")) {
+        const [, sku, ...nameParts] = e.message.split(":");
+        return jsonError(
+          `Product ${sku} - ${nameParts.join(":")} is discontinued and can no longer be ordered`,
+          400,
+        );
       }
       if (e.message === "DISTRIBUTOR_ORDER_INVOICE_NOT_FOUND") {
         return jsonError("Not found", 404);

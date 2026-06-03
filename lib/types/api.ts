@@ -311,7 +311,7 @@ export type Product = {
   msrp: string | number | null;
   quantityPerCarton: number | null;
   orderByDate: string | null;
-  editingStatus: "standard" | "final_stock" | "one_print_only";
+  editingStatus: "standard" | "final_stock" | "one_print_only" | "discontinued";
   description: string | null;
   imageLink: string;
   stockCount: number | null;

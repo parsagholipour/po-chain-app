@@ -76,7 +76,7 @@ export async function POST(
           saleChannel: { select: { email: true, type: true } },
           lines: {
             include: {
-              product: { select: { id: true, name: true, sku: true } },
+              product: { select: { id: true, name: true, sku: true, editingStatus: true } },
             },
             orderBy: { createdAt: "asc" },
           },
@@ -105,6 +105,12 @@ export async function POST(
   const lineItemByProduct = new Map<string, CheckoutLineItem>();
   for (const draft of invoice.draftPurchaseOrders) {
     for (const line of draft.lines) {
+      if (line.product.editingStatus === "discontinued") {
+        return jsonError(
+          `Product ${line.product.sku} - ${line.product.name} is discontinued and can no longer be ordered`,
+          400,
+        );
+      }
       const unitAmountCents = moneyToCents(line.unitPrice);
       if (unitAmountCents == null || unitAmountCents <= 0) {
         return jsonError(`Product ${line.product.sku} does not have a valid price`, 400);

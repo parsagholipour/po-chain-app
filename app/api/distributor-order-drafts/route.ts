@@ -301,7 +301,7 @@ export async function POST(request: Request) {
 
       const products = await tx.product.findMany({
         where: { id: { in: productIds }, storeId },
-        select: { id: true, name: true, sku: true, cost: true, price: true },
+        select: { id: true, name: true, sku: true, cost: true, price: true, editingStatus: true },
       });
       if (products.length !== productIds.length) {
         throw new Error("PRODUCT_NOT_FOUND");
@@ -309,6 +309,9 @@ export async function POST(request: Request) {
 
       const productMap = new Map<string, ProductPricing>();
       for (const product of products) {
+        if (product.editingStatus === "discontinued") {
+          throw new Error(`DISCONTINUED_PRODUCT:${product.sku}:${product.name}`);
+        }
         const priceCents = moneyToCents(product.price);
         if (priceCents == null || priceCents <= 0) {
           throw new Error(`MISSING_PRICE:${product.sku}:${product.name}`);
@@ -630,6 +633,13 @@ export async function POST(request: Request) {
       }
       if (e.message === "PRODUCT_NOT_FOUND") {
         return jsonError("One or more products were not found", 400);
+      }
+      if (e.message.startsWith("DISCONTINUED_PRODUCT:")) {
+        const [, sku, ...nameParts] = e.message.split(":");
+        return jsonError(
+          `Product ${sku} - ${nameParts.join(":")} is discontinued and can no longer be ordered`,
+          400,
+        );
       }
       if (e.message === "DUPLICATE_LOCATION_QUANTITY") {
         return jsonError("Each product can only have one quantity per location", 400);

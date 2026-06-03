@@ -48,7 +48,7 @@ export async function GET() {
 
   const [products, customDefinitions] = await Promise.all([
     prisma.product.findMany({
-      where: { storeId },
+      where: { storeId, editingStatus: { not: "discontinued" } },
       orderBy: [{ sku: "asc" }, { name: "asc" }],
       select: {
         id: true,
