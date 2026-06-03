@@ -1,5 +1,6 @@
 import "server-only";
 
+import imageSize from "image-size";
 import type {
   NotificationAudience,
   NotificationPriority,
@@ -14,11 +15,17 @@ import {
 } from "@/lib/po/purchase-order-pdf";
 import { APP_NAME } from "@/lib/app-name";
 import { EmailService } from "@/lib/services/email";
-import { getPresignedGetUrl } from "@/lib/storage";
+import {
+  getObjectBuffer,
+  getPresignedGetUrl,
+  parseStoredImageReference,
+} from "@/lib/storage";
 
 const MAX_EMAIL_ATTEMPTS = 5;
 const DEFAULT_DISPATCH_LIMIT = 50;
 const EMAIL_LOGO_URL_EXPIRES_SECONDS = 7 * 24 * 60 * 60;
+const EMAIL_LOGO_MAX_WIDTH = 64;
+const EMAIL_LOGO_MAX_HEIGHT = 48;
 
 export type NotificationEmailRecipient = {
   email?: string | null;
@@ -439,7 +446,13 @@ type NotificationEmailBranding = {
   storeName: string;
   websiteUrl: string | null;
   websiteLabel: string | null;
-  logoUrl: string | null;
+  logo: NotificationEmailLogo | null;
+};
+
+type NotificationEmailLogo = {
+  url: string;
+  width: number | null;
+  height: number | null;
 };
 
 async function emailStoreBranding(store: {
@@ -452,20 +465,72 @@ async function emailStoreBranding(store: {
     storeName: store.name,
     websiteUrl,
     websiteLabel: websiteUrl ? websiteDisplayLabel(websiteUrl) : null,
-    logoUrl: await storeLogoUrl(store.logoKey),
+    logo: await storeLogo(store.logoKey),
   };
 }
 
-async function storeLogoUrl(logoKey: string | null) {
+async function storeLogo(logoKey: string | null): Promise<NotificationEmailLogo | null> {
   const key = logoKey?.trim();
   if (!key) return null;
 
+  const referenceDimensions = imageDimensionsFromStoredReference(key);
+
   try {
-    return await getPresignedGetUrl(key, EMAIL_LOGO_URL_EXPIRES_SECONDS);
+    const [url, decodedDimensions] = await Promise.all([
+      getPresignedGetUrl(key, EMAIL_LOGO_URL_EXPIRES_SECONDS),
+      referenceDimensions ? Promise.resolve(referenceDimensions) : storedLogoDimensions(key),
+    ]);
+    const dimensions = referenceDimensions ?? decodedDimensions;
+    return {
+      url,
+      width: dimensions?.width ?? null,
+      height: dimensions?.height ?? null,
+    };
   } catch (error) {
     console.error("[notifications] store logo URL generation failed", error);
     return null;
   }
+}
+
+function imageDimensionsFromStoredReference(reference: string) {
+  const { width, height } = parseStoredImageReference(reference);
+  if (!width || !height || width <= 0 || height <= 0) return null;
+  return { width, height };
+}
+
+async function storedLogoDimensions(key: string) {
+  try {
+    const { buffer } = await getObjectBuffer(key);
+    return imageDimensionsFromBuffer(buffer);
+  } catch (error) {
+    console.error("[notifications] store logo dimension detection failed", error);
+    return null;
+  }
+}
+
+function imageDimensionsFromBuffer(buf: Buffer): { width: number; height: number } | null {
+  try {
+    const result = imageSize(new Uint8Array(buf));
+    const width = result.width;
+    const height = result.height;
+    if (typeof width === "number" && typeof height === "number" && width > 0 && height > 0) {
+      return { width, height };
+    }
+
+    const firstImage = result.images?.[0];
+    if (
+      firstImage &&
+      typeof firstImage.width === "number" &&
+      typeof firstImage.height === "number" &&
+      firstImage.width > 0 &&
+      firstImage.height > 0
+    ) {
+      return { width: firstImage.width, height: firstImage.height };
+    }
+  } catch {
+    /* not a supported image or buffer too small */
+  }
+  return null;
 }
 
 function notificationEmailFooterTextLines(branding: NotificationEmailBranding) {
@@ -477,14 +542,41 @@ function notificationEmailFooterTextLines(branding: NotificationEmailBranding) {
 }
 
 function notificationEmailFooterHtml(branding: NotificationEmailBranding) {
-  const logoHtml = branding.logoUrl
-    ? `<td style="padding:0 14px 0 0;vertical-align:middle;"><img src="${escapeHtml(branding.logoUrl)}" width="64" alt="${escapeHtml(branding.storeName)} logo" style="display:block;width:64px;max-width:64px;height:auto;max-height:48px;border:0;border-radius:6px;outline:none;text-decoration:none;"></td>`
+  const logoHtml = branding.logo
+    ? `<td style="padding:0 14px 0 0;vertical-align:middle;">${notificationEmailLogoHtml(branding.logo, branding.storeName)}</td>`
     : "";
   const websiteHtml = branding.websiteUrl
     ? `<div style="margin-top:2px;font-family:Arial,sans-serif;font-size:12px;line-height:18px;"><a href="${escapeHtml(branding.websiteUrl)}" style="color:#2563eb;text-decoration:none;">${escapeHtml(branding.websiteLabel ?? branding.websiteUrl)}</a></div>`
     : "";
 
   return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin-top:24px;border-top:1px solid #e5e7eb;"><tr><td style="padding-top:16px;"><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>${logoHtml}<td style="vertical-align:middle;"><div style="font-family:Arial,sans-serif;font-size:13px;line-height:18px;font-weight:700;color:#111827;">${escapeHtml(branding.storeName)}</div>${websiteHtml}</td></tr></table></td></tr></table>`;
+}
+
+function notificationEmailLogoHtml(logo: NotificationEmailLogo, storeName: string) {
+  const dimensions = fittedEmailLogoDimensions(logo.width, logo.height);
+  const sizeAttributes = dimensions
+    ? ` width="${dimensions.width}" height="${dimensions.height}"`
+    : "";
+  const sizeStyles = dimensions
+    ? `width:${dimensions.width}px;height:${dimensions.height}px;`
+    : "width:auto;height:auto;";
+
+  return `<img src="${escapeHtml(logo.url)}"${sizeAttributes} alt="${escapeHtml(storeName)} logo" style="display:block;${sizeStyles}max-width:${EMAIL_LOGO_MAX_WIDTH}px;max-height:${EMAIL_LOGO_MAX_HEIGHT}px;border:0;border-radius:6px;outline:none;text-decoration:none;">`;
+}
+
+function fittedEmailLogoDimensions(width: number | null, height: number | null) {
+  if (!width || !height || width <= 0 || height <= 0) return null;
+
+  const scale = Math.min(
+    EMAIL_LOGO_MAX_WIDTH / width,
+    EMAIL_LOGO_MAX_HEIGHT / height,
+    1,
+  );
+
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
 }
 
 async function purchaseOrderPdfLinkForNotification(notification: {
