@@ -334,6 +334,20 @@ export async function DELETE(
         }
       }
 
+      const lineRows = await tx.purchaseOrderLine.findMany({
+        where: { purchaseOrderId: pid.data.id, storeId },
+        select: { id: true },
+      });
+      const lineIds = lineRows.map((line) => line.id);
+      if (lineIds.length > 0) {
+        await tx.purchaseOrderOsdLine.deleteMany({
+          where: {
+            storeId,
+            purchaseOrderLineId: { in: lineIds },
+          },
+        });
+      }
+
       await tx.purchaseOrder.deleteMany({
         where: {
           id: pid.data.id,

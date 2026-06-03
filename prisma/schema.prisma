@@ -949,7 +949,7 @@ model PurchaseOrderOsdLine {
   createdAt           DateTime @default(now())
 
   osd               PurchaseOrderOsd  @relation(fields: [osdId], references: [id], onDelete: Cascade)
-  purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Cascade)
   store             Store             @relation(fields: [storeId], references: [id], onDelete: Restrict)
 
   @@index([storeId, osdId])
