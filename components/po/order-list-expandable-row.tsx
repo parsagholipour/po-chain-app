@@ -56,6 +56,7 @@ export function ExpandableOrderSummaryRow({
   onEditProduct,
   viewOnly = false,
   hideManufacturingDetails = false,
+  showTrackingNumberColumn = false,
   onDelete,
   isDeleting = false,
 }: {
@@ -64,6 +65,7 @@ export function ExpandableOrderSummaryRow({
   onEditProduct?: (product: Product) => void;
   viewOnly?: boolean;
   hideManufacturingDetails?: boolean;
+  showTrackingNumberColumn?: boolean;
   onDelete?: (id: string) => Promise<void>;
   isDeleting?: boolean;
 }) {
@@ -73,6 +75,14 @@ export function ExpandableOrderSummaryRow({
   const isStockList = apiScope === "stock-orders";
   const orderKindLabel = isStockList ? "stock order" : "purchase order";
   const locationName = row.saleChannelLocation?.name ?? row.shipToLocationName ?? null;
+  const showTrackingNumbers = showTrackingNumberColumn && !isStockList;
+  const trackingNumbers = Array.from(
+    new Set(
+      row.shippingBadges
+        .map((shipping) => shipping.trackingNumber.trim())
+        .filter((trackingNumber) => trackingNumber.length > 0),
+    ),
+  );
 
   function lineItemSubtitle(line: PoLineRow) {
     if (hideManufacturingDetails) {
@@ -93,7 +103,7 @@ export function ExpandableOrderSummaryRow({
     enabled: open,
   });
 
-  const baseColumnCount = isStockList ? 5 : 7;
+  const baseColumnCount = isStockList ? 5 : showTrackingNumbers ? 8 : 7;
   const colSpan = baseColumnCount + (onDelete ? 1 : 0);
 
   return (
@@ -188,6 +198,24 @@ export function ExpandableOrderSummaryRow({
               )}
             </TableCell>
           </>
+        ) : null}
+        {showTrackingNumbers ? (
+          <TableCell className="min-w-[12rem] max-w-64 whitespace-normal">
+            {trackingNumbers.length > 0 ? (
+              <div className="flex flex-col gap-1">
+                {trackingNumbers.map((trackingNumber) => (
+                  <span
+                    key={trackingNumber}
+                    className="break-all font-mono text-xs text-foreground"
+                  >
+                    {trackingNumber}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </TableCell>
         ) : null}
         <TableCell className="min-w-[12rem] whitespace-normal">
           <div className="flex flex-col gap-1.5">

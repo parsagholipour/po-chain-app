@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PriceView } from "@/components/ui/price-view";
@@ -19,9 +19,18 @@ import { storageDownloadUrl } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  rows: SaleChannelProduct[];
+  rows?: SaleChannelProduct[];
+  groups?: SaleChannelProductsTableGroup[];
   isPending: boolean;
   emptyMessage?: string;
+  groupScrollMarginTop?: number;
+  onGroupHeaderRef?: (groupId: string, node: HTMLTableRowElement | null) => void;
+};
+
+export type SaleChannelProductsTableGroup = {
+  id: string;
+  name: string;
+  rows: SaleChannelProduct[];
 };
 
 const columnCount = 17;
@@ -94,15 +103,19 @@ const initialStickyHeaderState: StickyHeaderState = {
 };
 
 function stickyViewportTop(root: HTMLElement) {
+  const rootRect = root.getBoundingClientRect();
   const stickyHeaders = Array.from(
-    document.querySelectorAll<HTMLElement>("header.sticky"),
+    document.querySelectorAll<HTMLElement>("header.sticky, [data-product-category-nav]"),
   );
 
   return stickyHeaders.reduce((offset, header) => {
     if (header.contains(root)) return offset;
 
+    const position = window.getComputedStyle(header).position;
+    if (position !== "fixed" && position !== "sticky") return offset;
+
     const rect = header.getBoundingClientRect();
-    if (rect.top > 1 || rect.bottom <= 0) return offset;
+    if (rect.bottom <= 0 || rect.top >= rootRect.bottom) return offset;
 
     return Math.max(offset, rect.bottom);
   }, 0);
@@ -341,13 +354,83 @@ function BarcodeImageDownload({ product }: { product: SaleChannelProduct }) {
   );
 }
 
+function SaleChannelProductRow({ row }: { row: SaleChannelProduct }) {
+  return (
+    <TableRow key={row.id} className="group">
+      <TableCell
+        className={cn(
+          stickySkuClassName,
+          stickyBodyClassName,
+          "truncate font-mono text-xs",
+        )}
+        title={row.sku}
+      >
+        {row.sku}
+      </TableCell>
+      <TableCell
+        className={cn(
+          stickyProductNameClassName,
+          stickyBodyClassName,
+          "whitespace-normal font-medium leading-snug",
+        )}
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <ProductImageCell product={row} />
+          <span className="min-w-0">{row.name}</span>
+        </div>
+      </TableCell>
+      <TableCell className="font-mono text-xs">{emptyValue(row.upcGtin)}</TableCell>
+      <TableCell className="max-w-44 truncate" title={row.collection?.name ?? undefined}>
+        {row.collection?.name ?? <span className="text-muted-foreground">None</span>}
+      </TableCell>
+      <TableCell className="text-end text-muted-foreground">
+        <PriceView value={row.msrp} />
+      </TableCell>
+      <TableCell className="text-end text-muted-foreground">
+        <PriceView value={row.map} />
+      </TableCell>
+      <TableCell className="text-end">
+        <PriceView value={row.wholesalePrice} />
+      </TableCell>
+      <TableCell className="text-end">{emptyValue(row.moq)}</TableCell>
+      <TableCell className="max-w-56 truncate">
+        <ImageLinkCell value={row.imageLink} />
+      </TableCell>
+      <TableCell>
+        <BarcodeImageDownload product={row} />
+      </TableCell>
+      <TableCell>
+        <StockStatus stockCount={row.stockCount} />
+      </TableCell>
+      <TableCell className="text-end">{emptyValue(row.stockCount)}</TableCell>
+      <TableCell className="text-end">{emptyValue(row.quantityPerCarton)}</TableCell>
+      <TableCell className="max-w-72 truncate" title={row.description ?? undefined}>
+        {emptyValue(row.description)}
+      </TableCell>
+      <TableCell>{formatDate(row.orderByDate)}</TableCell>
+      <TableCell>{formatDate(row.releaseDateShipsFrom)}</TableCell>
+      <TableCell>{productEditingStatusLabels[row.editionStatus]}</TableCell>
+    </TableRow>
+  );
+}
+
+function productCountLabel(count: number) {
+  return `${count} product${count === 1 ? "" : "s"}`;
+}
+
 export function SaleChannelProductsTable({
-  rows,
+  rows = [],
+  groups,
   isPending,
   emptyMessage = "No products yet.",
+  groupScrollMarginTop,
+  onGroupHeaderRef,
 }: Props) {
+  const renderedRowCount = groups
+    ? groups.reduce((count, group) => count + group.rows.length + 1, 0)
+    : rows.length;
   const { scrollRef, tableRef, state: stickyHeaderState } = useFixedStickyTableHeader(
-    rows.length,
+    renderedRowCount,
     isPending,
   );
   const stickySkuWidth = stickyHeaderState.columnWidths[0] ?? 144;
@@ -461,69 +544,46 @@ export function SaleChannelProductsTable({
                   Loading...
                 </TableCell>
               </TableRow>
-            ) : rows.length === 0 ? (
+            ) : renderedRowCount === 0 ? (
               <TableRow>
                 <TableCell colSpan={columnCount} className="h-24 text-center text-muted-foreground">
                   {emptyMessage}
                 </TableCell>
               </TableRow>
+            ) : groups ? (
+              groups.map((group) => (
+                <Fragment key={group.id}>
+                  <TableRow
+                    ref={(node) => onGroupHeaderRef?.(group.id, node)}
+                    className="bg-background hover:bg-background"
+                    style={
+                      groupScrollMarginTop
+                        ? { scrollMarginTop: groupScrollMarginTop }
+                        : undefined
+                    }
+                  >
+                    <TableCell
+                      colSpan={columnCount}
+                      className="sticky left-0 z-20 bg-background px-3 py-3 shadow-[inset_0_-1px_0_var(--border)] sm:px-4"
+                    >
+                      <div className="flex min-w-0 items-center justify-between gap-3">
+                        <span className="truncate text-sm font-semibold text-foreground">
+                          {group.name}
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {productCountLabel(group.rows.length)}
+                        </span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {group.rows.map((row) => (
+                    <SaleChannelProductRow key={row.id} row={row} />
+                  ))}
+                </Fragment>
+              ))
             ) : (
               rows.map((row) => (
-                <TableRow key={row.id} className="group">
-                  <TableCell
-                    className={cn(
-                      stickySkuClassName,
-                      stickyBodyClassName,
-                      "truncate font-mono text-xs",
-                    )}
-                    title={row.sku}
-                  >
-                    {row.sku}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      stickyProductNameClassName,
-                      stickyBodyClassName,
-                      "whitespace-normal font-medium leading-snug",
-                    )}
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <ProductImageCell product={row} />
-                      <span className="min-w-0">{row.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{emptyValue(row.upcGtin)}</TableCell>
-                  <TableCell className="max-w-44 truncate" title={row.collection?.name ?? undefined}>
-                    {row.collection?.name ?? <span className="text-muted-foreground">None</span>}
-                  </TableCell>
-                  <TableCell className="text-end text-muted-foreground">
-                    <PriceView value={row.msrp} />
-                  </TableCell>
-                  <TableCell className="text-end text-muted-foreground">
-                    <PriceView value={row.map} />
-                  </TableCell>
-                  <TableCell className="text-end">
-                    <PriceView value={row.wholesalePrice} />
-                  </TableCell>
-                  <TableCell className="text-end">{emptyValue(row.moq)}</TableCell>
-                  <TableCell className="max-w-56 truncate">
-                    <ImageLinkCell value={row.imageLink} />
-                  </TableCell>
-                  <TableCell>
-                    <BarcodeImageDownload product={row} />
-                  </TableCell>
-                  <TableCell>
-                    <StockStatus stockCount={row.stockCount} />
-                  </TableCell>
-                  <TableCell className="text-end">{emptyValue(row.stockCount)}</TableCell>
-                  <TableCell className="text-end">{emptyValue(row.quantityPerCarton)}</TableCell>
-                  <TableCell className="max-w-72 truncate" title={row.description ?? undefined}>
-                    {emptyValue(row.description)}
-                  </TableCell>
-                  <TableCell>{formatDate(row.orderByDate)}</TableCell>
-                  <TableCell>{formatDate(row.releaseDateShipsFrom)}</TableCell>
-                  <TableCell>{productEditingStatusLabels[row.editionStatus]}</TableCell>
-                </TableRow>
+                <SaleChannelProductRow key={row.id} row={row} />
               ))
             )}
           </TableBody>

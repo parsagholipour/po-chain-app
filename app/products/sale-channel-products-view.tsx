@@ -1,17 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { Download } from "lucide-react";
 import { api } from "@/lib/axios";
 import type { SaleChannelProduct } from "@/lib/types/api";
 import { SaleChannelProductsTable } from "@/components/po/products/sale-channel-products-table";
 import { Button } from "@/components/ui/button";
 import { ListFilters } from "@/components/ui/list-filters";
 import { TableContainer } from "@/components/ui/table-container";
-import { TablePagination } from "@/components/ui/table-pagination";
 import { useClientReady } from "@/hooks/use-client-ready";
-import { usePagination } from "@/hooks/use-pagination";
 import {
   LIST_FILTER_ALL_VALUE,
   normalizeListFilterText,
@@ -28,6 +26,8 @@ const filterDefaults = {
   collection: LIST_FILTER_ALL_VALUE,
 };
 const noCategorySheetName = "No category";
+const noCategoryId = "__no_category__";
+const categoryActivationLeadPx = 32;
 
 type WorkbookCellValue = string | number | null | undefined;
 
@@ -35,6 +35,28 @@ type SaleChannelProductExportColumn = {
   label: string;
   value: (row: SaleChannelProduct) => WorkbookCellValue;
   width: number;
+};
+
+type CategoryProductGroup = {
+  id: string;
+  name: string;
+  rows: SaleChannelProduct[];
+};
+
+type CategoryNavFrame = {
+  active: boolean;
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+};
+
+const initialCategoryNavFrame: CategoryNavFrame = {
+  active: false,
+  top: 0,
+  left: 0,
+  width: 0,
+  height: 0,
 };
 
 function numericExportValue(value: string | number | null | undefined): WorkbookCellValue {
@@ -165,16 +187,17 @@ function workbookRow(values: WorkbookCellValue[], styleId?: string) {
 }
 
 function categoryProductGroups(rows: SaleChannelProduct[]) {
-  const groups = new Map<string, { name: string; rows: SaleChannelProduct[] }>();
+  const groups = new Map<string, CategoryProductGroup>();
 
   for (const row of rows) {
-    const key = row.category?.id ?? noCategorySheetName;
+    const key = row.category?.id ?? noCategoryId;
     const current = groups.get(key);
 
     if (current) {
       current.rows.push(row);
     } else {
       groups.set(key, {
+        id: key,
         name: row.category?.name ?? noCategorySheetName,
         rows: [row],
       });
@@ -252,12 +275,46 @@ function searchHaystack(row: SaleChannelProduct) {
     .join(" ");
 }
 
+function topStickyOffset(exclude?: HTMLElement | null) {
+  const stickyHeaders = Array.from(
+    document.querySelectorAll<HTMLElement>("header.sticky"),
+  );
+
+  return stickyHeaders.reduce((offset, header) => {
+    if (exclude && (header === exclude || header.contains(exclude))) return offset;
+
+    const rect = header.getBoundingClientRect();
+    if (rect.bottom <= 0 || rect.top > 1) return offset;
+
+    return Math.max(offset, rect.bottom);
+  }, 0);
+}
+
+function sameCategoryNavFrame(a: CategoryNavFrame, b: CategoryNavFrame) {
+  return (
+    a.active === b.active &&
+    a.top === b.top &&
+    a.left === b.left &&
+    a.width === b.width &&
+    a.height === b.height
+  );
+}
+
 export function SaleChannelProductsView() {
   const clientReady = useClientReady();
   const productFilters = useListFilterState({ initialFilters: filterDefaults });
   const debouncedSearch = useDebouncedValue(productFilters.search);
-  const [selectedCategoryIdState, setSelectedCategoryId] = useState<string | null>(null);
+  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [categoryNavFrame, setCategoryNavFrame] = useState<CategoryNavFrame>(
+    initialCategoryNavFrame,
+  );
+  const productListRef = useRef<HTMLDivElement>(null);
+  const categoryNavShellRef = useRef<HTMLDivElement>(null);
+  const categoryNavRef = useRef<HTMLElement>(null);
   const categoryButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const categorySectionRefs = useRef(new Map<string, HTMLElement>());
+  const categoryActivationLockRef = useRef<string | null>(null);
+  const categoryActivationLockTimeoutRef = useRef<number | null>(null);
 
   const { data = [], isPending } = useQuery({
     queryKey: saleChannelProductsKey,
@@ -287,65 +344,178 @@ export function SaleChannelProductsView() {
     ];
   }, [data]);
 
-  const categoryOptions = useMemo(() => {
-    const options = new Map<string, { id: string; name: string; count: number }>();
-
-    for (const product of data) {
-      if (!product.category) continue;
-      const current = options.get(product.category.id);
-      options.set(product.category.id, {
-        id: product.category.id,
-        name: product.category.name,
-        count: (current?.count ?? 0) + 1,
-      });
-    }
-
-    return Array.from(options.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [data]);
-
-  const selectedCategoryId =
-    categoryOptions.find((category) => category.id === selectedCategoryIdState)?.id ??
-    categoryOptions[0]?.id ??
-    null;
-  const selectedCategoryIndex = selectedCategoryId
-    ? categoryOptions.findIndex((category) => category.id === selectedCategoryId)
-    : -1;
-  const canGoToPreviousCategory = selectedCategoryIndex > 0;
-  const canGoToNextCategory =
-    selectedCategoryIndex >= 0 && selectedCategoryIndex < categoryOptions.length - 1;
-
-  useEffect(() => {
-    if (!selectedCategoryId) return;
-    categoryButtonRefs.current
-      .get(selectedCategoryId)
-      ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-  }, [selectedCategoryId]);
-
-  function selectCategoryByOffset(offset: number) {
-    const nextCategory = categoryOptions[selectedCategoryIndex + offset];
-    if (!nextCategory) return;
-    setSelectedCategoryId(nextCategory.id);
-  }
-
   const filteredRows = useMemo(() => {
     const q = normalizeListFilterText(debouncedSearch);
     const collectionFilter = productFilters.filters.collection;
 
     return data.filter((row) => {
-      if (selectedCategoryId && row.category?.id !== selectedCategoryId) return false;
       if (q && !searchHaystack(row).includes(q)) return false;
       if (collectionFilter === LIST_FILTER_ALL_VALUE) return true;
       if (collectionFilter === uncollectedFilterValue) return row.collection === null;
       return row.collection?.id === collectionFilter;
     });
-  }, [data, debouncedSearch, productFilters.filters.collection, selectedCategoryId]);
+  }, [data, debouncedSearch, productFilters.filters.collection]);
 
-  const pagination = usePagination({
-    totalItems: filteredRows.length,
-    resetDeps: [debouncedSearch, productFilters.filters.collection, selectedCategoryId],
-  });
-  const pagedRows = pagination.sliceItems(filteredRows);
+  const categoryGroups = useMemo(() => categoryProductGroups(filteredRows), [filteredRows]);
   const isTablePending = isPending && data.length === 0;
+  const visibleActiveCategoryId =
+    activeCategoryId && categoryGroups.some((group) => group.id === activeCategoryId)
+      ? activeCategoryId
+      : categoryGroups[0]?.id ?? null;
+  const categoryScrollMarginTop = categoryNavFrame.top + categoryNavFrame.height + 12 || 112;
+
+  const clearCategoryActivationLock = useCallback(() => {
+    if (categoryActivationLockTimeoutRef.current != null) {
+      window.clearTimeout(categoryActivationLockTimeoutRef.current);
+      categoryActivationLockTimeoutRef.current = null;
+    }
+
+    categoryActivationLockRef.current = null;
+  }, []);
+
+  useEffect(() => clearCategoryActivationLock, [clearCategoryActivationLock]);
+
+  useEffect(() => {
+    if (!visibleActiveCategoryId) return;
+    categoryButtonRefs.current
+      .get(visibleActiveCategoryId)
+      ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+  }, [visibleActiveCategoryId]);
+
+  useEffect(() => {
+    const shell = categoryNavShellRef.current;
+    const nav = categoryNavRef.current;
+    const productList = productListRef.current;
+    if (!shell || !nav || !productList || categoryGroups.length === 0) return;
+
+    let frame = 0;
+
+    const updateCategoryNavFrame = () => {
+      frame = 0;
+
+      const top = Math.round(topStickyOffset(nav));
+      const shellRect = shell.getBoundingClientRect();
+      const listRect = productList.getBoundingClientRect();
+      const height = Math.round(nav.getBoundingClientRect().height);
+      const active =
+        shellRect.top <= top &&
+        listRect.bottom > top + height &&
+        shellRect.width > 0 &&
+        height > 0;
+      const nextFrame: CategoryNavFrame = {
+        active,
+        top,
+        left: Math.round(shellRect.left),
+        width: Math.round(shellRect.width),
+        height,
+      };
+
+      setCategoryNavFrame((current) =>
+        sameCategoryNavFrame(current, nextFrame) ? current : nextFrame,
+      );
+    };
+
+    const scheduleUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateCategoryNavFrame);
+    };
+
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
+    resizeObserver.observe(shell);
+    resizeObserver.observe(nav);
+    resizeObserver.observe(productList);
+
+    window.addEventListener("scroll", scheduleUpdate, true);
+    window.addEventListener("resize", scheduleUpdate);
+    scheduleUpdate();
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      window.removeEventListener("scroll", scheduleUpdate, true);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [categoryGroups.length]);
+
+  useEffect(() => {
+    if (categoryGroups.length === 0) return;
+    let frame = 0;
+
+    const updateActiveCategory = () => {
+      frame = 0;
+
+      const activationLine =
+        (categoryNavRef.current?.getBoundingClientRect().bottom ?? 0) +
+        categoryActivationLeadPx;
+      let nextCategoryId = categoryGroups[0]?.id ?? null;
+      const lockedCategoryId = categoryActivationLockRef.current;
+
+      if (lockedCategoryId) {
+        const lockedSection = categorySectionRefs.current.get(lockedCategoryId);
+
+        if (!lockedSection) {
+          clearCategoryActivationLock();
+        } else {
+          const distanceToLanding = Math.abs(
+            lockedSection.getBoundingClientRect().top - categoryScrollMarginTop,
+          );
+
+          if (distanceToLanding > categoryActivationLeadPx) {
+            setActiveCategoryId((current) =>
+              current === lockedCategoryId ? current : lockedCategoryId,
+            );
+            return;
+          }
+
+          clearCategoryActivationLock();
+        }
+      }
+
+      for (const group of categoryGroups) {
+        const section = categorySectionRefs.current.get(group.id);
+        if (!section) continue;
+
+        const rect = section.getBoundingClientRect();
+        if (rect.top > activationLine) break;
+
+        nextCategoryId = group.id;
+        if (rect.bottom > activationLine) break;
+      }
+
+      if (!nextCategoryId) return;
+      setActiveCategoryId((current) =>
+        current === nextCategoryId ? current : nextCategoryId,
+      );
+    };
+
+    const scheduleUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateActiveCategory);
+    };
+
+    window.addEventListener("scroll", scheduleUpdate, true);
+    window.addEventListener("resize", scheduleUpdate);
+    scheduleUpdate();
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", scheduleUpdate, true);
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [categoryGroups, categoryScrollMarginTop, clearCategoryActivationLock]);
+
+  function scrollToCategory(categoryId: string) {
+    const section = categorySectionRefs.current.get(categoryId);
+
+    clearCategoryActivationLock();
+    categoryActivationLockRef.current = categoryId;
+    setActiveCategoryId(categoryId);
+    section?.scrollIntoView({ behavior: "smooth", block: "start" });
+    categoryActivationLockTimeoutRef.current = window.setTimeout(() => {
+      categoryActivationLockRef.current = null;
+      categoryActivationLockTimeoutRef.current = null;
+    }, 2000);
+  }
 
   return (
     <div className="space-y-6">
@@ -366,115 +536,119 @@ export function SaleChannelProductsView() {
         </Button>
       </div>
 
-      {categoryOptions.length > 0 ? (
-        <div className="relative">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            className="absolute -left-9 top-1/2 z-10 -translate-y-1/2 bg-background shadow-sm active:not-aria-[haspopup]:-translate-y-1/2"
-            onClick={() => selectCategoryByOffset(-1)}
-            disabled={!canGoToPreviousCategory}
-            aria-label="Previous product category"
+      <div ref={productListRef} className="space-y-6">
+        {categoryGroups.length > 0 ? (
+          <div
+            ref={categoryNavShellRef}
+            className="-mx-3 sm:-mx-6 lg:-mx-8"
+            style={categoryNavFrame.active ? { height: categoryNavFrame.height } : undefined}
           >
-            <ChevronLeft className="size-4" aria-hidden />
-          </Button>
-          <div className="-mx-1 overflow-x-auto px-1 pb-1">
-            <div className="flex w-max gap-2">
-              {categoryOptions.map((category) => {
-                const selected = category.id === selectedCategoryId;
+            <header
+              ref={categoryNavRef}
+              data-product-category-nav
+              className={cn(
+                "z-[60] border-y border-border/80 bg-background/95 px-3 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:px-6 lg:px-8",
+                categoryNavFrame.active ? "fixed" : "sticky top-0",
+              )}
+              style={
+                categoryNavFrame.active
+                  ? {
+                      top: categoryNavFrame.top,
+                      left: categoryNavFrame.left,
+                      width: categoryNavFrame.width,
+                    }
+                  : undefined
+              }
+            >
+              <div className="-mx-1 overflow-x-auto px-1 pb-1">
+                <div className="flex w-max gap-2">
+                  {categoryGroups.map((category) => {
+                    const selected = category.id === visibleActiveCategoryId;
 
-                return (
-                  <Button
-                    key={category.id}
-                    ref={(node) => {
-                      if (node) {
-                        categoryButtonRefs.current.set(category.id, node);
-                      } else {
-                        categoryButtonRefs.current.delete(category.id);
-                      }
-                    }}
-                    type="button"
-                    size="sm"
-                    variant={selected ? "default" : "outline"}
-                    className={cn(
-                      "h-9 shrink-0 gap-2 px-3",
-                      !selected && "bg-background",
-                    )}
-                    onClick={() => setSelectedCategoryId(category.id)}
-                  >
-                    <span className="max-w-[220px] truncate">{category.name}</span>
-                    <span
-                      className={cn(
-                        "rounded-full px-1.5 text-[11px] tabular-nums",
-                        selected
-                          ? "bg-primary-foreground/20 text-primary-foreground"
-                          : "bg-muted text-muted-foreground",
-                      )}
-                    >
-                      {category.count}
-                    </span>
-                  </Button>
-                );
-              })}
-            </div>
+                    return (
+                      <Button
+                        key={category.id}
+                        ref={(node) => {
+                          if (node) {
+                            categoryButtonRefs.current.set(category.id, node);
+                          } else {
+                            categoryButtonRefs.current.delete(category.id);
+                          }
+                        }}
+                        type="button"
+                        size="sm"
+                        variant={selected ? "default" : "outline"}
+                        aria-pressed={selected}
+                        className={cn(
+                          "h-9 shrink-0 gap-2 px-3",
+                          !selected && "bg-background",
+                        )}
+                        onClick={() => scrollToCategory(category.id)}
+                      >
+                        <span className="max-w-[220px] truncate">{category.name}</span>
+                        <span
+                          className={cn(
+                            "rounded-full px-1.5 text-[11px] tabular-nums",
+                            selected
+                              ? "bg-primary-foreground/20 text-primary-foreground"
+                              : "bg-muted text-muted-foreground",
+                          )}
+                        >
+                          {category.rows.length}
+                        </span>
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            </header>
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            className="absolute -right-9 top-1/2 z-10 -translate-y-1/2 bg-background shadow-sm active:not-aria-[haspopup]:-translate-y-1/2"
-            onClick={() => selectCategoryByOffset(1)}
-            disabled={!canGoToNextCategory}
-            aria-label="Next product category"
-          >
-            <ChevronRight className="size-4" aria-hidden />
-          </Button>
-        </div>
-      ) : null}
+        ) : null}
 
-      <TableContainer
-        footer={
-          <TablePagination
-            {...pagination}
-            onPageChange={pagination.setPage}
-            onPageSizeChange={pagination.setPageSize}
+        <TableContainer>
+          <ListFilters
+            className="border-b border-border/80 bg-muted/20"
+            searchValue={productFilters.search}
+            onSearchChange={productFilters.setSearch}
+            searchAriaLabel="Search products"
+            searchPlaceholder="Search products..."
+            selects={[
+              {
+                key: "collection",
+                value: productFilters.filters.collection,
+                onValueChange: (value) => productFilters.setFilter("collection", value),
+                allLabel: "All collections",
+                ariaLabel: "Filter by collection",
+                placeholder: "Collection",
+                options: collectionOptions,
+                disabled: clientReady && (isPending || collectionOptions.length === 0),
+              },
+            ]}
+            hasActiveFilters={productFilters.hasActiveFilters}
+            onClear={productFilters.resetFilters}
+            resultCount={filteredRows.length}
+            totalCount={data.length}
           />
-        }
-      >
-        <ListFilters
-          className="border-b border-border/80 bg-muted/20"
-          searchValue={productFilters.search}
-          onSearchChange={productFilters.setSearch}
-          searchAriaLabel="Search products"
-          searchPlaceholder="Search products..."
-          selects={[
-            {
-              key: "collection",
-              value: productFilters.filters.collection,
-              onValueChange: (value) => productFilters.setFilter("collection", value),
-              allLabel: "All collections",
-              ariaLabel: "Filter by collection",
-              placeholder: "Collection",
-              options: collectionOptions,
-              disabled: clientReady && (isPending || collectionOptions.length === 0),
-            },
-          ]}
-          hasActiveFilters={productFilters.hasActiveFilters}
-          onClear={productFilters.resetFilters}
-          resultCount={filteredRows.length}
-          totalCount={data.length}
-        />
-        <SaleChannelProductsTable
-          rows={pagedRows}
-          isPending={isTablePending}
-          emptyMessage={
-            productFilters.hasActiveFilters
-              ? "No products match your filters."
-              : "No products yet."
-          }
-        />
-      </TableContainer>
+          <SaleChannelProductsTable
+            groups={categoryGroups.length > 0 ? categoryGroups : undefined}
+            rows={[]}
+            isPending={isTablePending}
+            emptyMessage={
+              productFilters.hasActiveFilters
+                ? "No products match your filters."
+                : "No products yet."
+            }
+            groupScrollMarginTop={categoryScrollMarginTop}
+            onGroupHeaderRef={(groupId, node) => {
+              if (node) {
+                categorySectionRefs.current.set(groupId, node);
+              } else {
+                categorySectionRefs.current.delete(groupId);
+              }
+            }}
+          />
+        </TableContainer>
+      </div>
     </div>
   );
 }

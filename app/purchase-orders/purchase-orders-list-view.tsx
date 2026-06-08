@@ -231,7 +231,7 @@ function PoListFiltersAndTable({
   deletingOrderId?: string | undefined;
 }) {
   const showActions = onDeleteOrder != null;
-  const colSpan = showActions ? 7 : 6;
+  const colSpan = showActions ? 9 : 8;
 
   return (
     <>
@@ -272,6 +272,7 @@ function PoListFiltersAndTable({
               <TableHead>Sale Channel</TableHead>
               <TableHead>Location</TableHead>
               <TableHead className="min-w-[12rem]">Fulfillment</TableHead>
+              <TableHead className="min-w-[12rem]">Tracking #</TableHead>
               <TableHead className="min-w-[12rem]">Status</TableHead>
               <TableHead className="w-40">Created</TableHead>
               {showActions ? (
@@ -309,6 +310,7 @@ function PoListFiltersAndTable({
                   onEditProduct={onEditProduct}
                   viewOnly={viewOnly}
                   hideManufacturingDetails={hideManufacturingDetails}
+                  showTrackingNumberColumn
                   onDelete={onDeleteOrder}
                   isDeleting={deletingOrderId === row.id}
                 />
