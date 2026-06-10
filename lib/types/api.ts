@@ -251,6 +251,7 @@ export type SaleChannel = {
 
 export type SaleChannelLocation = {
   id: string;
+  identifier: string;
   name: string;
   recipientName: string;
   companyName: string | null;
@@ -271,6 +272,7 @@ export type SaleChannelLocation = {
 export type SaleChannelLocationRef = Pick<
   SaleChannelLocation,
   | "id"
+  | "identifier"
   | "name"
   | "recipientName"
   | "companyName"

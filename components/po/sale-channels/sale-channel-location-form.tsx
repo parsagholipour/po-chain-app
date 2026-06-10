@@ -30,6 +30,7 @@ export type SaleChannelLocationFormValues = z.infer<typeof saleChannelLocationCr
 
 export function emptySaleChannelLocationValues(): SaleChannelLocationFormValues {
   return {
+    identifier: "",
     name: "",
     recipientName: "",
     companyName: "",
@@ -49,6 +50,7 @@ export function saleChannelLocationValuesFromLocation(
   location: SaleChannelLocation,
 ): SaleChannelLocationFormValues {
   return {
+    identifier: location.identifier,
     name: location.name,
     recipientName: location.recipientName,
     companyName: location.companyName ?? "",
@@ -88,6 +90,13 @@ export function SaleChannelLocationForm({ defaultValues, onSubmit, onCancel }: P
     >
       <FieldSet>
         <FieldGroup className="grid gap-4 md:grid-cols-2">
+          <Field data-invalid={!!form.formState.errors.identifier}>
+            <FieldLabel htmlFor="scl-identifier" required>Identifier</FieldLabel>
+            <FieldContent>
+              <Input id="scl-identifier" {...form.register("identifier")} />
+              <FieldError errors={[form.formState.errors.identifier]} />
+            </FieldContent>
+          </Field>
           <Field data-invalid={!!form.formState.errors.name}>
             <FieldLabel htmlFor="scl-name" required>Location Name</FieldLabel>
             <FieldContent>

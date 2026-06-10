@@ -173,6 +173,7 @@ export function SaleChannelLocationsDialog({ open, onOpenChange, saleChannel }: 
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Identifier</TableHead>
                   <TableHead>Location Name</TableHead>
                   <TableHead>Recipient</TableHead>
                   <TableHead>Address</TableHead>
@@ -183,19 +184,20 @@ export function SaleChannelLocationsDialog({ open, onOpenChange, saleChannel }: 
               <TableBody>
                 {isPending ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                       Loading...
                     </TableCell>
                   </TableRow>
                 ) : locations.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                       No locations yet.
                     </TableCell>
                   </TableRow>
                 ) : (
                   locations.map((location) => (
                     <TableRow key={location.id}>
+                      <TableCell className="font-medium">{location.identifier}</TableCell>
                       <TableCell className="font-medium">{location.name}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {location.recipientName}

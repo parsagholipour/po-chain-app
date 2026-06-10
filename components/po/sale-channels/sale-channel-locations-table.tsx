@@ -47,6 +47,7 @@ export function SaleChannelLocationsTable({
     <Table>
       <TableHeader>
         <TableRow>
+          <TableHead>Identifier</TableHead>
           <TableHead>Location Name</TableHead>
           <TableHead>Recipient</TableHead>
           <TableHead>Address</TableHead>
@@ -58,13 +59,13 @@ export function SaleChannelLocationsTable({
       <TableBody>
         {isPending ? (
           <TableRow>
-            <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
               Loading...
             </TableCell>
           </TableRow>
         ) : rows.length === 0 ? (
           <TableRow>
-            <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+            <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
               {emptyMessage}
             </TableCell>
           </TableRow>
@@ -74,6 +75,9 @@ export function SaleChannelLocationsTable({
 
             return (
               <TableRow key={row.id}>
+                <TableCell className="max-w-40 truncate font-medium" title={row.identifier}>
+                  {row.identifier}
+                </TableCell>
                 <TableCell className="max-w-56 truncate font-medium" title={row.name}>
                   {row.name}
                 </TableCell>

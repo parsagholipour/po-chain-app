@@ -121,6 +121,7 @@ export const saleChannelCreateSchema = z.object({
 export const saleChannelUpdateSchema = saleChannelCreateSchema.partial();
 
 export const saleChannelLocationCreateSchema = z.object({
+  identifier: requiredTrimmedString("Identifier is required"),
   name: requiredTrimmedString("Location name is required"),
   recipientName: requiredTrimmedString("Recipient name is required"),
   companyName: nullableOptionalString,

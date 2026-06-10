@@ -543,6 +543,7 @@ model SaleChannel {
 
 model SaleChannelLocation {
   id            String      @id @default(uuid()) @db.Uuid
+  identifier    String
   name          String
   recipientName String
   companyName   String?

@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { TableCell, TableHead, TableRow } from "@/components/ui/table";
+import { TableCell, TableRow } from "@/components/ui/table";
 import type { PoLineRow, Product, PurchaseOrderSummary } from "@/lib/types/api";
 import {
   distributorPoStatusLabels,
@@ -40,14 +40,6 @@ function detailHref(scope: OrderListLinesApiScope, orderId: string) {
   return scope === "purchase-orders"
     ? `/purchase-orders/${orderId}`
     : `/stock-orders/${orderId}`;
-}
-
-export function ExpandableOrderSummaryTableHead() {
-  return (
-    <TableHead className="w-10 p-2">
-      <span className="sr-only">Line items</span>
-    </TableHead>
-  );
 }
 
 export function ExpandableOrderSummaryRow({
@@ -103,35 +95,34 @@ export function ExpandableOrderSummaryRow({
     enabled: open,
   });
 
-  const baseColumnCount = isStockList ? 5 : showTrackingNumbers ? 8 : 7;
+  const baseColumnCount = isStockList ? 4 : showTrackingNumbers ? 7 : 6;
   const colSpan = baseColumnCount + (onDelete ? 1 : 0);
 
   return (
     <>
       <TableRow>
-        <TableCell className="w-10 p-1 align-middle">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-8 shrink-0 text-muted-foreground"
-            aria-expanded={open}
-            aria-label={open ? "Hide line items" : "Show line items"}
-            onClick={() => setOpen((v) => !v)}
-          >
-            {open ? (
-              <ChevronDown className="size-4" aria-hidden />
-            ) : (
-              <ChevronRight className="size-4" aria-hidden />
-            )}
-          </Button>
-        </TableCell>
-        <TableCell className="max-w-56">
-          <div className="min-w-0 space-y-1">
-            <div className="flex min-w-0 items-center gap-2">
+        <TableCell className="min-w-0 overflow-hidden">
+          <div className="flex min-w-0 items-start gap-0.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="-ml-1.5 size-7 shrink-0 text-muted-foreground"
+              aria-expanded={open}
+              aria-label={open ? "Hide line items" : "Show line items"}
+              onClick={() => setOpen((v) => !v)}
+            >
+              {open ? (
+                <ChevronDown className="size-4" aria-hidden />
+              ) : (
+                <ChevronRight className="size-4" aria-hidden />
+              )}
+            </Button>
+            <div className="min-w-0 flex-1 space-y-1">
+            <div className="flex min-w-0 flex-col gap-0.5">
               <Link
                 href={href}
-                className="min-w-0 truncate font-medium hover:underline"
+                className="block min-w-0 truncate font-medium hover:underline"
                 title={row.name}
               >
                 {row.name}
@@ -139,7 +130,7 @@ export function ExpandableOrderSummaryRow({
               {row.isBackOrder ? (
                 <Badge
                   variant="outline"
-                  className="border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                  className="w-fit max-w-full shrink-0 border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
                 >
                   Back Order
                 </Badge>
@@ -148,45 +139,57 @@ export function ExpandableOrderSummaryRow({
             {row.actualizedPo ? (
               <Link
                 href={`/purchase-orders/${row.actualizedPo.id}`}
-                className="text-xs font-medium text-primary underline-offset-4 hover:underline"
+                className="block min-w-0 truncate text-xs font-medium text-primary underline-offset-4 hover:underline"
+                title={`Actualized as PO #${row.actualizedPo.number}`}
               >
                 Actualized as PO #{row.actualizedPo.number}
               </Link>
             ) : null}
+            </div>
           </div>
         </TableCell>
         {!isStockList ? (
           <>
-            <TableCell className="max-w-48 truncate text-muted-foreground" title={row.saleChannel?.name ?? undefined}>
+            <TableCell className="min-w-0 truncate text-muted-foreground" title={row.saleChannel?.name ?? undefined}>
               {row.saleChannel?.name ?? "—"}
             </TableCell>
-            <TableCell className="max-w-48 truncate text-muted-foreground" title={locationName ?? undefined}>
+            <TableCell className="min-w-0 truncate text-muted-foreground" title={locationName ?? undefined}>
               {locationName ?? "-"}
             </TableCell>
-            <TableCell className="min-w-[12rem] whitespace-normal">
+            <TableCell className="min-w-0 overflow-hidden whitespace-normal">
               {row.manufacturingOrders.length > 0 || row.warehouseOrders.length > 0 ? (
-                <div className="flex flex-col gap-2">
+                <div className="flex min-w-0 flex-col gap-1">
                   {row.manufacturingOrders.map((mo) => (
-                    <div key={mo.id} className="flex items-center gap-1.5">
-                      <Link href={`/manufacturing-orders/${mo.id}`} className="text-xs hover:underline">
+                    <div key={mo.id} className="flex min-w-0 flex-col gap-0.5">
+                      <Link
+                        href={`/manufacturing-orders/${mo.id}`}
+                        className="block min-w-0 truncate text-xs hover:underline"
+                        title={`MO: ${mo.name}`}
+                      >
                         MO: {mo.name}
                       </Link>
                       <Badge
                         variant="outline"
-                        className={`${statusBadgeClassName(mo.status)} text-[10px] font-medium`}
+                        className={`w-fit max-w-full truncate ${statusBadgeClassName(mo.status)} text-[10px] font-medium`}
+                        title={moStatusLabels[mo.status] ?? mo.status}
                       >
                         {moStatusLabels[mo.status] ?? mo.status}
                       </Badge>
                     </div>
                   ))}
                   {row.warehouseOrders.map((wo) => (
-                    <div key={wo.id} className="flex items-center gap-1.5">
-                      <Link href={`/warehouse-orders/${wo.id}`} className="text-xs hover:underline">
+                    <div key={wo.id} className="flex min-w-0 flex-col gap-0.5">
+                      <Link
+                        href={`/warehouse-orders/${wo.id}`}
+                        className="block min-w-0 truncate text-xs hover:underline"
+                        title={`WO: ${wo.name}`}
+                      >
                         WO: {wo.name}
                       </Link>
                       <Badge
                         variant="outline"
-                        className={`${statusBadgeClassName(wo.status)} text-[10px] font-medium`}
+                        className={`w-fit max-w-full truncate ${statusBadgeClassName(wo.status)} text-[10px] font-medium`}
+                        title={warehouseOrderStatusLabels[wo.status] ?? wo.status}
                       >
                         {warehouseOrderStatusLabels[wo.status] ?? wo.status}
                       </Badge>
@@ -200,7 +203,7 @@ export function ExpandableOrderSummaryRow({
           </>
         ) : null}
         {showTrackingNumbers ? (
-          <TableCell className="min-w-[12rem] max-w-64 whitespace-normal">
+          <TableCell className="min-w-0 whitespace-normal">
             {trackingNumbers.length > 0 ? (
               <div className="flex flex-col gap-1">
                 {trackingNumbers.map((trackingNumber) => (
@@ -217,8 +220,8 @@ export function ExpandableOrderSummaryRow({
             )}
           </TableCell>
         ) : null}
-        <TableCell className="min-w-[12rem] whitespace-normal">
-          <div className="flex flex-col gap-1.5">
+        <TableCell className="min-w-0 whitespace-normal">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <Badge variant="secondary" className={statusBadgeClassName(row.status)}>
               {distributorPoStatusLabels[row.status] ?? row.status}
             </Badge>
@@ -238,7 +241,7 @@ export function ExpandableOrderSummaryRow({
             )}
           </div>
         </TableCell>
-        <TableCell className="text-muted-foreground text-xs">
+        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
           {new Date(row.createdAt).toLocaleDateString()}
         </TableCell>
         {onDelete ? (

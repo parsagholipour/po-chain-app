@@ -1,8 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { CreditCard, Eye, Loader2, MapPinned, Pencil, Search, ShoppingCart, Trash2 } from "lucide-react";
+import {
+  CreditCard,
+  Eye,
+  FileSpreadsheet,
+  Loader2,
+  MapPinned,
+  Pencil,
+  Search,
+  ShoppingCart,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/confirm-provider";
 import { api } from "@/lib/axios";
@@ -51,6 +61,21 @@ type OrderRow = {
   id: string;
   productId: string;
   quantities: Record<string, number>;
+};
+
+type ReadXlsxFileModule = typeof import("read-excel-file/browser");
+
+type OrderImportIssue = {
+  rowNumber: number;
+  message: string;
+};
+
+type OrderImportResult = {
+  rows: OrderRow[];
+  importedLineCount: number;
+  importedProductCount: number;
+  importedLocationCount: number;
+  issues: OrderImportIssue[];
 };
 
 type DraftCreateResponse = {
@@ -129,6 +154,22 @@ type UndoRedoHistory<T> = {
 };
 
 const MAX_UNDO_HISTORY = 100;
+const ORDER_IMPORT_ACCEPT = [
+  ".xlsx",
+  ".ods",
+  ".csv",
+  ".tsv",
+  ".txt",
+  ".psv",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.oasis.opendocument.spreadsheet",
+  "text/csv",
+  "text/tab-separated-values",
+  "text/plain",
+].join(",");
+const ODS_OFFICE_NS = "urn:oasis:names:tc:opendocument:xmlns:office:1.0";
+const ODS_TABLE_NS = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
+const ODS_TEXT_NS = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
 
 const NEW_ORDER_SELECTED_PRODUCTS_STORAGE_PREFIX = "po-new-order-selected-products";
 const PRODUCT_PICKER_SELECTION_STORAGE_PREFIX = "po-new-order-product-picker-selection";
@@ -260,6 +301,358 @@ function newRow(id: string): OrderRow {
     productId: "",
     quantities: {},
   };
+}
+
+function importCellText(value: unknown) {
+  if (value == null) return "";
+  return String(value).trim();
+}
+
+function normalizeImportKey(value: unknown) {
+  return importCellText(value).toLowerCase();
+}
+
+function addLookupValue<T extends { id: string }>(
+  map: Map<string, T>,
+  ambiguousKeys: Set<string>,
+  key: string | null | undefined,
+  row: T,
+) {
+  const normalized = normalizeImportKey(key);
+  if (!normalized) return;
+
+  const existing = map.get(normalized);
+  if (existing && existing.id !== row.id) {
+    ambiguousKeys.add(normalized);
+    return;
+  }
+
+  map.set(normalized, row);
+}
+
+function parseImportQuantity(value: unknown) {
+  const text = importCellText(value);
+  if (!text) return { quantity: null, error: "Missing quantity" };
+
+  const quantity = Number(text.replace(/,/g, ""));
+  if (!Number.isFinite(quantity)) {
+    return { quantity: null, error: `Invalid quantity "${text}"` };
+  }
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    return { quantity: null, error: "Quantity must be a positive whole number" };
+  }
+
+  return { quantity, error: null };
+}
+
+function buildImportProductLookup(products: SaleChannelProduct[]) {
+  const productBySkuOrUpc = new Map<string, SaleChannelProduct>();
+  const ambiguousProductKeys = new Set<string>();
+
+  for (const product of products) {
+    addLookupValue(productBySkuOrUpc, ambiguousProductKeys, product.sku, product);
+    addLookupValue(productBySkuOrUpc, ambiguousProductKeys, product.upcGtin, product);
+  }
+
+  return { productBySkuOrUpc, ambiguousProductKeys };
+}
+
+function buildImportLocationLookup(locations: SaleChannelLocation[]) {
+  const locationByIdentifier = new Map<string, SaleChannelLocation>();
+  const ambiguousLocationKeys = new Set<string>();
+
+  for (const location of locations) {
+    addLookupValue(locationByIdentifier, ambiguousLocationKeys, location.identifier, location);
+  }
+
+  return { locationByIdentifier, ambiguousLocationKeys };
+}
+
+function orderRowsFromImportRows({
+  importRows,
+  products,
+  locations,
+}: {
+  importRows: unknown[][];
+  products: SaleChannelProduct[];
+  locations: SaleChannelLocation[];
+}): OrderImportResult {
+  const issues: OrderImportIssue[] = [];
+  const { productBySkuOrUpc, ambiguousProductKeys } =
+    buildImportProductLookup(products);
+  const { locationByIdentifier, ambiguousLocationKeys } =
+    buildImportLocationLookup(locations);
+  const rowByProductId = new Map<string, OrderRow>();
+  const importedLocationIds = new Set<string>();
+  let importedLineCount = 0;
+
+  for (const [index, importRow] of importRows.entries()) {
+    if (index === 0) continue;
+
+    const rowNumber = index + 1;
+    const skuOrUpc = importCellText(importRow[0]);
+    const locationIdentifier = importCellText(importRow[2]);
+    const quantityResult = parseImportQuantity(importRow[1]);
+    const rowIssues: string[] = [];
+
+    if (!skuOrUpc) {
+      rowIssues.push("Missing SKU/UPC");
+    }
+    if (!locationIdentifier) {
+      rowIssues.push("Missing location identifier");
+    }
+    if (quantityResult.error) {
+      rowIssues.push(quantityResult.error);
+    }
+
+    const productKey = normalizeImportKey(skuOrUpc);
+    const product = productBySkuOrUpc.get(productKey);
+    if (productKey && ambiguousProductKeys.has(productKey)) {
+      rowIssues.push(`SKU/UPC "${skuOrUpc}" matches multiple products`);
+    } else if (productKey && !product) {
+      rowIssues.push(`No product found for SKU/UPC "${skuOrUpc}"`);
+    }
+
+    const locationKey = normalizeImportKey(locationIdentifier);
+    const location = locationByIdentifier.get(locationKey);
+    if (locationKey && ambiguousLocationKeys.has(locationKey)) {
+      rowIssues.push(
+        `Location identifier "${locationIdentifier}" matches multiple locations`,
+      );
+    } else if (locationKey && !location) {
+      rowIssues.push(`No location found for identifier "${locationIdentifier}"`);
+    }
+
+    if (rowIssues.length > 0 || !product || !location || !quantityResult.quantity) {
+      if (skuOrUpc || locationIdentifier || importCellText(importRow[1])) {
+        issues.push({ rowNumber, message: rowIssues.join("; ") });
+      }
+      continue;
+    }
+
+    const orderRow =
+      rowByProductId.get(product.id) ??
+      ({
+        ...newRow(`import:${product.id}`),
+        productId: product.id,
+      } satisfies OrderRow);
+    orderRow.quantities[location.id] =
+      (orderRow.quantities[location.id] ?? 0) + quantityResult.quantity;
+    rowByProductId.set(product.id, orderRow);
+    importedLocationIds.add(location.id);
+    importedLineCount += 1;
+  }
+
+  const importedRows = Array.from(rowByProductId.values());
+
+  return {
+    rows: ensureTrailingBlankRow(importedRows),
+    importedLineCount,
+    importedProductCount: importedRows.length,
+    importedLocationCount: importedLocationIds.size,
+    issues,
+  };
+}
+
+function importIssueSummary(issues: OrderImportIssue[]) {
+  if (issues.length === 0) return null;
+  const preview = issues
+    .slice(0, 3)
+    .map((issue) => `Row ${issue.rowNumber}: ${issue.message}`)
+    .join(" ");
+  const remaining = issues.length - 3;
+  if (remaining <= 0) return preview;
+  return `${preview} ${remaining} more row${remaining === 1 ? "" : "s"} skipped.`;
+}
+
+function fileExtension(file: File) {
+  const match = /\.([^.]+)$/.exec(file.name.toLowerCase());
+  return match?.[1] ?? "";
+}
+
+function normalizeDelimitedText(text: string) {
+  return text.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+}
+
+function detectDelimitedImportDelimiter(text: string, extension: string) {
+  if (extension === "tsv") return "\t";
+  if (extension === "psv") return "|";
+
+  const sampleLine =
+    normalizeDelimitedText(text)
+      .split("\n")
+      .find((line) => line.trim().length > 0) ?? "";
+  const delimiters = [",", "\t", ";", "|"] as const;
+  let bestDelimiter: (typeof delimiters)[number] = ",";
+  let bestScore = -1;
+
+  for (const delimiter of delimiters) {
+    const score = parseDelimitedImportRows(sampleLine, delimiter)[0]?.length ?? 0;
+    if (score > bestScore) {
+      bestDelimiter = delimiter;
+      bestScore = score;
+    }
+  }
+
+  return bestDelimiter;
+}
+
+function parseDelimitedImportRows(text: string, delimiter: string) {
+  const normalizedText = normalizeDelimitedText(text);
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < normalizedText.length; index += 1) {
+    const char = normalizedText[index];
+    const nextChar = normalizedText[index + 1];
+
+    if (char === '"') {
+      if (inQuotes && nextChar === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (!inQuotes && char === delimiter) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if (!inQuotes && char === "\n") {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell.length > 0 || row.length > 0 || normalizedText.endsWith(delimiter)) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  return rows;
+}
+
+function odsRepeatCount(element: Element, name: string) {
+  const value = element.getAttributeNS(ODS_TABLE_NS, name);
+  const count = value ? Number(value) : 1;
+  return Number.isInteger(count) && count > 0 ? count : 1;
+}
+
+function odsCellText(cell: Element) {
+  const paragraphs = Array.from(cell.getElementsByTagNameNS(ODS_TEXT_NS, "p"))
+    .map((paragraph) => paragraph.textContent ?? "")
+    .filter((value) => value.length > 0);
+  if (paragraphs.length > 0) return paragraphs.join("\n");
+
+  return (
+    cell.getAttributeNS(ODS_OFFICE_NS, "string-value") ??
+    cell.getAttributeNS(ODS_OFFICE_NS, "value") ??
+    cell.getAttributeNS(ODS_OFFICE_NS, "date-value") ??
+    cell.getAttributeNS(ODS_OFFICE_NS, "time-value") ??
+    ""
+  );
+}
+
+function directOdsChildren(element: Element, localNames: Set<string>) {
+  return Array.from(element.children).filter(
+    (child) => child.namespaceURI === ODS_TABLE_NS && localNames.has(child.localName),
+  );
+}
+
+function parseOdsImportRows(contentXml: string) {
+  const document = new DOMParser().parseFromString(contentXml, "application/xml");
+  const parserError = document.getElementsByTagName("parsererror")[0];
+  if (parserError) throw new Error("Could not parse the OpenDocument spreadsheet.");
+
+  const table = document.getElementsByTagNameNS(ODS_TABLE_NS, "table")[0];
+  if (!table) throw new Error("The OpenDocument spreadsheet does not contain any sheets.");
+
+  const rows: string[][] = [];
+  const rowElements = directOdsChildren(table, new Set(["table-row"]));
+  const cellNames = new Set(["table-cell", "covered-table-cell"]);
+
+  for (const rowElement of rowElements) {
+    const row: string[] = [];
+    const cells = directOdsChildren(rowElement, cellNames);
+
+    for (const cell of cells) {
+      const value = cell.localName === "covered-table-cell" ? "" : odsCellText(cell);
+      const columnsRepeated = odsRepeatCount(cell, "number-columns-repeated");
+      const columnsToAdd = Math.min(columnsRepeated, Math.max(1, 3 - row.length));
+      for (let index = 0; index < columnsToAdd; index += 1) {
+        row.push(value);
+      }
+      if (row.length >= 3) break;
+    }
+
+    const hasContent = row.some((value) => value.trim().length > 0);
+    const rowsRepeated = odsRepeatCount(rowElement, "number-rows-repeated");
+    const rowsToAdd = hasContent ? Math.min(rowsRepeated, 1000) : 1;
+
+    for (let index = 0; index < rowsToAdd; index += 1) {
+      rows.push(row);
+    }
+  }
+
+  return rows;
+}
+
+async function readXlsxImportRows(
+  file: File,
+  readXlsxFile: ReadXlsxFileModule["default"],
+) {
+  const sheets = await readXlsxFile<string>(file, {
+    parseNumber: (value) => value,
+    trim: false,
+  });
+  const firstSheet = sheets[0];
+  if (!firstSheet) throw new Error("The workbook does not contain any sheets.");
+
+  return firstSheet.data as unknown[][];
+}
+
+async function readDelimitedImportRows(file: File, extension: string) {
+  const text = await file.text();
+  const delimiter = detectDelimitedImportDelimiter(text, extension);
+  return parseDelimitedImportRows(text, delimiter);
+}
+
+async function readOdsImportRows(file: File) {
+  const { strFromU8, unzipSync } = await import("fflate");
+  const archive = unzipSync(new Uint8Array(await file.arrayBuffer()));
+  const contentXml = archive["content.xml"];
+  if (!contentXml) throw new Error("The OpenDocument spreadsheet is missing content.xml.");
+  return parseOdsImportRows(strFromU8(contentXml));
+}
+
+async function readOrderImportRows(file: File) {
+  const extension = fileExtension(file);
+
+  if (extension === "xlsx") {
+    const { default: readXlsxFile } = await import("read-excel-file/browser");
+    return readXlsxImportRows(file, readXlsxFile);
+  }
+
+  if (extension === "ods" || file.type === "application/vnd.oasis.opendocument.spreadsheet") {
+    return readOdsImportRows(file);
+  }
+
+  if (["csv", "tsv", "txt", "psv"].includes(extension) || file.type.startsWith("text/")) {
+    return readDelimitedImportRows(file, extension);
+  }
+
+  throw new Error("Unsupported file type. Upload an .xlsx, .ods, .csv, .tsv, .txt, or .psv file.");
 }
 
 function nextOrderRowId(rows: OrderRow[]) {
@@ -542,6 +935,7 @@ function sessionLocationFromValues({
   const now = new Date().toISOString();
   return {
     id,
+    identifier: values.identifier,
     name: values.name,
     recipientName: values.recipientName,
     companyName: values.companyName ?? null,
@@ -565,6 +959,7 @@ function isSessionLocation(value: unknown): value is SaleChannelLocation {
   const row = value as Partial<SaleChannelLocation>;
   return (
     typeof row.id === "string" &&
+    typeof row.identifier === "string" &&
     typeof row.name === "string" &&
     typeof row.recipientName === "string" &&
     typeof row.addressLine1 === "string" &&
@@ -670,6 +1065,7 @@ function LocationPurchaseOrderDetails({
 
 export function NewOrderView() {
   const confirm = useConfirm();
+  const orderImportInputRef = useRef<HTMLInputElement | null>(null);
   const {
     state: rows,
     setState: setRows,
@@ -686,6 +1082,7 @@ export function NewOrderView() {
   const [productPickerOpen, setProductPickerOpen] = useState(false);
   const [productPickerRowId, setProductPickerRowId] = useState<string | null>(null);
   const [productDetailRowId, setProductDetailRowId] = useState<string | null>(null);
+  const [isImportingOrderFile, setIsImportingOrderFile] = useState(false);
   const [sessionLocations, setSessionLocations] = useState<SaleChannelLocation[]>([]);
   const [loadedSessionLocationKey, setLoadedSessionLocationKey] = useState<string | null>(null);
   const [loadedSessionProductSelectionKey, setLoadedSessionProductSelectionKey] =
@@ -975,6 +1372,18 @@ export function NewOrderView() {
     clearStoredNewOrderDraft();
   }
 
+  function replaceOrderDraftWithImportedRows(nextRows: OrderRow[]) {
+    setProductDetailRowId(null);
+    setProductPickerOpen(false);
+    setProductPickerRowId(null);
+    replaceBackOrderReview(null);
+    replaceRows(nextRows);
+    setPurchaseOrderNamesByLocationId({});
+    setDocumentsByLocationId({});
+    setUploadingByLocationId({});
+    clearStoredNewOrderDraft();
+  }
+
   async function requestRemoveAllOrderDraft() {
     const ok = await confirm({
       title: "Remove all order details?",
@@ -984,6 +1393,47 @@ export function NewOrderView() {
       variant: "destructive",
     });
     if (ok) clearAllOrderDraft();
+  }
+
+  async function importOrderFile(file: File) {
+    setIsImportingOrderFile(true);
+    try {
+      const importRows = await readOrderImportRows(file);
+      const result = orderRowsFromImportRows({ importRows, products, locations });
+
+      if (result.importedLineCount === 0) {
+        toast.error("No rows were imported", {
+          description:
+            importIssueSummary(result.issues) ??
+            "Check that the file has SKU/UPC, quantity, and location identifier columns after the header row.",
+        });
+        return;
+      }
+
+      replaceOrderDraftWithImportedRows(result.rows);
+      toast.success(
+        `Imported ${result.importedLineCount} line${
+          result.importedLineCount === 1 ? "" : "s"
+        } for ${result.importedProductCount} product${
+          result.importedProductCount === 1 ? "" : "s"
+        } across ${result.importedLocationCount} location${
+          result.importedLocationCount === 1 ? "" : "s"
+        }`,
+      );
+
+      if (result.issues.length > 0) {
+        toast.warning(
+          `Skipped ${result.issues.length} row${result.issues.length === 1 ? "" : "s"}`,
+          {
+            description: importIssueSummary(result.issues),
+          },
+        );
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "File import failed");
+    } finally {
+      setIsImportingOrderFile(false);
+    }
   }
 
   const rowsWithActiveQuantity = useMemo(
@@ -1487,6 +1937,14 @@ export function NewOrderView() {
     !saleChannelsLoading &&
     !locationsPending &&
     !productsLoading;
+  const canImportOrderFile =
+    !isImportingOrderFile &&
+    !saleChannelsLoading &&
+    !locationsPending &&
+    !productsLoading &&
+    Boolean(orderSaleChannel) &&
+    locations.length > 0 &&
+    products.length > 0;
   const isBackOrderReviewOpen = backOrderReview != null;
   const hasNonBackOrderDialogOpen =
     productPickerOpen || productDetailRowId != null || sessionLocationOpen;
@@ -1578,6 +2036,32 @@ export function NewOrderView() {
           </p>
         </div>
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
+          <Input
+            ref={orderImportInputRef}
+            type="file"
+            accept={ORDER_IMPORT_ACCEPT}
+            className="hidden"
+            disabled={!canImportOrderFile}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0] ?? null;
+              event.currentTarget.value = "";
+              if (file) void importOrderFile(file);
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => orderImportInputRef.current?.click()}
+            disabled={!canImportOrderFile}
+            className="w-full sm:w-auto"
+          >
+            {isImportingOrderFile ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="size-4" />
+            )}
+            Import File
+          </Button>
           <Button
             type="button"
             variant="outline"

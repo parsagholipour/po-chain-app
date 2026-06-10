@@ -35,10 +35,7 @@ import {
   distributorPoStatusLabels,
   distributorPoStatuses,
 } from "@/lib/po/status-labels";
-import {
-  ExpandableOrderSummaryRow,
-  ExpandableOrderSummaryTableHead,
-} from "@/components/po/order-list-expandable-row";
+import { ExpandableOrderSummaryRow } from "@/components/po/order-list-expandable-row";
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
 import { productFormValuesToApiBody } from "@/components/po/products/product-payload";
@@ -211,7 +208,6 @@ function SoListFiltersAndTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <ExpandableOrderSummaryTableHead />
               <TableHead>Name</TableHead>
               <TableHead className="min-w-[12rem]">Status</TableHead>
               <TableHead className="w-40">Created</TableHead>
@@ -223,19 +219,19 @@ function SoListFiltersAndTable({
           <TableBody>
             {!filterReady ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
                   {emptyNoScopeMessage}
                 </TableCell>
               </TableRow>
             ) : isPending ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
                   Loading…
                 </TableCell>
               </TableRow>
             ) : data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
                   {emptyFilteredMessage}
                 </TableCell>
               </TableRow>

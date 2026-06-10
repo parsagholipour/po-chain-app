@@ -40,10 +40,7 @@ import {
 import { ProductUpsertDialog } from "@/components/po/products/product-upsert-dialog";
 import type { ProductFormValues } from "@/components/po/products/product-form";
 import { productFormValuesToApiBody } from "@/components/po/products/product-payload";
-import {
-  ExpandableOrderSummaryRow,
-  ExpandableOrderSummaryTableHead,
-} from "@/components/po/order-list-expandable-row";
+import { ExpandableOrderSummaryRow } from "@/components/po/order-list-expandable-row";
 import { usePagination } from "@/hooks/use-pagination";
 
 export type { PurchaseOrderSummary } from "@/lib/types/api";
@@ -231,7 +228,7 @@ function PoListFiltersAndTable({
   deletingOrderId?: string | undefined;
 }) {
   const showActions = onDeleteOrder != null;
-  const colSpan = showActions ? 9 : 8;
+  const colSpan = showActions ? 8 : 7;
 
   return (
     <>
@@ -264,17 +261,16 @@ function PoListFiltersAndTable({
         </Select>
       </div>
       <div className="overflow-hidden rounded-lg border border-border/60">
-        <Table>
+        <Table className="table-fixed min-w-0">
           <TableHeader>
             <TableRow>
-              <ExpandableOrderSummaryTableHead />
-              <TableHead>Name</TableHead>
-              <TableHead>Sale Channel</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead className="min-w-[12rem]">Fulfillment</TableHead>
-              <TableHead className="min-w-[12rem]">Tracking #</TableHead>
-              <TableHead className="min-w-[12rem]">Status</TableHead>
-              <TableHead className="w-40">Created</TableHead>
+              <TableHead className="w-[14%]">Name</TableHead>
+              <TableHead className={cn(viewOnly ? "w-[12%]" : "w-[10%]")}>Sale Channel</TableHead>
+              <TableHead className={cn(viewOnly ? "w-[12%]" : "w-[10%]")}>Location</TableHead>
+              <TableHead className={cn(viewOnly ? "w-[11%]" : "w-[8%]")}>Fulfillment</TableHead>
+              <TableHead className={cn(viewOnly ? "w-[14%]" : "w-[12%]")}>Tracking #</TableHead>
+              <TableHead className={cn(viewOnly ? "w-[16%]" : "w-[14%]")}>Status</TableHead>
+              <TableHead className="w-24">Created</TableHead>
               {showActions ? (
                 <TableHead className="w-12">
                   <span className="sr-only">Actions</span>

@@ -121,6 +121,7 @@ type MoneyLike = { toNumber(): number } | number | string | null | undefined;
 
 type SaleChannelLocationLike = {
   id: string;
+  identifier: string;
   name: string;
   recipientName: string;
   companyName: string | null;
@@ -140,6 +141,7 @@ function saleChannelLocationRefFromPrisma(location: SaleChannelLocationLike) {
   if (!location) return null;
   return {
     id: location.id,
+    identifier: location.identifier,
     name: location.name,
     recipientName: location.recipientName,
     companyName: location.companyName,
