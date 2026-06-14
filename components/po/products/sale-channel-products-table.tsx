@@ -1,8 +1,9 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type CSSProperties } from "react";
 import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { PriceView } from "@/components/ui/price-view";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
@@ -25,6 +26,9 @@ type Props = {
   emptyMessage?: string;
   groupScrollMarginTop?: number;
   onGroupHeaderRef?: (groupId: string, node: HTMLTableRowElement | null) => void;
+  selectedRowIds?: ReadonlySet<string>;
+  onRowSelectionChange?: (rowId: string, selected: boolean) => void;
+  onRowsSelectionChange?: (rows: SaleChannelProduct[], selected: boolean) => void;
 };
 
 export type SaleChannelProductsTableGroup = {
@@ -34,12 +38,16 @@ export type SaleChannelProductsTableGroup = {
 };
 
 const columnCount = 17;
-const stickySkuColumnClassName = "w-36 min-w-36 max-w-36";
+const stickySkuColumnClassName = "w-44 min-w-44 max-w-44";
 const stickyProductNameColumnClassName = "w-72 min-w-72 max-w-72";
 const stickySkuClassName =
   `sticky left-0 z-20 ${stickySkuColumnClassName} bg-card`;
 const stickyProductNameClassName =
-  `sticky left-36 z-20 ${stickyProductNameColumnClassName} bg-card shadow-[inset_-1px_0_0_var(--border)]`;
+  `sticky left-[var(--sale-channel-sticky-sku-width,9rem)] z-[21] ${stickyProductNameColumnClassName} bg-card shadow-[inset_-1px_0_0_var(--border)]`;
+const saleChannelTableClassName =
+  "w-full min-w-max caption-bottom border-separate border-spacing-0 text-sm";
+const stickyGroupHeaderClassName =
+  "sticky left-0 z-[22] bg-background px-3 py-3 shadow-[inset_0_-1px_0_var(--border),inset_-1px_0_0_var(--border)] sm:px-4";
 const stickyBodyClassName =
   "group-hover:bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]";
 const headerSurfaceClassName = "bg-card shadow-[inset_0_-1px_0_var(--border)]";
@@ -354,18 +362,35 @@ function BarcodeImageDownload({ product }: { product: SaleChannelProduct }) {
   );
 }
 
-function SaleChannelProductRow({ row }: { row: SaleChannelProduct }) {
+function SaleChannelProductRow({
+  row,
+  selected = false,
+  onSelectionChange,
+}: {
+  row: SaleChannelProduct;
+  selected?: boolean;
+  onSelectionChange?: (rowId: string, selected: boolean) => void;
+}) {
   return (
-    <TableRow key={row.id} className="group">
+    <TableRow key={row.id} className="group" data-state={selected ? "selected" : undefined}>
       <TableCell
         className={cn(
           stickySkuClassName,
           stickyBodyClassName,
-          "truncate font-mono text-xs",
+          "font-mono text-xs",
         )}
         title={row.sku}
       >
-        {row.sku}
+        <div className="flex min-w-0 items-center gap-2">
+          {onSelectionChange ? (
+            <Checkbox
+              aria-label={`Select ${row.name}`}
+              checked={selected}
+              onCheckedChange={(checked) => onSelectionChange(row.id, checked === true)}
+            />
+          ) : null}
+          <span className="min-w-0 truncate">{row.sku}</span>
+        </div>
       </TableCell>
       <TableCell
         className={cn(
@@ -425,7 +450,20 @@ export function SaleChannelProductsTable({
   emptyMessage = "No products yet.",
   groupScrollMarginTop,
   onGroupHeaderRef,
+  selectedRowIds,
+  onRowSelectionChange,
+  onRowsSelectionChange,
 }: Props) {
+  const selectableRows = groups ? groups.flatMap((group) => group.rows) : rows;
+  const selectedVisibleRowCount = selectedRowIds
+    ? selectableRows.reduce((count, row) => count + (selectedRowIds.has(row.id) ? 1 : 0), 0)
+    : 0;
+  const selectionEnabled =
+    Boolean(selectedRowIds && onRowSelectionChange) && selectableRows.length > 0;
+  const allVisibleRowsSelected =
+    selectionEnabled && selectedVisibleRowCount === selectableRows.length;
+  const someVisibleRowsSelected =
+    selectionEnabled && selectedVisibleRowCount > 0 && !allVisibleRowsSelected;
   const renderedRowCount = groups
     ? groups.reduce((count, group) => count + group.rows.length + 1, 0)
     : rows.length;
@@ -435,9 +473,19 @@ export function SaleChannelProductsTable({
   );
   const stickySkuWidth = stickyHeaderState.columnWidths[0] ?? 144;
   const stickyProductNameWidth = stickyHeaderState.columnWidths[1] ?? 288;
+  const stickyLeadingWidth = stickySkuWidth + stickyProductNameWidth;
+
+  const stickyColumnStyle = {
+    "--sale-channel-sticky-sku-width": `${stickySkuWidth}px`,
+    "--sale-channel-sticky-product-name-width": `${stickyProductNameWidth}px`,
+  } as CSSProperties;
 
   return (
-    <div data-slot="table-scroll-shell" className="relative min-w-0">
+    <div
+      data-slot="table-scroll-shell"
+      className="relative min-w-0"
+      style={stickyColumnStyle}
+    >
       {stickyHeaderState.active ? (
         <div
           aria-hidden="true"
@@ -450,7 +498,7 @@ export function SaleChannelProductsTable({
           }}
         >
           <table
-            className="min-w-max caption-bottom text-sm"
+            className={cn("min-w-max", saleChannelTableClassName)}
             style={{
               width: stickyHeaderState.tableWidth,
               transform: `translateX(${stickyHeaderState.tableOffsetLeft}px)`,
@@ -498,7 +546,7 @@ export function SaleChannelProductsTable({
             className={cn(
               stickyOverlayHeaderCellClassName,
               headerSurfaceClassName,
-              "shadow-[inset_-1px_0_0_var(--border),inset_0_-1px_0_var(--border)]",
+              "z-[21] shadow-[inset_-1px_0_0_var(--border),inset_0_-1px_0_var(--border)]",
             )}
             style={{
               left: stickySkuWidth,
@@ -518,7 +566,7 @@ export function SaleChannelProductsTable({
         <table
           ref={tableRef}
           data-slot="table"
-          className="w-full min-w-max caption-bottom text-sm"
+          className={saleChannelTableClassName}
         >
           <TableHeader>
             <TableRow>
@@ -532,7 +580,25 @@ export function SaleChannelProductsTable({
                       : undefined,
                   )}
                 >
-                  {header.label}
+                  {header.key === "sku" && selectionEnabled ? (
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        aria-label={
+                          allVisibleRowsSelected
+                            ? "Deselect all visible products"
+                            : "Select all visible products"
+                        }
+                        checked={allVisibleRowsSelected}
+                        indeterminate={someVisibleRowsSelected}
+                        onCheckedChange={(checked) =>
+                          onRowsSelectionChange?.(selectableRows, checked === true)
+                        }
+                      />
+                      <span>{header.label}</span>
+                    </div>
+                  ) : (
+                    header.label
+                  )}
                 </TableHead>
               ))}
             </TableRow>
@@ -563,8 +629,13 @@ export function SaleChannelProductsTable({
                     }
                   >
                     <TableCell
-                      colSpan={columnCount}
-                      className="sticky left-0 z-20 bg-background px-3 py-3 shadow-[inset_0_-1px_0_var(--border)] sm:px-4"
+                      colSpan={2}
+                      className={stickyGroupHeaderClassName}
+                      style={{
+                        width: stickyLeadingWidth,
+                        minWidth: stickyLeadingWidth,
+                        maxWidth: stickyLeadingWidth,
+                      }}
                     >
                       <div className="flex min-w-0 items-center justify-between gap-3">
                         <span className="truncate text-sm font-semibold text-foreground">
@@ -575,15 +646,30 @@ export function SaleChannelProductsTable({
                         </span>
                       </div>
                     </TableCell>
+                    <TableCell
+                      colSpan={columnCount - 2}
+                      className="bg-background p-0"
+                      aria-hidden="true"
+                    />
                   </TableRow>
                   {group.rows.map((row) => (
-                    <SaleChannelProductRow key={row.id} row={row} />
+                    <SaleChannelProductRow
+                      key={row.id}
+                      row={row}
+                      selected={selectedRowIds?.has(row.id)}
+                      onSelectionChange={onRowSelectionChange}
+                    />
                   ))}
                 </Fragment>
               ))
             ) : (
               rows.map((row) => (
-                <SaleChannelProductRow key={row.id} row={row} />
+                <SaleChannelProductRow
+                  key={row.id}
+                  row={row}
+                  selected={selectedRowIds?.has(row.id)}
+                  onSelectionChange={onRowSelectionChange}
+                />
               ))
             )}
           </TableBody>

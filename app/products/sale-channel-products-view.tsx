@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download } from "lucide-react";
+import { Download, Loader2, X } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "@/lib/axios";
 import type { SaleChannelProduct } from "@/lib/types/api";
 import { SaleChannelProductsTable } from "@/components/po/products/sale-channel-products-table";
@@ -259,6 +260,42 @@ function downloadSaleChannelProductsWorkbook(rows: SaleChannelProduct[]) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+function filenameFromContentDisposition(value: string | null) {
+  if (!value) return null;
+
+  const encoded = value.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded.trim().replace(/^"|"$/g, ""));
+    } catch {
+      return encoded.trim().replace(/^"|"$/g, "");
+    }
+  }
+
+  return value.match(/filename\s*=\s*("[^"]+"|[^;]+)/i)?.[1]?.trim().replace(/^"|"$/g, "") ?? null;
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function responseErrorMessage(response: Response) {
+  const data = (await response.json().catch(() => null)) as { message?: string } | null;
+  return data?.message ?? `Request failed (${response.status})`;
+}
+
+function selectedProductsLabel(count: number) {
+  return `${count} selected`;
+}
+
 function searchHaystack(row: SaleChannelProduct) {
   return [
     row.sku,
@@ -315,6 +352,10 @@ export function SaleChannelProductsView() {
   const categorySectionRefs = useRef(new Map<string, HTMLElement>());
   const categoryActivationLockRef = useRef<string | null>(null);
   const categoryActivationLockTimeoutRef = useRef<number | null>(null);
+  const [selectedProductIds, setSelectedProductIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [isImageZipDownloading, setIsImageZipDownloading] = useState(false);
 
   const { data = [], isPending } = useQuery({
     queryKey: saleChannelProductsKey,
@@ -356,6 +397,14 @@ export function SaleChannelProductsView() {
     });
   }, [data, debouncedSearch, productFilters.filters.collection]);
 
+  const filteredRowIds = useMemo(
+    () => new Set(filteredRows.map((row) => row.id)),
+    [filteredRows],
+  );
+  const selectedRows = useMemo(
+    () => filteredRows.filter((row) => selectedProductIds.has(row.id)),
+    [filteredRows, selectedProductIds],
+  );
   const categoryGroups = useMemo(() => categoryProductGroups(filteredRows), [filteredRows]);
   const isTablePending = isPending && data.length === 0;
   const visibleActiveCategoryId =
@@ -363,6 +412,97 @@ export function SaleChannelProductsView() {
       ? activeCategoryId
       : categoryGroups[0]?.id ?? null;
   const categoryScrollMarginTop = categoryNavFrame.top + categoryNavFrame.height + 12 || 112;
+
+  useEffect(() => {
+    setSelectedProductIds((current) => {
+      if (current.size === 0) return current;
+
+      let changed = false;
+      const next = new Set<string>();
+
+      for (const id of current) {
+        if (filteredRowIds.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+
+      return changed ? next : current;
+    });
+  }, [filteredRowIds]);
+
+  const handleRowSelectionChange = useCallback((rowId: string, selected: boolean) => {
+    setSelectedProductIds((current) => {
+      if (selected && current.has(rowId)) return current;
+      if (!selected && !current.has(rowId)) return current;
+
+      const next = new Set(current);
+      if (selected) {
+        next.add(rowId);
+      } else {
+        next.delete(rowId);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleRowsSelectionChange = useCallback(
+    (rows: SaleChannelProduct[], selected: boolean) => {
+      setSelectedProductIds((current) => {
+        const next = new Set(current);
+
+        for (const row of rows) {
+          if (selected) {
+            next.add(row.id);
+          } else {
+            next.delete(row.id);
+          }
+        }
+
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleDownloadSelectedProductImages = useCallback(async () => {
+    if (selectedRows.length === 0 || isImageZipDownloading) return;
+
+    setIsImageZipDownloading(true);
+    try {
+      const response = await fetch("/api/sale-channel/products/image-zip", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productIds: selectedRows.map((row) => row.id) }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await responseErrorMessage(response));
+      }
+
+      const blob = await response.blob();
+      const fileName =
+        filenameFromContentDisposition(response.headers.get("content-disposition")) ??
+        `sale-channel-product-images-${new Date().toISOString().slice(0, 10)}.zip`;
+      const warningCount = Number(response.headers.get("x-download-warning-count") ?? "0");
+
+      downloadBlob(blob, fileName);
+
+      if (warningCount > 0) {
+        toast.warning(
+          `Zip downloaded with ${warningCount} skipped file${warningCount === 1 ? "" : "s"}`,
+        );
+      } else {
+        toast.success("Image zip downloaded");
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not download image zip");
+    } finally {
+      setIsImageZipDownloading(false);
+    }
+  }, [isImageZipDownloading, selectedRows]);
 
   const clearCategoryActivationLock = useCallback(() => {
     if (categoryActivationLockTimeoutRef.current != null) {
@@ -639,6 +779,9 @@ export function SaleChannelProductsView() {
                 : "No products yet."
             }
             groupScrollMarginTop={categoryScrollMarginTop}
+            selectedRowIds={selectedProductIds}
+            onRowSelectionChange={handleRowSelectionChange}
+            onRowsSelectionChange={handleRowsSelectionChange}
             onGroupHeaderRef={(groupId, node) => {
               if (node) {
                 categorySectionRefs.current.set(groupId, node);
@@ -649,6 +792,41 @@ export function SaleChannelProductsView() {
           />
         </TableContainer>
       </div>
+
+      {selectedRows.length > 0 ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[80] flex justify-center px-4 sm:bottom-6">
+          <div className="pointer-events-auto flex w-full max-w-md items-center justify-between gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-popover-foreground shadow-lg">
+            <span className="truncate text-sm font-medium">
+              {selectedProductsLabel(selectedRows.length)}
+            </span>
+            <div className="flex shrink-0 items-center gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleDownloadSelectedProductImages}
+                disabled={isImageZipDownloading}
+              >
+                {isImageZipDownloading ? (
+                  <Loader2 data-icon="inline-start" className="size-3.5 animate-spin" />
+                ) : (
+                  <Download data-icon="inline-start" className="size-3.5" />
+                )}
+                {isImageZipDownloading ? "Preparing" : "Download images"}
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Clear selected products"
+                onClick={() => setSelectedProductIds(new Set())}
+                disabled={isImageZipDownloading}
+              >
+                <X className="size-3.5" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
