@@ -1,6 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type CSSProperties } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from "react";
 import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -362,6 +369,14 @@ function BarcodeImageDownload({ product }: { product: SaleChannelProduct }) {
   );
 }
 
+function shouldIgnoreSelectionCellClick(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+
+  return Boolean(
+    target.closest('a, button, input, textarea, select, [role="checkbox"], [data-slot="checkbox"]'),
+  );
+}
+
 function SaleChannelProductRow({
   row,
   selected = false,
@@ -371,6 +386,12 @@ function SaleChannelProductRow({
   selected?: boolean;
   onSelectionChange?: (rowId: string, selected: boolean) => void;
 }) {
+  const selectionEnabled = Boolean(onSelectionChange);
+  const handleSelectionCellClick = (event: MouseEvent<HTMLTableCellElement>) => {
+    if (!onSelectionChange || shouldIgnoreSelectionCellClick(event.target)) return;
+    onSelectionChange(row.id, !selected);
+  };
+
   return (
     <TableRow key={row.id} className="group" data-state={selected ? "selected" : undefined}>
       <TableCell
@@ -378,8 +399,10 @@ function SaleChannelProductRow({
           stickySkuClassName,
           stickyBodyClassName,
           "font-mono text-xs",
+          selectionEnabled && "cursor-pointer select-none",
         )}
         title={row.sku}
+        onClick={handleSelectionCellClick}
       >
         <div className="flex min-w-0 items-center gap-2">
           {onSelectionChange ? (
@@ -397,7 +420,9 @@ function SaleChannelProductRow({
           stickyProductNameClassName,
           stickyBodyClassName,
           "whitespace-normal font-medium leading-snug",
+          selectionEnabled && "cursor-pointer select-none",
         )}
+        onClick={handleSelectionCellClick}
       >
         <div className="flex min-w-0 items-center gap-3">
           <ProductImageCell product={row} />

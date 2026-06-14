@@ -29,7 +29,7 @@ const extensionByContentType: Record<string, string> = {
 };
 
 function extractUrls(value: string) {
-  const matches = value.match(/https?:\/\/[^\s"'<>]+/gi) ?? [];
+  const matches = value.match(/https?:\/\/[^\s"'<>()\[\]]+/gi) ?? [];
   return Array.from(
     new Set(
       matches
@@ -67,6 +67,10 @@ function googleDriveFileId(url: URL) {
   );
 }
 
+function googleDriveFolderId(url: URL) {
+  return url.pathname.match(/\/folders\/([^/?#]+)/)?.[1] ?? null;
+}
+
 function normalizeDownloadUrl(value: string) {
   const url = new URL(value);
   const driveFileId = isGoogleDriveUrl(url) ? googleDriveFileId(url) : null;
@@ -87,12 +91,39 @@ function decodeHtmlAttribute(value: string) {
     .replace(/&gt;/g, ">");
 }
 
+function embeddedFolderViewUrl(folderId: string) {
+  const url = new URL("https://drive.google.com/embeddedfolderview");
+  url.searchParams.set("id", folderId);
+  return url.toString();
+}
+
 function htmlAttribute(tag: string, name: string) {
   const quoted = tag.match(new RegExp(`${name}\\s*=\\s*(["'])(.*?)\\1`, "i"));
   if (quoted) return decodeHtmlAttribute(quoted[2]);
 
   const bare = tag.match(new RegExp(`${name}\\s*=\\s*([^\\s>]+)`, "i"));
   return bare ? decodeHtmlAttribute(bare[1]) : null;
+}
+
+function driveFileLinksFromEmbeddedFolderHtml(html: string, baseUrl: string) {
+  const links: string[] = [];
+  const seen = new Set<string>();
+
+  for (const anchor of html.matchAll(/<a\b[^>]*>/gi)) {
+    const href = htmlAttribute(anchor[0], "href");
+    if (!href) continue;
+
+    const fileUrl = new URL(href, baseUrl);
+    if (!isGoogleDriveUrl(fileUrl) || !googleDriveFileId(fileUrl)) continue;
+
+    const normalized = fileUrl.toString();
+    if (seen.has(normalized)) continue;
+
+    seen.add(normalized);
+    links.push(normalized);
+  }
+
+  return links;
 }
 
 function googleDriveConfirmationUrl(html: string, baseUrl: string) {
@@ -178,6 +209,29 @@ async function fetchWithTimeout(url: string) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function expandDriveLink(sourceUrl: string) {
+  const url = new URL(sourceUrl);
+  if (!isGoogleDriveUrl(url)) {
+    throw new Error("Only Google Drive image links are supported");
+  }
+
+  const folderId = googleDriveFolderId(url);
+  if (!folderId) return [sourceUrl];
+
+  const folderUrl = embeddedFolderViewUrl(folderId);
+  const response = await fetchWithTimeout(folderUrl);
+  if (!response.ok) {
+    throw new Error(`Folder listing failed with HTTP ${response.status}`);
+  }
+
+  const links = driveFileLinksFromEmbeddedFolderHtml(await response.text(), response.url);
+  if (links.length === 0) {
+    throw new Error("Google Drive folder did not contain downloadable files");
+  }
+
+  return links;
 }
 
 async function downloadLinkedFile(sourceUrl: string) {
@@ -301,10 +355,18 @@ export async function POST(request: Request) {
 
     for (const link of links) {
       try {
-        const file = await downloadLinkedFile(link);
-        folder[`${safeSku}_${counter}${file.extension}`] = file.data;
-        counter += 1;
-        downloadedFileCount += 1;
+        const fileLinks = await expandDriveLink(link);
+
+        for (const fileLink of fileLinks) {
+          try {
+            const file = await downloadLinkedFile(fileLink);
+            folder[`${safeSku}_${counter}${file.extension}`] = file.data;
+            counter += 1;
+            downloadedFileCount += 1;
+          } catch (error) {
+            warnings.push(`${product.sku}: ${fileLink} (${errorMessage(error)})`);
+          }
+        }
       } catch (error) {
         warnings.push(`${product.sku}: ${link} (${errorMessage(error)})`);
       }

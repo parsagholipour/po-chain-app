@@ -2,14 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, Loader2, X } from "lucide-react";
+import { Download, Loader2, ShoppingCart, X } from "lucide-react";
+import { useRouter } from "nextjs-toploader/app";
 import { toast } from "sonner";
 import { api } from "@/lib/axios";
-import type { SaleChannelProduct } from "@/lib/types/api";
+import type { SaleChannel, SaleChannelProduct } from "@/lib/types/api";
 import { SaleChannelProductsTable } from "@/components/po/products/sale-channel-products-table";
 import { Button } from "@/components/ui/button";
 import { ListFilters } from "@/components/ui/list-filters";
 import { TableContainer } from "@/components/ui/table-container";
+import {
+  productPickerStorageKey,
+  removeBrowserStorageItem,
+  selectedProductsStorageKey,
+  writeBrowserStorageItem,
+} from "@/app/new-order/browser-storage";
 import { useClientReady } from "@/hooks/use-client-ready";
 import {
   LIST_FILTER_ALL_VALUE,
@@ -339,6 +346,7 @@ function sameCategoryNavFrame(a: CategoryNavFrame, b: CategoryNavFrame) {
 
 export function SaleChannelProductsView() {
   const clientReady = useClientReady();
+  const router = useRouter();
   const productFilters = useListFilterState({ initialFilters: filterDefaults });
   const debouncedSearch = useDebouncedValue(productFilters.search);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
@@ -364,6 +372,21 @@ export function SaleChannelProductsView() {
       return rows;
     },
   });
+
+  const { data: saleChannels = [], isPending: saleChannelsPending } = useQuery({
+    queryKey: ["sale-channels"],
+    queryFn: async () => {
+      const { data: rows } = await api.get<SaleChannel[]>("/api/sale-channels");
+      return rows;
+    },
+  });
+
+  const orderSaleChannel = useMemo(
+    () =>
+      saleChannels.find((channel) => channel.type === "store" || channel.type === "distributor") ??
+      null,
+    [saleChannels],
+  );
 
   const collectionOptions = useMemo(() => {
     const options = new Map<string, string>();
@@ -503,6 +526,25 @@ export function SaleChannelProductsView() {
       setIsImageZipDownloading(false);
     }
   }, [isImageZipDownloading, selectedRows]);
+
+  const handleCreateOrderDraft = useCallback(() => {
+    if (selectedRows.length === 0 || isImageZipDownloading) return;
+
+    if (!orderSaleChannel) {
+      toast.error("Your account is not linked to an order sale channel");
+      return;
+    }
+
+    const draftStorageKey = selectedProductsStorageKey(orderSaleChannel.id);
+
+    removeBrowserStorageItem(draftStorageKey);
+    removeBrowserStorageItem(productPickerStorageKey(orderSaleChannel.id));
+    writeBrowserStorageItem(
+      draftStorageKey,
+      JSON.stringify(selectedRows.map((row) => row.id)),
+    );
+    router.push("/new-order");
+  }, [isImageZipDownloading, orderSaleChannel, router, selectedRows]);
 
   const clearCategoryActivationLock = useCallback(() => {
     if (categoryActivationLockTimeoutRef.current != null) {
@@ -795,23 +837,40 @@ export function SaleChannelProductsView() {
 
       {selectedRows.length > 0 ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-4 z-[80] flex justify-center px-4 sm:bottom-6">
-          <div className="pointer-events-auto flex w-full max-w-md items-center justify-between gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-popover-foreground shadow-lg">
+          <div className="pointer-events-auto flex w-full max-w-2xl flex-col gap-2 rounded-lg border border-border bg-popover px-3 py-2 text-popover-foreground shadow-lg sm:flex-row sm:items-center sm:justify-between">
             <span className="truncate text-sm font-medium">
               {selectedProductsLabel(selectedRows.length)}
             </span>
-            <div className="flex shrink-0 items-center gap-1.5">
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-center gap-1.5 sm:flex sm:shrink-0">
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleCreateOrderDraft}
+                disabled={saleChannelsPending || isImageZipDownloading}
+                className="min-w-0 px-2 sm:px-3"
+              >
+                {saleChannelsPending ? (
+                  <Loader2 data-icon="inline-start" className="size-3.5 animate-spin" />
+                ) : (
+                  <ShoppingCart data-icon="inline-start" className="size-3.5" />
+                )}
+                <span className="truncate">Create draft</span>
+              </Button>
               <Button
                 type="button"
                 size="sm"
                 onClick={handleDownloadSelectedProductImages}
                 disabled={isImageZipDownloading}
+                className="min-w-0 px-2 sm:px-3"
               >
                 {isImageZipDownloading ? (
                   <Loader2 data-icon="inline-start" className="size-3.5 animate-spin" />
                 ) : (
                   <Download data-icon="inline-start" className="size-3.5" />
                 )}
-                {isImageZipDownloading ? "Preparing" : "Download images"}
+                <span className="truncate">
+                  {isImageZipDownloading ? "Preparing" : "Download images"}
+                </span>
               </Button>
               <Button
                 type="button"

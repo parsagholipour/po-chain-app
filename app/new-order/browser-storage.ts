@@ -1,9 +1,19 @@
 const NEW_ORDER_STORAGE_TTL_MS = 72 * 60 * 60 * 1000;
+const NEW_ORDER_SELECTED_PRODUCTS_STORAGE_PREFIX = "po-new-order-selected-products";
+const PRODUCT_PICKER_SELECTION_STORAGE_PREFIX = "po-new-order-product-picker-selection";
 
 type ExpiringStorageRecord = {
   value: string;
   expiresAt: number;
 };
+
+export function selectedProductsStorageKey(saleChannelId: string) {
+  return `${NEW_ORDER_SELECTED_PRODUCTS_STORAGE_PREFIX}:${saleChannelId}`;
+}
+
+export function productPickerStorageKey(saleChannelId: string) {
+  return `${PRODUCT_PICKER_SELECTION_STORAGE_PREFIX}:${saleChannelId}`;
+}
 
 function expiringRecord(value: string): ExpiringStorageRecord {
   return {

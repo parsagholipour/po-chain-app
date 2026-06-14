@@ -51,9 +51,11 @@ import {
 import { ProductDetailDialog } from "./product-detail-dialog";
 import { ProductPickerDialog } from "./product-picker-dialog";
 import {
+  productPickerStorageKey,
   readBrowserStorageEventItem,
   readBrowserStorageItem,
   removeBrowserStorageItem,
+  selectedProductsStorageKey,
   writeBrowserStorageItem,
 } from "./browser-storage";
 
@@ -170,17 +172,6 @@ const ORDER_IMPORT_ACCEPT = [
 const ODS_OFFICE_NS = "urn:oasis:names:tc:opendocument:xmlns:office:1.0";
 const ODS_TABLE_NS = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
 const ODS_TEXT_NS = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
-
-const NEW_ORDER_SELECTED_PRODUCTS_STORAGE_PREFIX = "po-new-order-selected-products";
-const PRODUCT_PICKER_SELECTION_STORAGE_PREFIX = "po-new-order-product-picker-selection";
-
-function selectedProductsStorageKey(saleChannelId: string) {
-  return `${NEW_ORDER_SELECTED_PRODUCTS_STORAGE_PREFIX}:${saleChannelId}`;
-}
-
-function productPickerStorageKey(saleChannelId: string) {
-  return `${PRODUCT_PICKER_SELECTION_STORAGE_PREFIX}:${saleChannelId}`;
-}
 
 function uniqueProductIds(values: unknown[]) {
   return Array.from(
