@@ -169,7 +169,7 @@ export function SaleChannelLocationsDialog({ open, onOpenChange, saleChannel }: 
             </div>
           ) : null}
 
-          <div className="overflow-hidden rounded-md border">
+          <div className="mb-4 overflow-hidden rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow>
