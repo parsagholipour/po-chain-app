@@ -262,17 +262,27 @@ function PoListFiltersAndTable({
       </div>
       <div className="overflow-hidden rounded-lg border border-border/60">
         <Table className="table-fixed min-w-0">
+          <colgroup>
+            <col style={{ width: viewOnly ? "17%" : "19%" }} />
+            <col style={{ width: "14%" }} />
+            <col style={{ width: "14%" }} />
+            <col style={{ width: viewOnly ? "13%" : "11%" }} />
+            <col style={{ width: viewOnly ? "17%" : "16%" }} />
+            <col />
+            <col style={{ width: "5rem" }} />
+            {showActions ? <col style={{ width: "2.5rem" }} /> : null}
+          </colgroup>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[14%]">Name</TableHead>
-              <TableHead className={cn(viewOnly ? "w-[12%]" : "w-[10%]")}>Sale Channel</TableHead>
-              <TableHead className={cn(viewOnly ? "w-[12%]" : "w-[10%]")}>Location</TableHead>
-              <TableHead className={cn(viewOnly ? "w-[11%]" : "w-[8%]")}>Fulfillment</TableHead>
-              <TableHead className={cn(viewOnly ? "w-[14%]" : "w-[12%]")}>Tracking #</TableHead>
-              <TableHead className={cn(viewOnly ? "w-[16%]" : "w-[14%]")}>Status</TableHead>
-              <TableHead className="w-24">Created</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Sale Channel</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Fulfillment</TableHead>
+              <TableHead>Tracking #</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="px-2 pr-4 sm:px-2 sm:pr-4">Created</TableHead>
               {showActions ? (
-                <TableHead className="w-12">
+                <TableHead className="pl-2 pr-0 sm:pl-2 sm:pr-0">
                   <span className="sr-only">Actions</span>
                 </TableHead>
               ) : null}

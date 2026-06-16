@@ -241,11 +241,17 @@ export function ExpandableOrderSummaryRow({
             )}
           </div>
         </TableCell>
-        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+        <TableCell
+          className={
+            apiScope === "purchase-orders"
+              ? "px-2 pr-4 sm:px-2 sm:pr-4 whitespace-nowrap text-xs text-muted-foreground"
+              : "whitespace-nowrap text-xs text-muted-foreground"
+          }
+        >
           {new Date(row.createdAt).toLocaleDateString()}
         </TableCell>
         {onDelete ? (
-          <TableCell className="w-12 p-1 align-middle">
+          <TableCell className="pl-2 pr-0 py-0 sm:pl-2 sm:pr-0 sm:py-0 align-middle">
             <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
               <AlertDialogTrigger
                 nativeButton
@@ -254,7 +260,7 @@ export function ExpandableOrderSummaryRow({
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+                    className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
                     disabled={isDeleting}
                   />
                 }
