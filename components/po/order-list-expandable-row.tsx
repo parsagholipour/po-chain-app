@@ -251,7 +251,7 @@ export function ExpandableOrderSummaryRow({
           {new Date(row.createdAt).toLocaleDateString()}
         </TableCell>
         {onDelete ? (
-          <TableCell className="pl-2 pr-0 py-0 sm:pl-2 sm:pr-0 sm:py-0 align-middle">
+          <TableCell className="pl-2 pr-3 py-0 sm:pl-2 sm:pr-3 sm:py-0 align-middle">
             <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
               <AlertDialogTrigger
                 nativeButton

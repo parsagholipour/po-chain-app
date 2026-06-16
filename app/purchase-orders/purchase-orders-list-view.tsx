@@ -263,14 +263,14 @@ function PoListFiltersAndTable({
       <div className="overflow-hidden rounded-lg border border-border/60">
         <Table className="table-fixed min-w-0">
           <colgroup>
-            <col style={{ width: viewOnly ? "17%" : "19%" }} />
-            <col style={{ width: "14%" }} />
-            <col style={{ width: "14%" }} />
-            <col style={{ width: viewOnly ? "13%" : "11%" }} />
-            <col style={{ width: viewOnly ? "17%" : "16%" }} />
+            <col style={{ width: viewOnly ? "21%" : "22%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: viewOnly ? "13%" : "14%" }} />
+            <col style={{ width: viewOnly ? "14%" : "14%" }} />
             <col />
             <col style={{ width: "5rem" }} />
-            {showActions ? <col style={{ width: "2.5rem" }} /> : null}
+            {showActions ? <col style={{ width: "3.5rem" }} /> : null}
           </colgroup>
           <TableHeader>
             <TableRow>
@@ -282,7 +282,7 @@ function PoListFiltersAndTable({
               <TableHead>Status</TableHead>
               <TableHead className="px-2 pr-4 sm:px-2 sm:pr-4">Created</TableHead>
               {showActions ? (
-                <TableHead className="pl-2 pr-0 sm:pl-2 sm:pr-0">
+                <TableHead className="pl-2 pr-3 sm:pl-2 sm:pr-3">
                   <span className="sr-only">Actions</span>
                 </TableHead>
               ) : null}
