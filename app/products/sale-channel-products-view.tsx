@@ -353,6 +353,7 @@ export function SaleChannelProductsView() {
   const [categoryNavFrame, setCategoryNavFrame] = useState<CategoryNavFrame>(
     initialCategoryNavFrame,
   );
+  const [productTableHeaderHeight, setProductTableHeaderHeight] = useState(0);
   const productListRef = useRef<HTMLDivElement>(null);
   const categoryNavShellRef = useRef<HTMLDivElement>(null);
   const categoryNavRef = useRef<HTMLElement>(null);
@@ -434,7 +435,8 @@ export function SaleChannelProductsView() {
     activeCategoryId && categoryGroups.some((group) => group.id === activeCategoryId)
       ? activeCategoryId
       : categoryGroups[0]?.id ?? null;
-  const categoryScrollMarginTop = categoryNavFrame.top + categoryNavFrame.height + 12 || 112;
+  const categoryScrollMarginTop =
+    categoryNavFrame.top + categoryNavFrame.height + productTableHeaderHeight + 12 || 112;
 
   useEffect(() => {
     setSelectedProductIds((current) => {
@@ -620,15 +622,54 @@ export function SaleChannelProductsView() {
   }, [categoryGroups.length]);
 
   useEffect(() => {
+    const productList = productListRef.current;
+    const tableHeaderRow = productList?.querySelector<HTMLElement>(
+      "[data-sale-channel-products-table-header-row]",
+    );
+
+    if (!productList || !tableHeaderRow) {
+      setProductTableHeaderHeight(0);
+      return;
+    }
+
+    let frame = 0;
+
+    const updateProductTableHeaderHeight = () => {
+      frame = 0;
+
+      const nextHeight = Math.round(tableHeaderRow.getBoundingClientRect().height);
+      setProductTableHeaderHeight((current) =>
+        current === nextHeight ? current : nextHeight,
+      );
+    };
+
+    const scheduleUpdate = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(updateProductTableHeaderHeight);
+    };
+
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
+    resizeObserver.observe(productList);
+    resizeObserver.observe(tableHeaderRow);
+
+    window.addEventListener("resize", scheduleUpdate);
+    scheduleUpdate();
+
+    return () => {
+      if (frame) window.cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", scheduleUpdate);
+    };
+  }, [categoryGroups.length, isTablePending]);
+
+  useEffect(() => {
     if (categoryGroups.length === 0) return;
     let frame = 0;
 
     const updateActiveCategory = () => {
       frame = 0;
 
-      const activationLine =
-        (categoryNavRef.current?.getBoundingClientRect().bottom ?? 0) +
-        categoryActivationLeadPx;
+      const activationLine = categoryScrollMarginTop + categoryActivationLeadPx;
       let nextCategoryId = categoryGroups[0]?.id ?? null;
       const lockedCategoryId = categoryActivationLockRef.current;
 

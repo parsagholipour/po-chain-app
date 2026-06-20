@@ -53,8 +53,9 @@ const stickyProductNameClassName =
   `sticky left-[var(--sale-channel-sticky-sku-width,9rem)] z-[21] ${stickyProductNameColumnClassName} bg-card shadow-[inset_-1px_0_0_var(--border)]`;
 const saleChannelTableClassName =
   "w-full min-w-max caption-bottom border-separate border-spacing-0 text-sm";
+const groupHeaderSurfaceClassName = "bg-muted/70 dark:bg-muted/40";
 const stickyGroupHeaderClassName =
-  "sticky left-0 z-[22] bg-background px-3 py-3 shadow-[inset_0_-1px_0_var(--border),inset_-1px_0_0_var(--border)] sm:px-4";
+  `sticky left-0 z-[22] ${groupHeaderSurfaceClassName} px-3 py-3 shadow-[inset_0_1px_0_var(--border),inset_0_-1px_0_var(--border),inset_-1px_0_0_var(--border)] sm:px-4`;
 const stickyBodyClassName =
   "group-hover:bg-[color-mix(in_oklch,var(--muted)_50%,var(--card))]";
 const headerSurfaceClassName = "bg-card shadow-[inset_0_-1px_0_var(--border)]";
@@ -594,7 +595,7 @@ export function SaleChannelProductsTable({
           className={saleChannelTableClassName}
         >
           <TableHeader>
-            <TableRow>
+            <TableRow data-sale-channel-products-table-header-row>
               {saleChannelProductHeaders.map((header) => (
                 <TableHead
                   key={header.key}
@@ -642,51 +643,105 @@ export function SaleChannelProductsTable({
                 </TableCell>
               </TableRow>
             ) : groups ? (
-              groups.map((group) => (
-                <Fragment key={group.id}>
-                  <TableRow
-                    ref={(node) => onGroupHeaderRef?.(group.id, node)}
-                    className="bg-background hover:bg-background"
-                    style={
-                      groupScrollMarginTop
-                        ? { scrollMarginTop: groupScrollMarginTop }
-                        : undefined
-                    }
-                  >
-                    <TableCell
-                      colSpan={2}
-                      className={stickyGroupHeaderClassName}
-                      style={{
-                        width: stickyLeadingWidth,
-                        minWidth: stickyLeadingWidth,
-                        maxWidth: stickyLeadingWidth,
-                      }}
+              groups.map((group) => {
+                const selectedGroupRowCount = selectedRowIds
+                  ? group.rows.reduce(
+                      (count, row) => count + (selectedRowIds.has(row.id) ? 1 : 0),
+                      0,
+                    )
+                  : 0;
+                const allGroupRowsSelected =
+                  selectionEnabled && selectedGroupRowCount === group.rows.length;
+                const someGroupRowsSelected =
+                  selectionEnabled && selectedGroupRowCount > 0 && !allGroupRowsSelected;
+
+                return (
+                  <Fragment key={group.id}>
+                    <TableRow
+                      ref={(node) => onGroupHeaderRef?.(group.id, node)}
+                      className={cn(
+                        groupHeaderSurfaceClassName,
+                        "hover:bg-muted/70 dark:hover:bg-muted/40",
+                      )}
+                      style={
+                        groupScrollMarginTop
+                          ? { scrollMarginTop: groupScrollMarginTop }
+                          : undefined
+                      }
                     >
-                      <div className="flex min-w-0 items-center justify-between gap-3">
-                        <span className="truncate text-sm font-semibold text-foreground">
-                          {group.name}
-                        </span>
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          {productCountLabel(group.rows.length)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell
-                      colSpan={columnCount - 2}
-                      className="bg-background p-0"
-                      aria-hidden="true"
-                    />
-                  </TableRow>
-                  {group.rows.map((row) => (
-                    <SaleChannelProductRow
-                      key={row.id}
-                      row={row}
-                      selected={selectedRowIds?.has(row.id)}
-                      onSelectionChange={onRowSelectionChange}
-                    />
-                  ))}
-                </Fragment>
-              ))
+                      <TableCell
+                        colSpan={2}
+                        className={stickyGroupHeaderClassName}
+                        style={{
+                          width: stickyLeadingWidth,
+                          minWidth: stickyLeadingWidth,
+                          maxWidth: stickyLeadingWidth,
+                        }}
+                      >
+                        <div className="flex min-w-0 items-center justify-between gap-3">
+                          <div className="flex min-w-0 items-center gap-2">
+                            {selectionEnabled ? (
+                              <Checkbox
+                                className="after:inset-0"
+                                aria-label={
+                                  allGroupRowsSelected
+                                    ? `Deselect all products in ${group.name}`
+                                    : `Select all products in ${group.name}`
+                                }
+                                checked={allGroupRowsSelected}
+                                indeterminate={someGroupRowsSelected}
+                                onClick={(event) => event.stopPropagation()}
+                                onCheckedChange={(checked) =>
+                                  onRowsSelectionChange?.(group.rows, checked === true)
+                                }
+                              />
+                            ) : null}
+                            {selectionEnabled ? (
+                              <button
+                                type="button"
+                                className="min-w-0 truncate text-left text-sm font-semibold text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                                aria-label={
+                                  allGroupRowsSelected
+                                    ? `Deselect all products in ${group.name}`
+                                    : `Select all products in ${group.name}`
+                                }
+                                onClick={() =>
+                                  onRowsSelectionChange?.(group.rows, !allGroupRowsSelected)
+                                }
+                              >
+                                {group.name}
+                              </button>
+                            ) : (
+                              <span className="truncate text-sm font-semibold text-foreground">
+                                {group.name}
+                              </span>
+                            )}
+                          </div>
+                          <span className="me-3 shrink-0 rounded-full border border-border/70 bg-background/80 px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm">
+                            {productCountLabel(group.rows.length)}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell
+                        colSpan={columnCount - 2}
+                        className={cn(
+                          groupHeaderSurfaceClassName,
+                          "p-0 shadow-[inset_0_1px_0_var(--border),inset_0_-1px_0_var(--border)]",
+                        )}
+                        aria-hidden="true"
+                      />
+                    </TableRow>
+                    {group.rows.map((row) => (
+                      <SaleChannelProductRow
+                        key={row.id}
+                        row={row}
+                        selected={selectedRowIds?.has(row.id)}
+                        onSelectionChange={onRowSelectionChange}
+                      />
+                    ))}
+                  </Fragment>
+                );
+              })
             ) : (
               rows.map((row) => (
                 <SaleChannelProductRow

@@ -169,20 +169,6 @@ export async function storeOwnerEmailRecipients(
     select: {
       name: true,
       email: true,
-      userStores: {
-        where: { user: { type: "internal" } },
-        select: {
-          user: {
-            select: {
-              email: true,
-              name: true,
-              realEmail: true,
-              realName: true,
-            },
-          },
-        },
-        orderBy: { createdAt: "asc" },
-      },
     },
   });
 
@@ -192,17 +178,11 @@ export async function storeOwnerEmailRecipients(
       email: preferredEmail(store.email),
       name: preferredName(store.name),
     });
-    recipients.push(
-      ...store.userStores.map(({ user }) => ({
-        email: preferredEmail(user.realEmail, user.email),
-        name: preferredName(user.realName, user.name),
-      })),
-    );
   }
 
   return uniqueEmailRecipients(
     recipients,
-    "Store.email and internal user emails are missing.",
+    "Store.email is missing.",
   );
 }
 
