@@ -9,6 +9,7 @@ import {
   type CjInventoryBySkuRow,
   type CjMyProduct,
   type CjMyProductListData,
+  type CjVariant,
   normalizeCjSku,
   toInt,
 } from "@/lib/cjdropshipping/api";
@@ -132,6 +133,34 @@ function metadataFromMyProduct(product: CjMyProduct): CjSkuMetadata | null {
   };
 }
 
+function metadataFromVariant(
+  variant: CjVariant,
+  fallback: CjSkuMetadata,
+): CjSkuMetadata | null {
+  const sku = normalizeCjSku(variant.variantSku) || fallback.sku;
+  if (!sku) return null;
+
+  const variantLabel =
+    stringOrNull(variant.variantNameEn) ??
+    stringOrNull(variant.variantName) ??
+    stringOrNull(variant.variantKey) ??
+    stringOrNull(variant.variantStandard);
+  const productName =
+    variantLabel && fallback.cjProductName
+      ? `${fallback.cjProductName} - ${variantLabel}`
+      : variantLabel ?? fallback.cjProductName;
+
+  return {
+    sku,
+    cjProductId: stringOrNull(variant.pid) ?? fallback.cjProductId,
+    cjVariantId: stringOrNull(variant.vid) ?? fallback.cjVariantId,
+    cjProductName: productName,
+    cjAreaId: fallback.cjAreaId,
+    cjAreaEn: fallback.cjAreaEn,
+    countryCode: fallback.countryCode,
+  };
+}
+
 function pageSignature(products: CjMyProduct[]) {
   return products
     .map((product) =>
@@ -144,7 +173,7 @@ function pageSignature(products: CjMyProduct[]) {
     .join("|");
 }
 
-async function collectCjMyProductSkus(
+async function collectCjMyProductVariantSkus(
   client: CjDropshippingClient,
   accessToken: string,
 ) {
@@ -181,8 +210,23 @@ async function collectCjMyProductSkus(
 
     for (const product of content) {
       const metadata = metadataFromMyProduct(product);
-      if (!metadata || bySku.has(metadata.sku)) continue;
-      bySku.set(metadata.sku, metadata);
+      if (!metadata) continue;
+
+      const variants = await queryVariantsForProduct({
+        client,
+        accessToken,
+        metadata,
+      });
+      if (variants.length === 0) {
+        if (!bySku.has(metadata.sku)) bySku.set(metadata.sku, metadata);
+        continue;
+      }
+
+      for (const variant of variants) {
+        const variantMetadata = metadataFromVariant(variant, metadata);
+        if (!variantMetadata || bySku.has(variantMetadata.sku)) continue;
+        bySku.set(variantMetadata.sku, variantMetadata);
+      }
     }
 
     const totalPages = toInt(data.totalPages, 0);
@@ -193,6 +237,30 @@ async function collectCjMyProductSkus(
   }
 
   return bySku;
+}
+
+async function queryVariantsForProduct(input: {
+  client: CjDropshippingClient;
+  accessToken: string;
+  metadata: CjSkuMetadata;
+}) {
+  try {
+    const variants = await input.client.queryVariants({
+      accessToken: input.accessToken,
+      pid: input.metadata.cjProductId,
+      productSku: input.metadata.cjProductId ? null : input.metadata.sku,
+    });
+    return Array.isArray(variants) ? variants : [];
+  } catch (error) {
+    if (isCjProductNotFoundError(error)) {
+      console.info("[cjdropshipping-sync] no CJ variants found for product", {
+        sku: input.metadata.sku,
+        cjProductId: input.metadata.cjProductId,
+      });
+      return [];
+    }
+    throw error;
+  }
 }
 
 async function queryInventoryRowsForSku(input: {
@@ -210,6 +278,37 @@ async function queryInventoryRowsForSku(input: {
     if (isCjProductNotFoundError(error)) {
       console.info("[cjdropshipping-sync] SKU not found in CJ inventory", {
         sku: input.sku,
+      });
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function queryInventoryRowsForMetadata(input: {
+  client: CjDropshippingClient;
+  accessToken: string;
+  metadata: CjSkuMetadata;
+}) {
+  if (!input.metadata.cjVariantId) {
+    return queryInventoryRowsForSku({
+      client: input.client,
+      accessToken: input.accessToken,
+      sku: input.metadata.sku,
+    });
+  }
+
+  try {
+    const inventoryRows = await input.client.queryInventoryByVid({
+      accessToken: input.accessToken,
+      vid: input.metadata.cjVariantId,
+    });
+    return Array.isArray(inventoryRows) ? inventoryRows : [];
+  } catch (error) {
+    if (isCjProductNotFoundError(error)) {
+      console.info("[cjdropshipping-sync] variant not found in CJ inventory", {
+        sku: input.metadata.sku,
+        cjVariantId: input.metadata.cjVariantId,
       });
       return [];
     }
@@ -615,7 +714,7 @@ export async function syncCjDropshippingIntegrationById(
 
     const client = new CjDropshippingClient();
     const accessToken = await ensureCjAccessToken(integration.id, client);
-    const cjProductsBySku = await collectCjMyProductSkus(client, accessToken);
+    const cjProductsBySku = await collectCjMyProductVariantSkus(client, accessToken);
 
     const products = await prisma.product.findMany({
       where: { storeId: integration.storeId },
@@ -630,11 +729,23 @@ export async function syncCjDropshippingIntegrationById(
       productsBySku.set(sku, product);
     }
 
-    const allSkus = [...new Set([...cjProductsBySku.keys(), ...productsBySku.keys()])].sort();
+    const previouslyMirroredSkus =
+      await prisma.cjDropshippingInventoryCount.findMany({
+        where: { storeId: integration.storeId },
+        select: { sku: true },
+        distinct: ["sku"],
+        orderBy: { sku: "asc" },
+      });
+    const allSkus = [
+      ...new Set([
+        ...cjProductsBySku.keys(),
+        ...previouslyMirroredSkus.map((row) => row.sku),
+      ]),
+    ].sort();
     const syncRunId = randomUUID();
     const observedAt = new Date();
-    const cjSkusWithInventory = new Set<string>();
     const localSkusWithInventory = new Set<string>();
+    const allCjSkus = new Set(cjProductsBySku.keys());
 
     let syncedProductCount = 0;
     let syncedInventoryCount = 0;
@@ -643,14 +754,15 @@ export async function syncCjDropshippingIntegrationById(
     for (const [index, sku] of allSkus.entries()) {
       const product = productsBySku.get(sku) ?? null;
       const metadata = cjProductsBySku.get(sku) ?? null;
-      const inventoryRows = await queryInventoryRowsForSku({ client, accessToken, sku });
+      const inventoryRows = metadata
+        ? await queryInventoryRowsForMetadata({ client, accessToken, metadata })
+        : [];
       const rows =
         inventoryRows.length > 0 || !metadata
           ? inventoryRows
           : [zeroInventoryRowFromMetadata(metadata)];
       const hasCjInventoryRow = rows.length > 0;
 
-      if (hasCjInventoryRow && metadata) cjSkusWithInventory.add(sku);
       if (hasCjInventoryRow && product) localSkusWithInventory.add(sku);
 
       const stats = await prisma.$transaction(async (tx) => {
@@ -691,10 +803,7 @@ export async function syncCjDropshippingIntegrationById(
           trigger,
           checkedSkuCount,
           skuCount: allSkus.length,
-          matchedSkuCount: new Set([
-            ...cjSkusWithInventory,
-            ...localSkusWithInventory,
-          ]).size,
+          matchedSkuCount: localSkusWithInventory.size,
           syncedProductCount,
           syncedInventoryCount,
           movementCount,
@@ -702,17 +811,16 @@ export async function syncCjDropshippingIntegrationById(
       }
     }
 
-    const matchedSkuCount = new Set([
-      ...cjSkusWithInventory,
-      ...localSkusWithInventory,
-    ]).size;
+    const matchedSkuCount = localSkusWithInventory.size;
     const result: CjDropshippingSyncResult = {
       integrationId,
       skipped: false,
-      syncedSkuCount: allSkus.length,
+      syncedSkuCount: allCjSkus.size,
       matchedSkuCount,
-      unmatchedCjSkuCount: cjProductsBySku.size - cjSkusWithInventory.size,
-      unmatchedLocalSkuCount: productsBySku.size - localSkusWithInventory.size,
+      unmatchedCjSkuCount: [...allCjSkus].filter((sku) => !productsBySku.has(sku)).length,
+      unmatchedLocalSkuCount: [...productsBySku.keys()].filter(
+        (sku) => !localSkusWithInventory.has(sku),
+      ).length,
       syncedProductCount,
       syncedInventoryCount,
       movementCount,

@@ -37,14 +37,27 @@ export type CjInventoryStock = {
 };
 
 export type CjInventoryBySkuRow = {
+  vid?: string | number | null;
   areaEn?: string | null;
   areaId?: string | number | null;
   countryCode?: string | null;
   countryNameEn?: string | null;
+  storageNum?: number | string | null;
   totalInventoryNum?: number | string | null;
   cjInventoryNum?: number | string | null;
   factoryInventoryNum?: number | string | null;
   stock?: CjInventoryStock[] | null;
+};
+
+export type CjVariant = {
+  vid?: string | number | null;
+  pid?: string | number | null;
+  variantName?: string | null;
+  variantNameEn?: string | null;
+  variantImage?: string | null;
+  variantSku?: string | null;
+  variantKey?: string | null;
+  variantStandard?: string | null;
 };
 
 type CjApiEnvelope<T> = {
@@ -211,6 +224,29 @@ export class CjDropshippingClient {
         pageNumber: numericParam(input.pageNumber),
         pageSize: numericParam(input.pageSize),
       },
+    });
+  }
+
+  queryVariants(input: {
+    accessToken: string;
+    pid?: string | null;
+    productSku?: string | null;
+    variantSku?: string | null;
+  }) {
+    return this.request<CjVariant[]>("GET", "/product/variant/query", {
+      accessToken: input.accessToken,
+      query: {
+        pid: input.pid,
+        productSku: input.productSku,
+        variantSku: input.variantSku,
+      },
+    });
+  }
+
+  queryInventoryByVid(input: { accessToken: string; vid: string }) {
+    return this.request<CjInventoryBySkuRow[]>("GET", "/product/stock/queryByVid", {
+      accessToken: input.accessToken,
+      query: { vid: input.vid },
     });
   }
 
