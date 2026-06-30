@@ -20,6 +20,10 @@ import type {
   ShopifySyncResult,
   StripeIntegrationSettings,
 } from "@/lib/types/api";
+import {
+  postSyncEventStream,
+  type SyncStreamMessage,
+} from "@/lib/sync-event-stream";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DocumentDownloadLink } from "@/components/ui/document-download-link";
@@ -89,6 +93,22 @@ function formatBytes(bytes: number) {
   }
   const digits = value >= 10 || unitIndex === 0 ? 0 : 1;
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+function formatElapsedMs(ms: number) {
+  const totalSeconds = Math.max(Math.floor(ms / 1000), 1);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+function syncProgressMessage<T>(provider: string, event: SyncStreamMessage<T>) {
+  if (event.event === "started") return `${provider} sync started`;
+  if (event.event === "heartbeat") {
+    return `${provider} sync still running (${formatElapsedMs(event.elapsedMs)})`;
+  }
+  return null;
 }
 
 function buildInventoryQuery({
@@ -821,6 +841,7 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
   const [enabled, setEnabled] = useState(data.enabled);
   const [accessToken, setAccessToken] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const saveMut = useMutation({
     mutationFn: async () => {
@@ -854,6 +875,7 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
   const syncMut = useMutation({
     mutationFn: async () => {
       const startedAt = Date.now();
+      setSyncMessage("Starting Shopify sync...");
       console.info("[shopify-sync] Sync now clicked", {
         integrationId: data.id,
         shopDomain: data.shopDomain,
@@ -862,8 +884,14 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
       });
 
       try {
-        const { data: result } = await api.post<ShopifySyncResult>(
+        const result = await postSyncEventStream<ShopifySyncResult>(
           "/api/integrations/shopify/sync-now",
+          {
+            onEvent: (event) => {
+              const message = syncProgressMessage("Shopify", event);
+              if (message) setSyncMessage(message);
+            },
+          },
         );
         console.info("[shopify-sync] Sync now response", {
           integrationId: result.integrationId,
@@ -889,6 +917,7 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
       }
     },
     onSuccess: (result) => {
+      setSyncMessage(null);
       qc.invalidateQueries({ queryKey: shopifyIntegrationKey });
       qc.invalidateQueries({ queryKey: productStockBackupsKey });
       qc.invalidateQueries({ queryKey: shopifyInventoryCountsKey });
@@ -902,7 +931,10 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
         );
       }
     },
-    onError: (error: unknown) => toast.error(apiErrorMessage(error)),
+    onError: (error: unknown) => {
+      setSyncMessage(null);
+      toast.error(apiErrorMessage(error));
+    },
   });
 
   const canSync = Boolean(data.enabled && data.hasAccessToken);
@@ -995,6 +1027,9 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
             Sync now
           </Button>
         </div>
+        {syncMut.isPending && syncMessage ? (
+          <p className="mt-3 text-sm text-muted-foreground">{syncMessage}</p>
+        ) : null}
       </div>
 
       <div className="rounded-lg border bg-background p-4 sm:p-5">
@@ -1063,6 +1098,7 @@ function CjDropshippingIntegrationForm({
   const qc = useQueryClient();
   const [enabled, setEnabled] = useState(data.enabled);
   const [apiKey, setApiKey] = useState("");
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const saveMut = useMutation({
     mutationFn: async () => {
@@ -1090,12 +1126,20 @@ function CjDropshippingIntegrationForm({
 
   const syncMut = useMutation({
     mutationFn: async () => {
-      const { data: result } = await api.post<CjDropshippingSyncResult>(
+      setSyncMessage("Starting CJdropshipping sync...");
+      const result = await postSyncEventStream<CjDropshippingSyncResult>(
         "/api/integrations/cjdropshipping/sync-now",
+        {
+          onEvent: (event) => {
+            const message = syncProgressMessage("CJdropshipping", event);
+            if (message) setSyncMessage(message);
+          },
+        },
       );
       return result;
     },
     onSuccess: (result) => {
+      setSyncMessage(null);
       qc.invalidateQueries({ queryKey: cjDropshippingIntegrationKey });
       qc.invalidateQueries({ queryKey: cjDropshippingInventoryCountsKey });
       qc.invalidateQueries({ queryKey: cjDropshippingInventoryTransactionsKey });
@@ -1109,7 +1153,10 @@ function CjDropshippingIntegrationForm({
         );
       }
     },
-    onError: (error: unknown) => toast.error(apiErrorMessage(error)),
+    onError: (error: unknown) => {
+      setSyncMessage(null);
+      toast.error(apiErrorMessage(error));
+    },
   });
 
   const canSync = Boolean(data.enabled && data.hasApiKey);
@@ -1176,6 +1223,9 @@ function CjDropshippingIntegrationForm({
             Sync now
           </Button>
         </div>
+        {syncMut.isPending && syncMessage ? (
+          <p className="mt-3 text-sm text-muted-foreground">{syncMessage}</p>
+        ) : null}
       </div>
 
       <div className="rounded-lg border bg-background p-4 sm:p-5">
