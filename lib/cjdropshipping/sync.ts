@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import {
   CjDropshippingApiError,
   CjDropshippingClient,
+  type CjInventoryStock,
   type CjInventoryBySkuRow,
   type CjMyProduct,
   type CjMyProductListData,
@@ -329,6 +330,44 @@ function zeroInventoryRowFromMetadata(metadata: CjSkuMetadata): CjInventoryBySku
   };
 }
 
+function stockInventoryTotals(stock: CjInventoryStock[] | null | undefined) {
+  return (stock ?? []).reduce(
+    (totals, row) => ({
+      cjInventoryNum: totals.cjInventoryNum + toInt(row.inventory),
+      factoryInventoryNum:
+        totals.factoryInventoryNum + toInt(row.factoryInventory),
+    }),
+    { cjInventoryNum: 0, factoryInventoryNum: 0 },
+  );
+}
+
+function inventoryNumbersFromRow(row: CjInventoryBySkuRow) {
+  const nested = stockInventoryTotals(Array.isArray(row.stock) ? row.stock : null);
+  const rawCjInventoryNum = toInt(row.cjInventoryNum ?? row.storageNum);
+  const rawFactoryInventoryNum = toInt(row.factoryInventoryNum);
+  const cjInventoryNum =
+    rawCjInventoryNum > 0 ? rawCjInventoryNum : nested.cjInventoryNum;
+  const factoryInventoryNum =
+    rawFactoryInventoryNum > 0
+      ? rawFactoryInventoryNum
+      : nested.factoryInventoryNum;
+  const derivedTotalInventoryNum = cjInventoryNum + factoryInventoryNum;
+  const rawTotalInventoryNum = toInt(row.totalInventoryNum);
+  const storageNum = toInt(row.storageNum);
+  const totalInventoryNum =
+    rawTotalInventoryNum > 0
+      ? rawTotalInventoryNum
+      : derivedTotalInventoryNum > 0
+        ? derivedTotalInventoryNum
+        : storageNum;
+
+  return {
+    totalInventoryNum,
+    cjInventoryNum,
+    factoryInventoryNum,
+  };
+}
+
 function normalizeInventoryRow(input: {
   sku: string;
   product: LocalProduct | null;
@@ -340,6 +379,7 @@ function normalizeInventoryRow(input: {
     stringOrNull(input.row.countryCode) ??
     stringOrNull(input.row.areaEn) ??
     "unknown";
+  const inventoryNumbers = inventoryNumbersFromRow(input.row);
 
   return {
     sku: input.sku,
@@ -352,9 +392,9 @@ function normalizeInventoryRow(input: {
     cjAreaEn: stringOrNull(input.row.areaEn),
     countryCode: stringOrNull(input.row.countryCode),
     countryNameEn: stringOrNull(input.row.countryNameEn),
-    totalInventoryNum: toInt(input.row.totalInventoryNum),
-    cjInventoryNum: toInt(input.row.cjInventoryNum),
-    factoryInventoryNum: toInt(input.row.factoryInventoryNum),
+    totalInventoryNum: inventoryNumbers.totalInventoryNum,
+    cjInventoryNum: inventoryNumbers.cjInventoryNum,
+    factoryInventoryNum: inventoryNumbers.factoryInventoryNum,
     stock: Array.isArray(input.row.stock)
       ? (input.row.stock as Prisma.InputJsonValue)
       : null,
