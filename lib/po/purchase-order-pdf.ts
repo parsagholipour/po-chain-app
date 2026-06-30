@@ -424,6 +424,22 @@ function drawDistributorTemplateContactBox(
     .fontSize(9)
     .fillColor(TEMPLATE_DARK)
     .text(TEMPLATE_BILLING_EMAIL, rightX, y + 79, { width: 220 });
+
+  const trackingNumbers = distributorTrackingNumbers(po);
+  if (trackingNumbers.length > 0) {
+    const label = trackingNumbers.length === 1 ? "TRACKING NUMBER" : "TRACKING NUMBERS";
+    doc
+      .font("Helvetica")
+      .fontSize(8)
+      .fillColor(TEMPLATE_GRAY)
+      .text(label, rightX, y + 100, { width: 220 });
+    drawFittedText(doc, trackingNumbers.join(", "), rightX, y + 114, 220, {
+      font: "Helvetica-Bold",
+      fontSize: 9,
+      minFontSize: 7,
+      color: TEMPLATE_DARK,
+    });
+  }
 }
 
 function drawDistributorTemplateLineItems(
@@ -1099,6 +1115,26 @@ function distributorShipTo(po: PurchaseOrderPdfData) {
       (line): line is string => Boolean(line),
     ),
   };
+}
+
+function distributorTrackingNumbers(po: PurchaseOrderPdfData) {
+  const seen = new Set<string>();
+  const trackingNumbers: string[] = [];
+
+  for (const { shipping } of po.purchaseOrderShippings) {
+    if (shipping.status === "cancelled") continue;
+
+    const trackingNumber = shipping.trackingNumber.trim();
+    if (!trackingNumber) continue;
+
+    const key = trackingNumber.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    trackingNumbers.push(trackingNumber);
+  }
+
+  return trackingNumbers;
 }
 
 function distributorCityStatePostal(po: PurchaseOrderPdfData) {

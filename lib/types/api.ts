@@ -106,6 +106,28 @@ export type ShopifyIntegrationSettings = {
   updatedAt: string | null;
 };
 
+export type CjDropshippingIntegrationSettings = {
+  id: string | null;
+  enabled: boolean;
+  hasApiKey: boolean;
+  hasAccessToken: boolean;
+  hasRefreshToken: boolean;
+  openId: string | null;
+  accessTokenExpiresAt: string | null;
+  refreshTokenExpiresAt: string | null;
+  lastSyncAt: string | null;
+  lastSyncStatus: string | null;
+  lastSyncError: string | null;
+  lastSyncedSkuCount: number;
+  lastMatchedSkuCount: number;
+  lastUnmatchedCjSkuCount: number;
+  lastUnmatchedLocalSkuCount: number;
+  lastSyncedProductCount: number;
+  lastSyncedInventoryCount: number;
+  lastMovementCount: number;
+  updatedAt: string | null;
+};
+
 export type StripeIntegrationSettings = {
   id: string | null;
   enabled: boolean;
@@ -126,6 +148,20 @@ export type ShopifySyncResult = {
   matchedSkuCount: number;
   unmatchedLocalSkuCount: number;
   syncedLocationCount: number;
+  syncedInventoryCount: number;
+  movementCount: number;
+};
+
+export type CjDropshippingSyncResult = {
+  integrationId: string;
+  skipped: boolean;
+  reason?: string;
+  lockExpiresAt?: string | null;
+  syncedSkuCount: number;
+  matchedSkuCount: number;
+  unmatchedCjSkuCount: number;
+  unmatchedLocalSkuCount: number;
+  syncedProductCount: number;
   syncedInventoryCount: number;
   movementCount: number;
 };
@@ -175,6 +211,70 @@ export type ShopifyInventoryMovementRow = {
 export type ShopifyInventoryMovementsResponse = PaginatedResponse<ShopifyInventoryMovementRow> & {
   locations: ShopifyInventoryLocationOption[];
 };
+
+export type CjDropshippingWarehouseOption = {
+  id: string;
+  label: string;
+  cjAreaId: string;
+  cjAreaEn: string | null;
+  countryCode: string | null;
+  countryNameEn: string | null;
+};
+
+export type CjDropshippingInventoryCountRow = {
+  id: string;
+  productId: string | null;
+  productName: string | null;
+  sku: string;
+  localSku: string | null;
+  cjProductId: string | null;
+  cjVariantId: string | null;
+  cjProductName: string | null;
+  cjAreaId: string;
+  cjAreaEn: string | null;
+  countryCode: string | null;
+  countryNameEn: string | null;
+  totalInventoryNum: number;
+  cjInventoryNum: number;
+  factoryInventoryNum: number;
+  lastSyncedAt: string;
+  lastSyncTrigger: string;
+};
+
+export type CjDropshippingInventoryCountsResponse =
+  PaginatedResponse<CjDropshippingInventoryCountRow> & {
+    warehouses: CjDropshippingWarehouseOption[];
+  };
+
+export type CjDropshippingInventoryTransactionRow = {
+  id: string;
+  productId: string | null;
+  productName: string | null;
+  sku: string;
+  cjProductId: string | null;
+  cjVariantId: string | null;
+  cjProductName: string | null;
+  cjAreaId: string;
+  cjAreaEn: string | null;
+  countryCode: string | null;
+  countryNameEn: string | null;
+  previousTotalInventoryNum: number | null;
+  newTotalInventoryNum: number;
+  previousCjInventoryNum: number | null;
+  newCjInventoryNum: number;
+  previousFactoryInventoryNum: number | null;
+  newFactoryInventoryNum: number;
+  delta: number;
+  movementType: "initial" | "increase" | "decrease";
+  trigger: string;
+  syncRunId: string;
+  observedAt: string;
+};
+
+export type CjDropshippingInventoryTransactionsResponse =
+  PaginatedResponse<CjDropshippingInventoryTransactionRow> & {
+    warehouses: CjDropshippingWarehouseOption[];
+  };
 
 export type ProductStockSnapshotBackup = {
   id: string;

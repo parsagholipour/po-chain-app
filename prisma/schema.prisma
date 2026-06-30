@@ -157,6 +157,12 @@ enum ProductEditingStatus {
   discontinued
 }
 
+enum CjDropshippingInventoryMovementType {
+  initial
+  increase
+  decrease
+}
+
 enum NotificationType {
   purchase_order_created
   external_order_created
@@ -226,6 +232,9 @@ model Store {
   shopifyLocations                     ShopifyLocation[]
   shopifyInventoryCounts               ShopifyInventoryCount[]
   shopifyInventoryMovements            ShopifyInventoryMovement[]
+  cjdropshippingIntegration            CjDropshippingIntegration?
+  cjdropshippingInventoryCounts        CjDropshippingInventoryCount[]
+  cjdropshippingInventoryTransactions  CjDropshippingInventoryTransaction[]
   paymentProviderSettings              StorePaymentProviderSetting[]
   productStockSnapshotBackups          ProductStockSnapshotBackup[]
   productCategories                    ProductCategory[]
@@ -348,6 +357,102 @@ model ShopifyInventoryMovement {
   @@index([storeId, productId, observedAt])
   @@index([storeId, shopifyLocationId, observedAt])
   @@index([storeId, syncRunId])
+}
+
+model CjDropshippingIntegration {
+  id                         String    @id @default(uuid()) @db.Uuid
+  storeId                    String    @unique @db.Uuid
+  store                      Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  enabled                    Boolean   @default(false)
+  apiKeyEncrypted            String?   @db.Text
+  openId                     String?
+  accessTokenEncrypted       String?   @db.Text
+  accessTokenExpiresAt       DateTime?
+  refreshTokenEncrypted      String?   @db.Text
+  refreshTokenExpiresAt      DateTime?
+  lastSyncAt                 DateTime?
+  lastSyncStatus             String?
+  lastSyncError              String?   @db.Text
+  lastSyncedSkuCount         Int       @default(0)
+  lastMatchedSkuCount        Int       @default(0)
+  lastUnmatchedCjSkuCount    Int       @default(0)
+  lastUnmatchedLocalSkuCount Int       @default(0)
+  lastSyncedProductCount     Int       @default(0)
+  lastSyncedInventoryCount   Int       @default(0)
+  lastMovementCount          Int       @default(0)
+  syncLockUntil              DateTime?
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
+
+  @@index([enabled])
+  @@index([syncLockUntil])
+}
+
+model CjDropshippingInventoryCount {
+  id                  String   @id @default(uuid()) @db.Uuid
+  storeId             String   @db.Uuid
+  store               Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId           String?  @db.Uuid
+  product             Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  sku                 String
+  cjProductId         String?
+  cjVariantId         String?
+  cjProductName       String?
+  cjAreaId            String
+  cjAreaEn            String?
+  countryCode         String?
+  countryNameEn       String?
+  totalInventoryNum   Int      @default(0)
+  cjInventoryNum      Int      @default(0)
+  factoryInventoryNum Int      @default(0)
+  stock               Json?
+  lastSyncedAt        DateTime
+  lastSyncTrigger     String
+  lastSeenInRunId     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([storeId, sku, cjAreaId])
+  @@index([storeId, sku])
+  @@index([storeId, productId])
+  @@index([storeId, cjAreaId])
+  @@index([storeId, lastSyncedAt])
+}
+
+model CjDropshippingInventoryTransaction {
+  id                          String                               @id @default(uuid()) @db.Uuid
+  storeId                     String                               @db.Uuid
+  store                       Store                                @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId                   String?                              @db.Uuid
+  product                     Product?                             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName                 String?
+  sku                         String
+  cjProductId                 String?
+  cjVariantId                 String?
+  cjProductName               String?
+  cjAreaId                    String
+  cjAreaEn                    String?
+  countryCode                 String?
+  countryNameEn               String?
+  previousTotalInventoryNum   Int?
+  newTotalInventoryNum        Int
+  previousCjInventoryNum      Int?
+  newCjInventoryNum           Int
+  previousFactoryInventoryNum Int?
+  newFactoryInventoryNum      Int
+  delta                       Int
+  movementType                CjDropshippingInventoryMovementType
+  trigger                     String
+  syncRunId                   String
+  observedAt                  DateTime
+  createdAt                   DateTime                             @default(now())
+
+  @@index([storeId, observedAt])
+  @@index([storeId, productId, observedAt])
+  @@index([storeId, sku, observedAt])
+  @@index([storeId, cjAreaId, observedAt])
+  @@index([storeId, syncRunId])
+  @@index([storeId, movementType])
 }
 
 model StorePaymentProviderSetting {
@@ -631,6 +736,8 @@ model Product {
   draftPurchaseOrderLines   DraftPurchaseOrderLine[]
   shopifyInventoryCounts    ShopifyInventoryCount[]
   shopifyInventoryMovements ShopifyInventoryMovement[]
+  cjdropshippingInventoryCounts       CjDropshippingInventoryCount[]
+  cjdropshippingInventoryTransactions CjDropshippingInventoryTransaction[]
 
   @@unique([storeId, sku])
   @@index([storeId, name])

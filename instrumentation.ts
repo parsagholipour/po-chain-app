@@ -3,6 +3,10 @@ export async function register() {
     const { startShopifyInventoryScheduler } = await import(
       "@/lib/shopify/scheduler"
     );
+    const { startCjDropshippingInventoryScheduler } = await import(
+      "@/lib/cjdropshipping/scheduler"
+    );
     startShopifyInventoryScheduler();
+    startCjDropshippingInventoryScheduler();
   }
 }

@@ -7,6 +7,11 @@ import { toast } from "sonner";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import type {
+  CjDropshippingIntegrationSettings,
+  CjDropshippingInventoryCountsResponse,
+  CjDropshippingInventoryTransactionsResponse,
+  CjDropshippingSyncResult,
+  CjDropshippingWarehouseOption,
   ProductStockSnapshotBackup,
   ShopifyInventoryCountsResponse,
   ShopifyInventoryLocationOption,
@@ -34,10 +39,15 @@ import {
 } from "@/components/ui/select";
 
 const shopifyIntegrationKey = ["shopify-integration"] as const;
+const cjDropshippingIntegrationKey = ["cjdropshipping-integration"] as const;
 const stripeIntegrationKey = ["stripe-integration"] as const;
 const productStockBackupsKey = ["product-stock-snapshot-backups"] as const;
 const shopifyInventoryCountsKey = ["shopify-inventory-counts"] as const;
 const shopifyInventoryMovementsKey = ["shopify-inventory-movements"] as const;
+const cjDropshippingInventoryCountsKey = ["cjdropshipping-inventory-counts"] as const;
+const cjDropshippingInventoryTransactionsKey = [
+  "cjdropshipping-inventory-transactions",
+] as const;
 const allLocationsValue = "__all_locations__";
 const inventoryPageSize = 8;
 
@@ -99,6 +109,24 @@ function buildInventoryQuery({
   return params.toString();
 }
 
+function buildCjInventoryQuery({
+  page,
+  q,
+  warehouseId,
+}: {
+  page: number;
+  q: string;
+  warehouseId: string;
+}) {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(inventoryPageSize));
+  const search = q.trim();
+  if (search) params.set("q", search);
+  if (warehouseId !== allLocationsValue) params.set("warehouseId", warehouseId);
+  return params.toString();
+}
+
 function formatSignedNumber(value: number) {
   return value > 0 ? `+${value}` : String(value);
 }
@@ -109,6 +137,19 @@ function triggerLabel(value: string) {
 
 function locationLabel(location: ShopifyInventoryLocationOption) {
   return location.isActive ? location.name : `${location.name} (inactive)`;
+}
+
+function cjWarehouseLabel(warehouse: CjDropshippingWarehouseOption) {
+  return warehouse.label || warehouse.cjAreaEn || warehouse.countryNameEn || warehouse.id;
+}
+
+function movementTypeLabel(value: string) {
+  const labels: Record<string, string> = {
+    initial: "Initial",
+    increase: "Increase",
+    decrease: "Decrease",
+  };
+  return labels[value] ?? value;
 }
 
 function InventoryPagination({
@@ -345,6 +386,236 @@ function ShopifyInventoryMirrorCard() {
             page={movementsPage}
             total={movements.data?.total ?? 0}
             onPageChange={setMovementsPage}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CjDropshippingInventoryMirrorCard() {
+  const [search, setSearch] = useState("");
+  const [warehouseId, setWarehouseId] = useState(allLocationsValue);
+  const [countsPage, setCountsPage] = useState(1);
+  const [transactionsPage, setTransactionsPage] = useState(1);
+
+  const countsQuery = buildCjInventoryQuery({
+    page: countsPage,
+    q: search,
+    warehouseId,
+  });
+  const transactionsQuery = buildCjInventoryQuery({
+    page: transactionsPage,
+    q: search,
+    warehouseId,
+  });
+
+  const counts = useQuery({
+    queryKey: [...cjDropshippingInventoryCountsKey, countsQuery],
+    queryFn: async () => {
+      const { data } = await api.get<CjDropshippingInventoryCountsResponse>(
+        `/api/integrations/cjdropshipping/inventory-counts?${countsQuery}`,
+      );
+      return data;
+    },
+  });
+  const transactions = useQuery({
+    queryKey: [...cjDropshippingInventoryTransactionsKey, transactionsQuery],
+    queryFn: async () => {
+      const { data } = await api.get<CjDropshippingInventoryTransactionsResponse>(
+        `/api/integrations/cjdropshipping/inventory-transactions?${transactionsQuery}`,
+      );
+      return data;
+    },
+  });
+
+  const warehouses = counts.data?.warehouses ?? transactions.data?.warehouses ?? [];
+  const countRows = counts.data?.rows ?? [];
+  const transactionRows = transactions.data?.rows ?? [];
+
+  function updateSearch(value: string) {
+    setSearch(value);
+    setCountsPage(1);
+    setTransactionsPage(1);
+  }
+
+  function updateWarehouse(value: unknown) {
+    setWarehouseId(typeof value === "string" ? value : allLocationsValue);
+    setCountsPage(1);
+    setTransactionsPage(1);
+  }
+
+  return (
+    <div className="rounded-lg border bg-background p-4 sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold">CJdropshipping inventory mirror</h2>
+          <p className="text-sm text-muted-foreground">
+            Current CJ warehouse counts and observed inventory transactions.
+          </p>
+        </div>
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:min-w-[28rem] sm:flex-row">
+          <Input
+            value={search}
+            onChange={(event) => updateSearch(event.target.value)}
+            placeholder="Search product, SKU, or warehouse"
+            className="sm:flex-1"
+          />
+          <Select value={warehouseId} onValueChange={updateWarehouse}>
+            <SelectTrigger className="w-full sm:w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={allLocationsValue}>All warehouses</SelectItem>
+              {warehouses.map((warehouse) => (
+                <SelectItem key={warehouse.id} value={warehouse.id}>
+                  {cjWarehouseLabel(warehouse)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <div className="overflow-hidden rounded-md border">
+          <div className="border-b bg-muted/40 px-3 py-2">
+            <h3 className="text-sm font-medium">Current counts</h3>
+          </div>
+          {counts.isPending ? (
+            <p className="p-4 text-sm text-muted-foreground">Loading CJ counts...</p>
+          ) : counts.isError ? (
+            <p className="m-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {apiErrorMessage(counts.error)}
+            </p>
+          ) : countRows.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">No CJ counts yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] text-sm">
+                <thead className="border-b bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Product</th>
+                    <th className="px-3 py-2 text-left font-medium">Warehouse</th>
+                    <th className="px-3 py-2 text-right font-medium">Total</th>
+                    <th className="px-3 py-2 text-right font-medium">CJ</th>
+                    <th className="px-3 py-2 text-right font-medium">Factory</th>
+                    <th className="px-3 py-2 text-left font-medium">Last sync</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {countRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2">
+                        <p className="font-medium">
+                          {row.productName ?? row.cjProductName ?? "Unmatched CJ product"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          SKU {row.sku}
+                          {!row.productId ? " / No local product" : ""}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2">
+                        <p>{row.cjAreaEn ?? row.countryNameEn ?? row.cjAreaId}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {[row.countryCode, row.countryNameEn]
+                            .filter(Boolean)
+                            .join(" / ") || "CJ warehouse"}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {row.totalInventoryNum}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {row.cjInventoryNum}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {row.factoryInventoryNum}
+                      </td>
+                      <td className="px-3 py-2">
+                        <p>{formatDate(row.lastSyncedAt)}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {triggerLabel(row.lastSyncTrigger)}
+                        </p>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <InventoryPagination
+            page={countsPage}
+            total={counts.data?.total ?? 0}
+            onPageChange={setCountsPage}
+          />
+        </div>
+
+        <div className="overflow-hidden rounded-md border">
+          <div className="border-b bg-muted/40 px-3 py-2">
+            <h3 className="text-sm font-medium">Transactions</h3>
+          </div>
+          {transactions.isPending ? (
+            <p className="p-4 text-sm text-muted-foreground">Loading CJ transactions...</p>
+          ) : transactions.isError ? (
+            <p className="m-3 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {apiErrorMessage(transactions.error)}
+            </p>
+          ) : transactionRows.length === 0 ? (
+            <p className="p-4 text-sm text-muted-foreground">No CJ transactions yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[860px] text-sm">
+                <thead className="border-b bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Observed</th>
+                    <th className="px-3 py-2 text-left font-medium">Product</th>
+                    <th className="px-3 py-2 text-left font-medium">Warehouse</th>
+                    <th className="px-3 py-2 text-left font-medium">Type</th>
+                    <th className="px-3 py-2 text-right font-medium">Before</th>
+                    <th className="px-3 py-2 text-right font-medium">After</th>
+                    <th className="px-3 py-2 text-right font-medium">Delta</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {transactionRows.map((row) => (
+                    <tr key={row.id}>
+                      <td className="px-3 py-2">
+                        <p>{formatDate(row.observedAt)}</p>
+                        <p className="text-xs text-muted-foreground">{triggerLabel(row.trigger)}</p>
+                      </td>
+                      <td className="px-3 py-2">
+                        <p className="font-medium">
+                          {row.productName ?? row.cjProductName ?? "Unmatched CJ product"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          SKU {row.sku}
+                          {!row.productId ? " / No local product" : ""}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2">
+                        {row.cjAreaEn ?? row.countryNameEn ?? row.cjAreaId}
+                      </td>
+                      <td className="px-3 py-2">{movementTypeLabel(row.movementType)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {row.previousTotalInventoryNum ?? "-"}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {row.newTotalInventoryNum}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {formatSignedNumber(row.delta)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <InventoryPagination
+            page={transactionsPage}
+            total={transactions.data?.total ?? 0}
+            onPageChange={setTransactionsPage}
           />
         </div>
       </div>
@@ -784,12 +1055,216 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
   );
 }
 
+function CjDropshippingIntegrationForm({
+  data,
+}: {
+  data: CjDropshippingIntegrationSettings;
+}) {
+  const qc = useQueryClient();
+  const [enabled, setEnabled] = useState(data.enabled);
+  const [apiKey, setApiKey] = useState("");
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      const body: {
+        enabled: boolean;
+        apiKey?: string;
+      } = { enabled };
+      if (apiKey.trim()) body.apiKey = apiKey.trim();
+
+      const { data: row } = await api.patch<CjDropshippingIntegrationSettings>(
+        "/api/integrations/cjdropshipping",
+        body,
+      );
+      return row;
+    },
+    onSuccess: (row) => {
+      qc.setQueryData(cjDropshippingIntegrationKey, row);
+      setApiKey("");
+      toast.success(
+        row.enabled ? "CJdropshipping integration enabled" : "CJdropshipping settings saved",
+      );
+    },
+    onError: (error: unknown) => toast.error(apiErrorMessage(error)),
+  });
+
+  const syncMut = useMutation({
+    mutationFn: async () => {
+      const { data: result } = await api.post<CjDropshippingSyncResult>(
+        "/api/integrations/cjdropshipping/sync-now",
+      );
+      return result;
+    },
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: cjDropshippingIntegrationKey });
+      qc.invalidateQueries({ queryKey: cjDropshippingInventoryCountsKey });
+      qc.invalidateQueries({ queryKey: cjDropshippingInventoryTransactionsKey });
+      qc.invalidateQueries({ queryKey: productStockBackupsKey });
+      qc.invalidateQueries({ queryKey: ["products"] });
+      if (result.skipped) {
+        toast.info(result.reason ?? "CJdropshipping sync skipped");
+      } else {
+        toast.success(
+          `Synced ${result.syncedSkuCount} SKU(s), ${result.syncedProductCount} product stock count(s), ${result.movementCount} transaction(s)`,
+        );
+      }
+    },
+    onError: (error: unknown) => toast.error(apiErrorMessage(error)),
+  });
+
+  const canSync = Boolean(data.enabled && data.hasApiKey);
+  const statusTone = useMemo(() => {
+    if (data.lastSyncStatus === "error") return "text-destructive";
+    if (data.enabled) return "text-emerald-600 dark:text-emerald-400";
+    return "text-muted-foreground";
+  }, [data.enabled, data.lastSyncStatus]);
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border bg-background p-4 sm:p-5">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold">CJdropshipping</h2>
+            <p className="text-sm text-muted-foreground">
+              API-key authentication and SKU-based inventory sync.
+            </p>
+          </div>
+          <Checkbox
+            checked={enabled}
+            onCheckedChange={(value) => setEnabled(value === true)}
+            label="Enabled"
+          />
+        </div>
+
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="cjdropshipping-api-key">API key</FieldLabel>
+            <Input
+              id="cjdropshipping-api-key"
+              type="password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder={data.hasApiKey ? "Configured" : "Paste CJdropshipping API key"}
+              autoComplete="off"
+            />
+            {data.hasApiKey ? (
+              <FieldDescription>Leave blank to keep the saved API key.</FieldDescription>
+            ) : (
+              <FieldDescription>
+                The key is exchanged for CJ access and refresh tokens on save.
+              </FieldDescription>
+            )}
+          </Field>
+        </FieldGroup>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            onClick={() => saveMut.mutate()}
+            disabled={saveMut.isPending}
+          >
+            <Save className="size-4" />
+            Save
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => syncMut.mutate()}
+            disabled={!canSync || syncMut.isPending}
+          >
+            <RefreshCw className={syncMut.isPending ? "size-4 animate-spin" : "size-4"} />
+            Sync now
+          </Button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border bg-background p-4 sm:p-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Status
+            </p>
+            <p className={`mt-1 text-sm font-medium ${statusTone}`}>
+              {enabled ? statusLabel(data.lastSyncStatus) : "Disabled"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Last sync
+            </p>
+            <p className="mt-1 text-sm">{formatDate(data.lastSyncAt)}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              SKUs
+            </p>
+            <p className="mt-1 text-sm tabular-nums">
+              {data.lastMatchedSkuCount} matched
+              <span className="text-muted-foreground">
+                {" "}
+                / {data.lastSyncedSkuCount} checked
+              </span>
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Unmatched
+            </p>
+            <p className="mt-1 text-sm tabular-nums">
+              {data.lastUnmatchedCjSkuCount} CJ
+              <span className="text-muted-foreground">
+                {" "}
+                / {data.lastUnmatchedLocalSkuCount} local
+              </span>
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Mirror
+            </p>
+            <p className="mt-1 text-sm tabular-nums">
+              {data.lastSyncedInventoryCount} counts
+              <span className="text-muted-foreground">
+                {" "}
+                / {data.lastMovementCount} txns
+              </span>
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
+          <p>Access token expires: {formatDate(data.accessTokenExpiresAt)}</p>
+          <p>Refresh token expires: {formatDate(data.refreshTokenExpiresAt)}</p>
+        </div>
+        {data.openId ? (
+          <p className="mt-2 text-sm text-muted-foreground">CJ open ID: {data.openId}</p>
+        ) : null}
+        {data.lastSyncError ? (
+          <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {data.lastSyncError}
+          </p>
+        ) : null}
+      </div>
+
+      <CjDropshippingInventoryMirrorCard />
+    </div>
+  );
+}
+
 export function IntegrationsSettingsView() {
   const { data: shopifyData, isPending: shopifyPending } = useQuery({
     queryKey: shopifyIntegrationKey,
     queryFn: async () => {
       const { data: row } = await api.get<ShopifyIntegrationSettings>(
         "/api/integrations/shopify",
+      );
+      return row;
+    },
+  });
+  const { data: cjDropshippingData, isPending: cjDropshippingPending } = useQuery({
+    queryKey: cjDropshippingIntegrationKey,
+    queryFn: async () => {
+      const { data: row } = await api.get<CjDropshippingIntegrationSettings>(
+        "/api/integrations/cjdropshipping",
       );
       return row;
     },
@@ -804,7 +1279,14 @@ export function IntegrationsSettingsView() {
     },
   });
 
-  if (shopifyPending || stripePending || !shopifyData || !stripeData) {
+  if (
+    shopifyPending ||
+    cjDropshippingPending ||
+    stripePending ||
+    !shopifyData ||
+    !cjDropshippingData ||
+    !stripeData
+  ) {
     return <p className="py-8 text-center text-sm text-muted-foreground">Loading...</p>;
   }
 
@@ -817,6 +1299,10 @@ export function IntegrationsSettingsView() {
       <ShopifyIntegrationForm
         key={`shopify:${shopifyData.id ?? "new"}:${shopifyData.updatedAt ?? "never"}:${shopifyData.enabled}`}
         data={shopifyData}
+      />
+      <CjDropshippingIntegrationForm
+        key={`cjdropshipping:${cjDropshippingData.id ?? "new"}:${cjDropshippingData.updatedAt ?? "never"}:${cjDropshippingData.enabled}`}
+        data={cjDropshippingData}
       />
     </div>
   );
