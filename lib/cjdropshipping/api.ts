@@ -1,6 +1,7 @@
 import "server-only";
 
 const CJ_API_BASE_URL = "https://developers.cjdropshipping.com/api2.0/v1";
+const CJ_WEB_API_BASE_URL = "https://cjdropshipping.com";
 const DEFAULT_REQUEST_INTERVAL_MS = 1100;
 
 export type CjAuthTokenData = {
@@ -58,6 +59,58 @@ export type CjVariant = {
   variantSku?: string | null;
   variantKey?: string | null;
   variantStandard?: string | null;
+};
+
+export type CjPrivateInventorySkuRow = {
+  clientTransitQuantity?: number | string | null;
+  clientAvailableQuantity?: number | string | null;
+  clientFreezeQuantity?: number | string | null;
+  clientLockQuantity?: number | string | null;
+  clientUseQuantity?: number | string | null;
+  clientDisputeQuantity?: number | string | null;
+  clientDisputeCompleteQuantity?: number | string | null;
+  productId?: string | number | null;
+  variantId?: string | number | null;
+  productName?: string | null;
+  sku?: string | null;
+  variantKey?: string | null;
+  variantValue1?: string | null;
+  variantValue2?: string | null;
+  variantValue3?: string | null;
+  storageId?: string | null;
+  productType?: string | number | null;
+  isPod?: number | boolean | null;
+};
+
+export type CjPrivateInventorySkuListData = {
+  totalRecords?: number | string | null;
+  content?: CjPrivateInventorySkuRow[] | null;
+};
+
+export type CjPrivateInventoryOrderRow = {
+  unitPrice?: number | string | null;
+  orderQuantity?: number | string | null;
+  clientTransitQuantity?: number | string | null;
+  clientAvailableQuantity?: number | string | null;
+  clientFreezeQuantity?: number | string | null;
+  clientLockQuantity?: number | string | null;
+  clientUseQuantity?: number | string | null;
+  clientDisputeQuantity?: number | string | null;
+  clientDisputeCompleteQuantity?: number | string | null;
+  productId?: string | number | null;
+  sku?: string | null;
+  storageId?: string | null;
+  storage?: string | null;
+  orderCode?: string | null;
+  merchantId?: string | number | null;
+};
+
+export type CjPrivateInventoryStore = {
+  areaId?: string | number | null;
+  countryCode?: string | null;
+  storageId?: string | null;
+  storehouseName?: string | null;
+  storehouseNameCN?: string | null;
 };
 
 type CjApiEnvelope<T> = {
@@ -134,6 +187,16 @@ function numericParam(value: number) {
   return Number.isFinite(value) ? String(value) : undefined;
 }
 
+type PrivateInventoryFilterInput = {
+  keyword?: string | null;
+  orderCode?: string | null;
+  storageIds?: string[] | null;
+  availableStock?: boolean | null;
+  pack?: boolean | null;
+  pod?: boolean | null;
+  serviceProd?: boolean | null;
+};
+
 export class CjDropshippingClient {
   private nextRequestAt = 0;
 
@@ -155,9 +218,13 @@ export class CjDropshippingClient {
     this.nextRequestAt = Date.now() + intervalMs;
   }
 
-  private url(endpoint: string, query?: RequestOptions["query"]) {
+  private url(
+    endpoint: string,
+    query?: RequestOptions["query"],
+    baseUrl = this.options.baseUrl ?? CJ_API_BASE_URL,
+  ) {
     const url = new URL(
-      `${this.options.baseUrl ?? CJ_API_BASE_URL}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`,
+      `${baseUrl}${endpoint.startsWith("/") ? endpoint : `/${endpoint}`}`,
     );
     for (const [key, value] of Object.entries(query ?? {})) {
       if (value == null || value === "") continue;
@@ -198,6 +265,52 @@ export class CjDropshippingClient {
     if (!parsed || typeof parsed !== "object") {
       throw new CjDropshippingApiError(
         `CJdropshipping API returned invalid JSON on ${endpoint}`,
+        { status: response.status },
+      );
+    }
+
+    return requireData(parsed as CjApiEnvelope<T>, endpoint);
+  }
+
+  private async privateInventoryRequest<T>(
+    endpoint: string,
+    input: {
+      accessToken: string;
+      body?: unknown;
+    },
+  ) {
+    await this.throttle();
+
+    const headers: Record<string, string> = {
+      Accept: "application/json, text/plain, */*",
+      "Content-Type": "application/json;charset=utf-8",
+      Origin: CJ_WEB_API_BASE_URL,
+      Referer: `${CJ_WEB_API_BASE_URL}/mine/myInventoryNew/inventoryDocuments`,
+      platform: "2",
+      token: input.accessToken,
+      "User-Agent":
+        "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0",
+    };
+
+    const response = await fetch(this.url(endpoint, undefined, CJ_WEB_API_BASE_URL), {
+      method: "POST",
+      headers,
+      body: JSON.stringify(input.body ?? {}),
+      cache: "no-store",
+    });
+    const raw = await response.text();
+    const parsed = safeJsonParse(raw);
+
+    if (!response.ok) {
+      throw new CjDropshippingApiError(
+        `CJdropshipping private inventory HTTP ${response.status} on ${endpoint}`,
+        { status: response.status },
+      );
+    }
+
+    if (!parsed || typeof parsed !== "object") {
+      throw new CjDropshippingApiError(
+        `CJdropshipping private inventory returned invalid JSON on ${endpoint}`,
         { status: response.status },
       );
     }
@@ -255,6 +368,65 @@ export class CjDropshippingClient {
       accessToken: input.accessToken,
       query: { sku: input.sku },
     });
+  }
+
+  getPrivateInventoryStores(input: { accessToken: string }) {
+    return this.privateInventoryRequest<CjPrivateInventoryStore[]>(
+      "/api/privateInventory/getStoreList",
+      {
+        accessToken: input.accessToken,
+      },
+    );
+  }
+
+  getPrivateInventoryDocumentSkus(
+    input: PrivateInventoryFilterInput & {
+      accessToken: string;
+      pageNum: number;
+      pageSize: number;
+    },
+  ) {
+    return this.privateInventoryRequest<CjPrivateInventorySkuListData>(
+      "/api/privateInventory/querySkuDetailPagePc",
+      {
+        accessToken: input.accessToken,
+        body: {
+          keyword: input.keyword?.trim() || undefined,
+          orderCode: input.orderCode?.trim() || undefined,
+          storageIds: input.storageIds?.length ? input.storageIds : undefined,
+          availableStock: Boolean(input.availableStock),
+          pack: Boolean(input.pack),
+          pod: Boolean(input.pod),
+          serviceProd: Boolean(input.serviceProd),
+          pageNum: numericParam(input.pageNum),
+          pageSize: numericParam(input.pageSize),
+        },
+      },
+    );
+  }
+
+  getPrivateInventoryDocumentOrders(
+    input: PrivateInventoryFilterInput & {
+      accessToken: string;
+      sku: string;
+    },
+  ) {
+    return this.privateInventoryRequest<CjPrivateInventoryOrderRow[]>(
+      "/api/privateInventory/querySkuDetailListBySkuPc",
+      {
+        accessToken: input.accessToken,
+        body: {
+          sku: input.sku.trim(),
+          keyword: input.keyword?.trim() || undefined,
+          orderCode: input.orderCode?.trim() || undefined,
+          storageIds: input.storageIds?.length ? input.storageIds : undefined,
+          availableStock: Boolean(input.availableStock),
+          pack: Boolean(input.pack),
+          pod: Boolean(input.pod),
+          serviceProd: Boolean(input.serviceProd),
+        },
+      },
+    );
   }
 }
 
