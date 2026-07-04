@@ -23,6 +23,7 @@ function transactionRow(row: {
   productId: string | null;
   productName: string | null;
   sku: string;
+  cjInternalSku: string;
   cjProductId: string | null;
   cjVariantId: string | null;
   cjProductName: string | null;
@@ -41,12 +42,15 @@ function transactionRow(row: {
   trigger: string;
   syncRunId: string;
   observedAt: Date;
+  product: { sku: string } | null;
 }) {
   return {
     id: row.id,
     productId: row.productId,
     productName: row.productName ?? row.cjProductName ?? null,
     sku: row.sku,
+    localSku: row.product?.sku ?? null,
+    cjInternalSku: row.cjInternalSku,
     cjProductId: row.cjProductId,
     cjVariantId: row.cjVariantId,
     cjProductName: row.cjProductName,
@@ -93,6 +97,7 @@ export async function GET(request: Request) {
   if (q) {
     where.OR = [
       { sku: { contains: q, mode: "insensitive" } },
+      { cjInternalSku: { contains: q, mode: "insensitive" } },
       { productName: { contains: q, mode: "insensitive" } },
       { cjProductName: { contains: q, mode: "insensitive" } },
       { cjAreaEn: { contains: q, mode: "insensitive" } },
@@ -113,6 +118,7 @@ export async function GET(request: Request) {
         productId: true,
         productName: true,
         sku: true,
+        cjInternalSku: true,
         cjProductId: true,
         cjVariantId: true,
         cjProductName: true,
@@ -131,6 +137,7 @@ export async function GET(request: Request) {
         trigger: true,
         syncRunId: true,
         observedAt: true,
+        product: { select: { sku: true } },
       },
     }),
     prisma.cjDropshippingInventoryCount.findMany({

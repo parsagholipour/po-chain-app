@@ -395,6 +395,7 @@ model CjDropshippingInventoryCount {
   productId           String?  @db.Uuid
   product             Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
   sku                 String
+  cjInternalSku       String
   cjProductId         String?
   cjVariantId         String?
   cjProductName       String?
@@ -414,19 +415,21 @@ model CjDropshippingInventoryCount {
 
   @@unique([storeId, sku, cjAreaId])
   @@index([storeId, sku])
+  @@index([storeId, cjInternalSku])
   @@index([storeId, productId])
   @@index([storeId, cjAreaId])
   @@index([storeId, lastSyncedAt])
 }
 
 model CjDropshippingInventoryTransaction {
-  id                          String                               @id @default(uuid()) @db.Uuid
-  storeId                     String                               @db.Uuid
-  store                       Store                                @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  productId                   String?                              @db.Uuid
-  product                     Product?                             @relation(fields: [productId], references: [id], onDelete: SetNull)
+  id                          String                              @id @default(uuid()) @db.Uuid
+  storeId                     String                              @db.Uuid
+  store                       Store                               @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId                   String?                             @db.Uuid
+  product                     Product?                            @relation(fields: [productId], references: [id], onDelete: SetNull)
   productName                 String?
   sku                         String
+  cjInternalSku               String
   cjProductId                 String?
   cjVariantId                 String?
   cjProductName               String?
@@ -445,11 +448,12 @@ model CjDropshippingInventoryTransaction {
   trigger                     String
   syncRunId                   String
   observedAt                  DateTime
-  createdAt                   DateTime                             @default(now())
+  createdAt                   DateTime                            @default(now())
 
   @@index([storeId, observedAt])
   @@index([storeId, productId, observedAt])
   @@index([storeId, sku, observedAt])
+  @@index([storeId, cjInternalSku, observedAt], map: "CjDropshipTxn_storeId_cjInternalSku_observed_idx")
   @@index([storeId, cjAreaId, observedAt])
   @@index([storeId, syncRunId])
   @@index([storeId, movementType])
@@ -732,10 +736,10 @@ model Product {
   createdById           String               @db.Uuid
   createdBy             User                 @relation("ProductCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  purchaseOrderLines        PurchaseOrderLine[]
-  draftPurchaseOrderLines   DraftPurchaseOrderLine[]
-  shopifyInventoryCounts    ShopifyInventoryCount[]
-  shopifyInventoryMovements ShopifyInventoryMovement[]
+  purchaseOrderLines                  PurchaseOrderLine[]
+  draftPurchaseOrderLines             DraftPurchaseOrderLine[]
+  shopifyInventoryCounts              ShopifyInventoryCount[]
+  shopifyInventoryMovements           ShopifyInventoryMovement[]
   cjdropshippingInventoryCounts       CjDropshippingInventoryCount[]
   cjdropshippingInventoryTransactions CjDropshippingInventoryTransaction[]
 

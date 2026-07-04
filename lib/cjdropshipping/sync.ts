@@ -10,6 +10,7 @@ import {
   type CjPrivateInventorySkuListData,
   type CjPrivateInventorySkuRow,
   type CjPrivateInventoryStore,
+  type CjVariant,
   normalizeCjSku,
   toInt,
 } from "@/lib/cjdropshipping/api";
@@ -40,6 +41,9 @@ type LocalProduct = {
   id: string;
   name: string;
   sku: string;
+  upcGtin: string | null;
+  stockCount: number | null;
+  shopifyInventoryCount: number;
 };
 
 type CjSkuMetadata = {
@@ -47,13 +51,22 @@ type CjSkuMetadata = {
   cjProductId: string | null;
   cjVariantId: string | null;
   cjProductName: string | null;
+  barcode: string | null;
+  barcode2: string | null;
   cjAreaId: string | null;
   cjAreaEn: string | null;
   countryCode: string | null;
 };
 
+type LocalProductIndexEntry = {
+  product: LocalProduct;
+  score: number;
+  ambiguous: boolean;
+};
+
 type NormalizedInventoryRow = {
   sku: string;
+  cjInternalSku: string;
   productId: string | null;
   productName: string | null;
   cjProductId: string | null;
@@ -161,6 +174,8 @@ function metadataFromPrivateInventorySku(
     cjProductId: stringOrNull(row.productId),
     cjVariantId: stringOrNull(row.variantId),
     cjProductName,
+    barcode: null,
+    barcode2: null,
     cjAreaId: stringOrNull(row.storageId),
     cjAreaEn: null,
     countryCode: null,
@@ -232,6 +247,105 @@ async function collectCjPrivateInventorySkus(
   return bySku;
 }
 
+function productIndexScore(product: LocalProduct) {
+  let score = 0;
+  if (!product.sku.includes("__VARIANT_")) score += 8;
+  if (product.shopifyInventoryCount > 0) score += 4;
+  if (product.stockCount != null) score += 2;
+  return score;
+}
+
+function addPreferredProductIndex(
+  index: Map<string, LocalProductIndexEntry>,
+  value: string | null | undefined,
+  product: LocalProduct,
+) {
+  const key = value?.trim();
+  if (!key) return;
+
+  const score = productIndexScore(product);
+  const existing = index.get(key);
+  if (!existing) {
+    index.set(key, { product, score, ambiguous: false });
+    return;
+  }
+
+  if (existing.product.id === product.id) return;
+
+  if (score > existing.score) {
+    index.set(key, { product, score, ambiguous: false });
+    return;
+  }
+
+  if (score === existing.score) {
+    existing.ambiguous = true;
+  }
+}
+
+function getPreferredProduct(
+  index: Map<string, LocalProductIndexEntry>,
+  value: string | null | undefined,
+) {
+  const key = value?.trim();
+  if (!key) return null;
+
+  const entry = index.get(key);
+  if (!entry || entry.ambiguous) return null;
+  return entry.product;
+}
+
+async function enrichCjPrivateInventorySkusWithVariantMetadata(input: {
+  client: CjDropshippingClient;
+  accessToken: string;
+  cjInventoryBySku: Map<
+    string,
+    { metadata: CjSkuMetadata; summary: CjPrivateInventorySkuRow }
+  >;
+}) {
+  const productIds = [
+    ...new Set(
+      [...input.cjInventoryBySku.values()]
+        .map((row) => row.metadata.cjProductId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  for (const productId of productIds) {
+    let variants: CjVariant[];
+    try {
+      variants = await input.client.queryVariants({
+        accessToken: input.accessToken,
+        pid: productId,
+      });
+    } catch (error) {
+      console.warn("[cjdropshipping-sync] could not load CJ variant metadata", {
+        cjProductId: productId,
+        error: errorMessage(error),
+      });
+      continue;
+    }
+
+    for (const variant of Array.isArray(variants) ? variants : []) {
+      const sku = normalizeCjSku(variant.variantSku);
+      if (!sku) continue;
+
+      const inventory = input.cjInventoryBySku.get(sku);
+      if (!inventory) continue;
+
+      inventory.metadata.cjProductId =
+        stringOrNull(variant.pid) ?? inventory.metadata.cjProductId;
+      inventory.metadata.cjVariantId =
+        stringOrNull(variant.vid) ?? inventory.metadata.cjVariantId;
+      inventory.metadata.barcode =
+        stringOrNull(variant.barcode) ?? inventory.metadata.barcode;
+      inventory.metadata.barcode2 =
+        stringOrNull(variant.barcode2) ?? inventory.metadata.barcode2;
+      inventory.metadata.cjProductName =
+        inventory.metadata.cjProductName ?? stringOrNull(variant.variantNameEn);
+    }
+  }
+}
+
 async function collectCjPrivateInventoryStores(
   client: CjDropshippingClient,
   accessToken: string,
@@ -249,6 +363,24 @@ async function collectCjPrivateInventoryStores(
     });
   }
   return byStorageId;
+}
+
+function resolveLocalProductForCjSku(input: {
+  cjSku: string;
+  metadata: CjSkuMetadata | null;
+  productsBySku: Map<string, LocalProduct>;
+  productsByUpcGtin: Map<string, LocalProductIndexEntry>;
+}) {
+  const exactSkuProduct = input.productsBySku.get(input.cjSku);
+  if (exactSkuProduct) return exactSkuProduct;
+
+  return (
+    getPreferredProduct(input.productsByUpcGtin, input.metadata?.barcode) ??
+    input.productsBySku.get(input.metadata?.barcode ?? "") ??
+    getPreferredProduct(input.productsByUpcGtin, input.metadata?.barcode2) ??
+    input.productsBySku.get(input.metadata?.barcode2 ?? "") ??
+    null
+  );
 }
 
 async function queryPrivateInventoryOrderRowsForSku(input: {
@@ -442,6 +574,7 @@ function normalizePrivateInventoryRows(input: {
 
     return {
       sku: input.sku,
+      cjInternalSku: input.sku,
       productId: input.product?.id ?? null,
       productName: input.product?.name ?? null,
       cjProductId: input.metadata.cjProductId,
@@ -472,6 +605,7 @@ function countData(
 ) {
   return {
     productId: row.productId,
+    cjInternalSku: row.cjInternalSku,
     cjProductId: row.cjProductId,
     cjVariantId: row.cjVariantId,
     cjProductName: row.cjProductName,
@@ -513,6 +647,7 @@ async function createTransaction(input: {
       productId: input.row.productId,
       productName: input.row.productName,
       sku: input.row.sku,
+      cjInternalSku: input.row.cjInternalSku,
       cjProductId: input.row.cjProductId,
       cjVariantId: input.row.cjVariantId,
       cjProductName: input.row.cjProductName,
@@ -629,6 +764,7 @@ async function syncInventoryMirrorForSku(input: {
       productId: true,
       sku: true,
       cjProductId: true,
+      cjInternalSku: true,
       cjVariantId: true,
       cjProductName: true,
       cjAreaId: true,
@@ -651,6 +787,7 @@ async function syncInventoryMirrorForSku(input: {
         storeId: input.storeId,
         row: {
           sku: count.sku,
+          cjInternalSku: count.cjInternalSku,
           productId: input.product?.id ?? count.productId,
           productName: input.product?.name ?? count.product?.name ?? null,
           cjProductId: input.metadata?.cjProductId ?? count.cjProductId,
@@ -798,6 +935,11 @@ export async function syncCjDropshippingIntegrationById(
     const client = new CjDropshippingClient();
     const accessToken = await ensureCjAccessToken(integration.id, client);
     const cjInventoryBySku = await collectCjPrivateInventorySkus(client, accessToken);
+    await enrichCjPrivateInventorySkusWithVariantMetadata({
+      client,
+      accessToken,
+      cjInventoryBySku,
+    });
     const warehousesByStorageId = await collectCjPrivateInventoryStores(
       client,
       accessToken,
@@ -805,15 +947,31 @@ export async function syncCjDropshippingIntegrationById(
 
     const products = await prisma.product.findMany({
       where: { storeId: integration.storeId },
-      select: { id: true, name: true, sku: true },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        upcGtin: true,
+        stockCount: true,
+        _count: { select: { shopifyInventoryCounts: true } },
+      },
       orderBy: { sku: "asc" },
     });
 
     const productsBySku = new Map<string, LocalProduct>();
+    const productsByUpcGtin = new Map<string, LocalProductIndexEntry>();
     for (const product of products) {
+      const localProduct: LocalProduct = {
+        id: product.id,
+        name: product.name,
+        sku: product.sku,
+        upcGtin: product.upcGtin,
+        stockCount: product.stockCount,
+        shopifyInventoryCount: product._count.shopifyInventoryCounts,
+      };
       const sku = product.sku.trim();
-      if (!sku || productsBySku.has(sku)) continue;
-      productsBySku.set(sku, product);
+      if (sku && !productsBySku.has(sku)) productsBySku.set(sku, localProduct);
+      addPreferredProductIndex(productsByUpcGtin, product.upcGtin, localProduct);
     }
 
     const previouslyMirroredSkus =
@@ -839,9 +997,14 @@ export async function syncCjDropshippingIntegrationById(
     let movementCount = 0;
 
     for (const [index, sku] of allSkus.entries()) {
-      const product = productsBySku.get(sku) ?? null;
       const cjInventory = cjInventoryBySku.get(sku) ?? null;
       const metadata = cjInventory?.metadata ?? null;
+      const product = resolveLocalProductForCjSku({
+        cjSku: sku,
+        metadata,
+        productsBySku,
+        productsByUpcGtin,
+      });
       const orderRows = cjInventory
         ? await queryPrivateInventoryOrderRowsForSku({ client, accessToken, sku })
         : [];
@@ -857,7 +1020,7 @@ export async function syncCjDropshippingIntegrationById(
         : [];
       const hasCjInventoryRow = rows.length > 0;
 
-      if (hasCjInventoryRow && product) localSkusWithInventory.add(sku);
+      if (hasCjInventoryRow && product) localSkusWithInventory.add(product.sku);
 
       const stats = await prisma.$transaction(async (tx) => {
         const mirrorStats = await syncInventoryMirrorForSku({
@@ -911,7 +1074,15 @@ export async function syncCjDropshippingIntegrationById(
       skipped: false,
       syncedSkuCount: allCjSkus.size,
       matchedSkuCount,
-      unmatchedCjSkuCount: [...allCjSkus].filter((sku) => !productsBySku.has(sku)).length,
+      unmatchedCjSkuCount: [...allCjSkus].filter(
+        (sku) =>
+          !resolveLocalProductForCjSku({
+            cjSku: sku,
+            metadata: cjInventoryBySku.get(sku)?.metadata ?? null,
+            productsBySku,
+            productsByUpcGtin,
+          }),
+      ).length,
       unmatchedLocalSkuCount: [...productsBySku.keys()].filter(
         (sku) => !localSkusWithInventory.has(sku),
       ).length,

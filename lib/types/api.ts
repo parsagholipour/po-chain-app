@@ -227,6 +227,7 @@ export type CjDropshippingInventoryCountRow = {
   productName: string | null;
   sku: string;
   localSku: string | null;
+  cjInternalSku: string;
   cjProductId: string | null;
   cjVariantId: string | null;
   cjProductName: string | null;
@@ -251,6 +252,8 @@ export type CjDropshippingInventoryTransactionRow = {
   productId: string | null;
   productName: string | null;
   sku: string;
+  localSku: string | null;
+  cjInternalSku: string;
   cjProductId: string | null;
   cjVariantId: string | null;
   cjProductName: string | null;

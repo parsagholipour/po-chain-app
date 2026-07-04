@@ -57,6 +57,8 @@ export type CjVariant = {
   variantNameEn?: string | null;
   variantImage?: string | null;
   variantSku?: string | null;
+  barcode?: string | null;
+  barcode2?: string | null;
   variantKey?: string | null;
   variantStandard?: string | null;
 };

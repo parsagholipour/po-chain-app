@@ -478,7 +478,7 @@ function CjDropshippingInventoryMirrorCard() {
           <Input
             value={search}
             onChange={(event) => updateSearch(event.target.value)}
-            placeholder="Search product, SKU, or warehouse"
+            placeholder="Search product, local SKU, CJ SKU, or warehouse"
             className="sm:flex-1"
           />
           <Select value={warehouseId} onValueChange={updateWarehouse}>
@@ -531,7 +531,8 @@ function CjDropshippingInventoryMirrorCard() {
                           {row.productName ?? row.cjProductName ?? "Unmatched CJ product"}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          SKU {row.sku}
+                          {row.localSku ? `Local SKU ${row.localSku} / ` : ""}
+                          CJ SKU {row.cjInternalSku}
                           {!row.productId ? " / No local product" : ""}
                         </p>
                       </td>
@@ -609,7 +610,8 @@ function CjDropshippingInventoryMirrorCard() {
                           {row.productName ?? row.cjProductName ?? "Unmatched CJ product"}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          SKU {row.sku}
+                          {row.localSku ? `Local SKU ${row.localSku} / ` : ""}
+                          CJ SKU {row.cjInternalSku}
                           {!row.productId ? " / No local product" : ""}
                         </p>
                       </td>

@@ -22,6 +22,7 @@ function countRow(row: {
   id: string;
   productId: string | null;
   sku: string;
+  cjInternalSku: string;
   cjProductId: string | null;
   cjVariantId: string | null;
   cjProductName: string | null;
@@ -42,6 +43,7 @@ function countRow(row: {
     productName: row.product?.name ?? row.cjProductName ?? null,
     sku: row.sku,
     localSku: row.product?.sku ?? null,
+    cjInternalSku: row.cjInternalSku,
     cjProductId: row.cjProductId,
     cjVariantId: row.cjVariantId,
     cjProductName: row.cjProductName,
@@ -82,6 +84,7 @@ export async function GET(request: Request) {
   if (q) {
     where.OR = [
       { sku: { contains: q, mode: "insensitive" } },
+      { cjInternalSku: { contains: q, mode: "insensitive" } },
       { cjProductName: { contains: q, mode: "insensitive" } },
       { cjAreaEn: { contains: q, mode: "insensitive" } },
       { countryNameEn: { contains: q, mode: "insensitive" } },
@@ -102,6 +105,7 @@ export async function GET(request: Request) {
         id: true,
         productId: true,
         sku: true,
+        cjInternalSku: true,
         cjProductId: true,
         cjVariantId: true,
         cjProductName: true,
