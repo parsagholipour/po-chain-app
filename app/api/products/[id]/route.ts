@@ -6,6 +6,10 @@ import {
 } from "@/lib/validations/master-data";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { requireStoreContext } from "@/lib/store-context";
+import {
+  emitProductDeletedEvent,
+  emitProductEvent,
+} from "@/lib/webhooks/product-events";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -121,6 +125,7 @@ export async function PATCH(
       data: productUpdateToPrisma(parsed.data),
       include: { defaultManufacturer: true, category: true, type: true, collection: true },
     });
+    await emitProductEvent({ storeId, productId: row.id, event: "product.updated" });
     return NextResponse.json(row);
   } catch (e) {
     const j = jsonFromPrisma(e);
@@ -142,10 +147,20 @@ export async function DELETE(
   if (!pid.success) return jsonFromZod(pid.error);
 
   try {
+    // Read identifiers first: the deleted row still has to be described in the
+    // product.deleted webhook payload.
+    const existing = await prisma.product.findFirst({
+      where: { id: pid.data.id, storeId },
+      select: { id: true, sku: true, name: true },
+    });
+    if (!existing) return jsonError("Not found", 404);
+
     const deleted = await prisma.product.deleteMany({
       where: { id: pid.data.id, storeId },
     });
     if (deleted.count === 0) return jsonError("Not found", 404);
+
+    await emitProductDeletedEvent({ storeId, product: existing });
     return new NextResponse(null, { status: 204 });
   } catch (e) {
     const j = jsonFromPrisma(e);

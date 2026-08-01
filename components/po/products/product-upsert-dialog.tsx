@@ -85,6 +85,10 @@ export function ProductUpsertDialog({
 
   const resetKey = editing?.id ?? "new";
   const firstMf = manufacturers[0]?.id ?? "";
+  const formCategories =
+    editing?.category && (readOnly || categories.length === 0)
+      ? [editing.category]
+      : categories;
   const defaultValues: ProductFormValues = editing
     ? {
         name: editing.name,
@@ -144,7 +148,7 @@ export function ProductUpsertDialog({
         <ProductForm
           key={open ? resetKey : "idle"}
           manufacturers={manufacturers}
-          categories={readOnly && editing?.category ? [editing.category] : categories}
+          categories={formCategories}
           productTypes={readOnly && editing?.type ? [editing.type] : productTypes}
           productCollections={
             readOnly && editing?.collection ? [editing.collection] : productCollections

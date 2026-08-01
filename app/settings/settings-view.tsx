@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CustomFieldsSettingsView } from "./custom-fields-settings-view";
+import { DevelopersSettingsView } from "./developers-settings-view";
 import { IntegrationsSettingsView } from "./integrations-settings-view";
 import {
   StoreSettingsView,
@@ -9,7 +10,7 @@ import {
 } from "./store-settings-view";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-type SettingsTab = "store" | "custom-fields" | "integrations";
+type SettingsTab = "store" | "custom-fields" | "integrations" | "developers";
 
 export function SettingsView({
   activeStore,
@@ -32,6 +33,7 @@ export function SettingsView({
           <TabsTrigger value="store">Store</TabsTrigger>
           <TabsTrigger value="custom-fields">Custom fields</TabsTrigger>
           <TabsTrigger value="integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="developers">Developers</TabsTrigger>
         </TabsList>
         <TabsContent value="store">
           <StoreSettingsView store={activeStore} />
@@ -41,6 +43,9 @@ export function SettingsView({
         </TabsContent>
         <TabsContent value="integrations">
           <IntegrationsSettingsView />
+        </TabsContent>
+        <TabsContent value="developers">
+          <DevelopersSettingsView />
         </TabsContent>
       </Tabs>
     </div>

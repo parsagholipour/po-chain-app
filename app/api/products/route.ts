@@ -7,6 +7,7 @@ import {
 } from "@/lib/validations/master-data";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { requireStoreContext } from "@/lib/store-context";
+import { emitProductEvent } from "@/lib/webhooks/product-events";
 import type { Prisma } from "@/app/generated/prisma/client";
 
 export const runtime = "nodejs";
@@ -180,6 +181,7 @@ export async function POST(request: Request) {
       },
       include: { defaultManufacturer: true, category: true, type: true, collection: true },
     });
+    await emitProductEvent({ storeId, productId: row.id, event: "product.created" });
     return NextResponse.json(row, { status: 201 });
   } catch (e) {
     const j = jsonFromPrisma(e);

@@ -45,7 +45,8 @@ import {
   productEditingStatusValues,
 } from "@/lib/product-editing-status";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
-import { Loader2 } from "lucide-react";
+import { getProductSkuWarnings } from "./product-sku-patterns";
+import { Loader2, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
 function emptyToMoney(value: unknown): unknown {
@@ -170,9 +171,21 @@ export function ProductForm({
     resolver: zodResolver(schema) as Resolver<ProductFormValues>,
     defaultValues: normalizedDefaultValues,
   });
-  const { isSubmitting } = useFormState({ control: form.control });
+  const { dirtyFields, isSubmitting } = useFormState({ control: form.control });
   const watchedValues = useWatch({ control: form.control });
   const nativeValues = { ...(watchedValues as Record<string, unknown>), stockCount };
+  const selectedCategoryName =
+    typeof watchedValues.categoryId === "string"
+      ? categories.find((category) => category.id === watchedValues.categoryId)
+          ?.name
+      : null;
+  const skuWarnings = readOnly
+    ? []
+    : getProductSkuWarnings({
+        name: watchedValues.name ?? "",
+        sku: watchedValues.sku ?? "",
+        categoryName: selectedCategoryName,
+      });
 
   const storedImageKey =
     removeStoredImage || imageFile ? null : (defaultValues.imageKey ?? null);
@@ -187,6 +200,36 @@ export function ProductForm({
 
   async function handleSubmit(values: ProductFormValues) {
     if (readOnly || !onSubmit) return;
+    const submittedCategoryName =
+      typeof values.categoryId === "string"
+        ? categories.find((category) => category.id === values.categoryId)?.name
+        : null;
+    const submittedSkuWarnings = getProductSkuWarnings({
+      name: values.name,
+      sku: values.sku,
+      categoryName: submittedCategoryName,
+    });
+    const patternFieldsChanged =
+      !editingId ||
+      dirtyFields.name ||
+      dirtyFields.sku ||
+      dirtyFields.categoryId;
+
+    if (submittedSkuWarnings.length > 0 && patternFieldsChanged) {
+      const shouldSave = await confirm({
+        title: "SKU may not match product conventions",
+        description: submittedSkuWarnings
+          .map((warning) => warning.message)
+          .join(" "),
+        confirmLabel: "Save anyway",
+        cancelLabel: "Review SKU",
+      });
+      if (!shouldSave) {
+        window.setTimeout(() => form.setFocus("sku"), 0);
+        return;
+      }
+    }
+
     let imageKey: string | null;
     if (imageFile) {
       try {
@@ -279,6 +322,27 @@ export function ProductForm({
             <FieldContent>
               <Input id="pf-sku" {...form.register("sku")} />
               <FieldError errors={[form.formState.errors.sku]} />
+              {skuWarnings.length > 0 ? (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="mt-1 flex items-start gap-2 text-sm text-amber-700 dark:text-amber-300"
+                >
+                  <TriangleAlert
+                    aria-hidden="true"
+                    className="mt-0.5 size-4 shrink-0"
+                  />
+                  {skuWarnings.length === 1 ? (
+                    <p>{skuWarnings[0].message}</p>
+                  ) : (
+                    <ul className="ml-4 list-disc space-y-1">
+                      {skuWarnings.map((warning) => (
+                        <li key={warning.id}>{warning.message}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : null}
             </FieldContent>
           </Field>
           {!readOnly ? (

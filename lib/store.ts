@@ -180,23 +180,43 @@ export async function syncUserWithDefaultStore({
       select: { id: true, name: true },
     });
 
-    const user = await tx.user.upsert({
-      where: { keycloakSub },
-      create: {
-        keycloakSub,
-        email,
-        name,
-        realEmail: realEmail ?? null,
-        realName: realName ?? null,
-        type: "internal",
-      },
-      update: {
-        email,
-        name,
-        ...(realEmail !== undefined ? { realEmail } : {}),
-        ...(realName !== undefined ? { realName } : {}),
-      },
+    // A Keycloak user can be recreated with the same email and a new subject.
+    // Reattach that identity to the existing app user so its stores, role, and
+    // related records survive instead of failing the unique email constraint.
+    const existingUserByEmail = await tx.user.findUnique({
+      where: { email },
+      select: { id: true, keycloakSub: true },
     });
+
+    const user =
+      existingUserByEmail && existingUserByEmail.keycloakSub !== keycloakSub
+        ? await tx.user.update({
+            where: { id: existingUserByEmail.id },
+            data: {
+              keycloakSub,
+              email,
+              name,
+              ...(realEmail !== undefined ? { realEmail } : {}),
+              ...(realName !== undefined ? { realName } : {}),
+            },
+          })
+        : await tx.user.upsert({
+            where: { keycloakSub },
+            create: {
+              keycloakSub,
+              email,
+              name,
+              realEmail: realEmail ?? null,
+              realName: realName ?? null,
+              type: "internal",
+            },
+            update: {
+              email,
+              name,
+              ...(realEmail !== undefined ? { realEmail } : {}),
+              ...(realName !== undefined ? { realName } : {}),
+            },
+          });
 
     await tx.userStore.createMany({
       data: [

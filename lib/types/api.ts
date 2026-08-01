@@ -916,3 +916,55 @@ export type RecommendedOpenItem = {
   status: string;
   updatedAt: string;
 };
+
+/** Public API tokens and outbound webhooks (Settings > Developers). */
+export type ApiTokenRow = {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  last4: string;
+  scopes: string[];
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  requestCount: number;
+  revokedAt: string | null;
+  createdAt: string;
+  createdByName: string | null;
+  active: boolean;
+  expired: boolean;
+};
+
+/** The plaintext token is present on the create response only. */
+export type ApiTokenCreateResponse = ApiTokenRow & { token: string };
+
+export type WebhookEndpointRow = {
+  id: string;
+  url: string;
+  description: string | null;
+  events: string[];
+  enabled: boolean;
+  secretLast4: string;
+  consecutiveFailures: number;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  disabledAt: string | null;
+  createdAt: string;
+};
+
+/** The signing secret is present on create and rotate responses only. */
+export type WebhookEndpointSecretResponse = WebhookEndpointRow & { secret: string };
+
+export type WebhookDeliveryStatus = "pending" | "succeeded" | "failed";
+
+export type WebhookDeliveryRow = {
+  id: string;
+  event: string;
+  status: WebhookDeliveryStatus;
+  attemptCount: number;
+  nextAttemptAt: string | null;
+  deliveredAt: string | null;
+  responseStatus: number | null;
+  lastError: string | null;
+  createdAt: string;
+  endpoint: { id: string; url: string };
+};

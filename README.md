@@ -86,6 +86,36 @@ APP_PORT=4001 make docker-dev-build
 
 The same pattern works for `POSTGRES_PORT`, `MAILHOG_SMTP_PORT`, `MAILHOG_UI_PORT`, `MINIO_API_PORT`, and `MINIO_CONSOLE_PORT`.
 
+## Authentication
+
+The application uses Auth.js with Keycloak OIDC, Prisma-backed application authorization, and an application session registry for revocation. See [Authentication, User Management, and Super Admin](docs/AUTH-AUTHJS-KEYCLOAK.md) for the exact sign-in callbacks, claim mapping, user lifecycle, super-admin panel, route protection, session behavior, and logout flow.
+
+## Public API and webhooks
+
+External services integrate through a store-scoped, token-authenticated API at
+`/api/v1` and outbound webhooks. See [Public API and Webhooks](docs/PUBLIC-API.md) for
+the full reference: endpoints, query parameters, error codes, signature verification,
+and retry behaviour.
+
+Store admins manage both from **Settings → Developers**:
+
+- **API tokens** — `Authorization: Bearer poa_…`, scoped (`products:read`), optionally
+  expiring, revocable. Only the SHA-256 hash is stored; the value is shown once.
+- **Webhook endpoints** — subscribe to `product.created` / `product.updated` /
+  `product.deleted`. Each delivery is signed with a per-endpoint secret in
+  `X-PO-Signature` and retried with backoff for about nine hours through the
+  `WebhookDelivery` outbox.
+
+Currently exposed: read-only products with their manufacturer, category, type, and
+collection embedded.
+
+| Variable | Purpose |
+| -------- | ------- |
+| `WEBHOOK_SIGNING_ENCRYPTION_KEY` | pgcrypto passphrase for webhook signing secrets. Keep stable. Falls back to `PAYMENT_PROVIDER_ENCRYPTION_KEY`. |
+| `WEBHOOK_INTERNAL_DISPATCH_ENABLED` | Optional; defaults enabled. Set to `false` to disable the in-process retry sweep. |
+| `WEBHOOK_DISPATCH_TOKEN` | Optional bearer token for `POST /api/webhook-deliveries/dispatch`. |
+| `PUBLIC_API_RATE_LIMIT_MAX` / `PUBLIC_API_RATE_LIMIT_WINDOW_MS` | Optional per-token rate limit; defaults to 120 requests per minute. |
+
 ## Email and notifications
 
 Transactional email is handled by the server-only [`EmailService`](lib/services/email.ts). It uses an adapter so local development can send through MailHog SMTP while production sends through SendGrid. Important notifications are stored in-app and queued into `NotificationEmailDelivery` outbox rows for retryable delivery.
