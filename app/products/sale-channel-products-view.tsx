@@ -18,6 +18,7 @@ import {
   writeBrowserStorageItem,
 } from "@/app/new-order/browser-storage";
 import { useClientReady } from "@/hooks/use-client-ready";
+import { useSaleChannelPricing } from "@/hooks/use-sale-channel-pricing";
 import {
   LIST_FILTER_ALL_VALUE,
   normalizeListFilterText,
@@ -25,6 +26,7 @@ import {
   useListFilterState,
 } from "@/hooks/use-list-filters";
 import { productEditingStatusLabels } from "@/lib/product-editing-status";
+import { saleChannelProductPrice } from "@/lib/store-pricing";
 import { storageDownloadUrl } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 
@@ -97,7 +99,9 @@ function barcodeDownloadUrl(row: SaleChannelProduct) {
   return absoluteAppUrl(storageDownloadUrl(row.barcodeKey));
 }
 
-const saleChannelProductExportColumns: SaleChannelProductExportColumn[] = [
+const saleChannelProductExportColumns = (
+  priceLabel: string,
+): SaleChannelProductExportColumn[] => [
   { label: "SKU", value: (row) => row.sku, width: 120 },
   { label: "Product Name", value: (row) => row.name, width: 260 },
   { label: "UPC/GTIN", value: (row) => row.upcGtin, width: 140 },
@@ -106,8 +110,8 @@ const saleChannelProductExportColumns: SaleChannelProductExportColumn[] = [
   { label: "MSRP", value: (row) => numericExportValue(row.msrp), width: 90 },
   { label: "MAP", value: (row) => numericExportValue(row.map), width: 90 },
   {
-    label: "Wholesale Price",
-    value: (row) => numericExportValue(row.wholesalePrice),
+    label: priceLabel,
+    value: (row) => numericExportValue(saleChannelProductPrice(row)),
     width: 110,
   },
   { label: "MOQ", value: (row) => numericExportValue(row.moq), width: 70 },
@@ -219,22 +223,21 @@ function categoryProductGroups(rows: SaleChannelProduct[]) {
   });
 }
 
-function buildSaleChannelProductsWorkbook(rows: SaleChannelProduct[]) {
+function buildSaleChannelProductsWorkbook(rows: SaleChannelProduct[], priceLabel: string) {
   const usedSheetNames = new Set<string>();
-  const columns = saleChannelProductExportColumns
+  const exportColumns = saleChannelProductExportColumns(priceLabel);
+  const columns = exportColumns
     .map((column) => `<Column ss:AutoFitWidth="0" ss:Width="${column.width}"/>`)
     .join("");
   const headerRow = workbookRow(
-    saleChannelProductExportColumns.map((column) => column.label),
+    exportColumns.map((column) => column.label),
     "Header",
   );
   const worksheets = categoryProductGroups(rows)
     .map((group) => {
       const sheetName = uniqueSheetName(group.name, usedSheetNames);
       const productRows = group.rows
-        .map((row) =>
-          workbookRow(saleChannelProductExportColumns.map((column) => column.value(row))),
-        )
+        .map((row) => workbookRow(exportColumns.map((column) => column.value(row))))
         .join("");
 
       return `<Worksheet ss:Name="${escapeXml(sheetName)}"><Table>${columns}${headerRow}${productRows}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><FreezePanes/><FrozenNoSplit/><SplitHorizontal>1</SplitHorizontal><TopRowBottomPane>1</TopRowBottomPane><ActivePane>2</ActivePane></WorksheetOptions></Worksheet>`;
@@ -249,10 +252,10 @@ ${worksheets}
 </Workbook>`;
 }
 
-function downloadSaleChannelProductsWorkbook(rows: SaleChannelProduct[]) {
+function downloadSaleChannelProductsWorkbook(rows: SaleChannelProduct[], priceLabel: string) {
   if (rows.length === 0) return;
 
-  const workbook = buildSaleChannelProductsWorkbook(rows);
+  const workbook = buildSaleChannelProductsWorkbook(rows, priceLabel);
   const blob = new Blob([workbook], {
     type: "application/vnd.ms-excel;charset=utf-8",
   });
@@ -347,6 +350,7 @@ function sameCategoryNavFrame(a: CategoryNavFrame, b: CategoryNavFrame) {
 export function SaleChannelProductsView() {
   const clientReady = useClientReady();
   const router = useRouter();
+  const { priceLabel } = useSaleChannelPricing();
   const productFilters = useListFilterState({ initialFilters: filterDefaults });
   const debouncedSearch = useDebouncedValue(productFilters.search);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
@@ -750,7 +754,7 @@ export function SaleChannelProductsView() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => downloadSaleChannelProductsWorkbook(data)}
+          onClick={() => downloadSaleChannelProductsWorkbook(data, priceLabel)}
           disabled={isPending || data.length === 0}
           className="w-fit"
         >

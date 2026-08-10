@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { CustomFieldDefinition, CustomFieldValue } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { requireStoreContext } from "@/lib/store-context";
+import { isStoreSaleChannelContext, requireStoreContext } from "@/lib/store-context";
+import { storePriceFromMsrp } from "@/lib/store-pricing";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,7 @@ export async function GET() {
   const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
+  const storePricing = isStoreSaleChannelContext(authz.context);
 
   const [products, customDefinitions] = await Promise.all([
     prisma.product.findMany({
@@ -102,7 +104,8 @@ export async function GET() {
       collection: product.collection,
       msrp: product.msrp,
       map: product.map,
-      wholesalePrice: product.price,
+      wholesalePrice: storePricing ? null : product.price,
+      storePrice: storePricing ? storePriceFromMsrp(product.msrp) : null,
       moq: product.mop,
       imageLink: product.imageLink,
       imageKey: product.imageKey,

@@ -444,7 +444,10 @@ export type SaleChannelProduct = {
   collection: ProductCollection | null;
   msrp: string | number | null;
   map: string | number | null;
+  /** Null for store sale channels, which pay `storePrice` instead. */
   wholesalePrice: string | number | null;
+  /** 50% of MSRP; only set for store sale channels. */
+  storePrice: string | number | null;
   moq: number | null;
   imageLink: string;
   imageKey: string | null;

@@ -9,7 +9,10 @@ import {
   isDistributorContext,
   requireStoreContext,
 } from "@/lib/store-context";
-import { productPricingSnapshot } from "@/lib/purchase-order-line-pricing";
+import {
+  MissingStorePriceError,
+  productPricingSnapshot,
+} from "@/lib/purchase-order-line-pricing";
 import { purchaseOrderLineApiInclude } from "@/lib/purchase-order-include";
 import {
   purchaseOrderLineFromPrisma,
@@ -98,6 +101,7 @@ export async function POST(
       storeId,
       type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
     },
+    select: { id: true, saleChannel: { select: { type: true } } },
   });
   if (!po) return jsonError("Purchase order not found", 404);
 
@@ -124,7 +128,7 @@ export async function POST(
           productId: parsed.data.productId,
           storeId,
           createdById: userId,
-          ...productPricingSnapshot(product),
+          ...productPricingSnapshot(product, { saleChannelType: po.saleChannel?.type }),
           quantity: parsed.data.quantity,
           orderedQuantity: parsed.data.quantity,
         },
@@ -138,6 +142,9 @@ export async function POST(
     });
     return NextResponse.json(purchaseOrderLineFromPrisma(line), { status: 201 });
   } catch (e) {
+    if (e instanceof MissingStorePriceError) {
+      return jsonError(e.message, 400);
+    }
     const j = jsonFromPrisma(e);
     if (j) return j;
     throw e;

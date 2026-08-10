@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { Plus, Search } from "lucide-react";
 import type { SaleChannelProduct } from "@/lib/types/api";
+import { useSaleChannelPricing } from "@/hooks/use-sale-channel-pricing";
+import { saleChannelProductPrice } from "@/lib/store-pricing";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,7 +62,7 @@ function productSearchFields(product: SaleChannelProduct) {
     product.editionStatus,
     product.msrp,
     product.map,
-    product.wholesalePrice,
+    saleChannelProductPrice(product),
     product.moq,
     product.stockCount,
     product.quantityPerCarton,
@@ -222,6 +224,7 @@ function ProductPickerRow({
   checked: boolean;
   onToggle: (productId: string, checked: boolean) => void;
 }) {
+  const { priceShortLabel } = useSaleChannelPricing();
   const checkboxId = `product-picker-${product.id}`;
 
   return (
@@ -260,8 +263,8 @@ function ProductPickerRow({
               </div>
             </div>
             <div className="text-right">
-              <div className="text-xs text-muted-foreground">Wholesale</div>
-              <PriceView value={product.wholesalePrice} className="font-medium" />
+              <div className="text-xs text-muted-foreground">{priceShortLabel}</div>
+              <PriceView value={saleChannelProductPrice(product)} className="font-medium" />
             </div>
           </div>
 

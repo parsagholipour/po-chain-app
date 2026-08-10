@@ -17,7 +17,10 @@ import type { Prisma } from "@/app/generated/prisma/client";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
-import { productPricingSnapshot } from "@/lib/purchase-order-line-pricing";
+import {
+  MissingStorePriceError,
+  productPricingSnapshot,
+} from "@/lib/purchase-order-line-pricing";
 import {
   findLinesMissingProductAssets,
   formatMissingProductAssetsError,
@@ -297,7 +300,10 @@ export async function POST(request: Request) {
         locationSnapshot = purchaseOrderDestinationFromLocation(location);
       }
 
-      const productPricingById = new Map<string, { cost: unknown; price: unknown }>();
+      const productPricingById = new Map<
+        string,
+        { cost: unknown; price: unknown; msrp: unknown; sku: string; name: string }
+      >();
       if (lines.length > 0) {
         const pIds = [...new Set(lines.map((l) => l.productId))];
         const products = await tx.product.findMany({
@@ -306,6 +312,7 @@ export async function POST(request: Request) {
             id: true,
             cost: true,
             price: true,
+            msrp: true,
             name: true,
             sku: true,
             barcodeKey: true,
@@ -356,7 +363,7 @@ export async function POST(request: Request) {
             productId: line.productId,
             storeId,
             createdById: userId,
-            ...productPricingSnapshot(productPricing),
+            ...productPricingSnapshot(productPricing, { saleChannelType: sc.type }),
             quantity: line.quantity,
             orderedQuantity: line.quantity,
           },
@@ -387,6 +394,9 @@ export async function POST(request: Request) {
       status: 201,
     });
   } catch (e) {
+    if (e instanceof MissingStorePriceError) {
+      return jsonError(e.message, 400);
+    }
     if (e instanceof Error) {
       if (e.message === "SALE_CHANNEL_NOT_FOUND") {
         return jsonError("Sale channel was not found", 400);

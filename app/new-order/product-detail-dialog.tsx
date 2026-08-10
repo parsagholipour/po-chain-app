@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import type { SaleChannelLocation, SaleChannelProduct } from "@/lib/types/api";
+import { useSaleChannelPricing } from "@/hooks/use-sale-channel-pricing";
 import { productEditingStatusLabels } from "@/lib/product-editing-status";
+import { saleChannelProductPrice } from "@/lib/store-pricing";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -113,6 +115,8 @@ export function ProductDetailDialog({
   quantities: OrderLineQuantity[];
   rowTotal: number | null;
 }) {
+  const { priceLabel } = useSaleChannelPricing();
+
   if (!product) return null;
 
   const lineQuantityTotal = quantities.reduce((sum, entry) => sum + entry.quantity, 0);
@@ -143,8 +147,8 @@ export function ProductDetailDialog({
               </div>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <DetailField label="Wholesale price">
-                  <PriceView value={product.wholesalePrice} className="font-medium" />
+                <DetailField label={priceLabel}>
+                  <PriceView value={saleChannelProductPrice(product)} className="font-medium" />
                 </DetailField>
                 <DetailField label="MSRP">
                   <PriceView value={product.msrp} />

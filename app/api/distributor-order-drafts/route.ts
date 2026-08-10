@@ -16,6 +16,7 @@ import {
   requireStoreContext,
 } from "@/lib/store-context";
 import { getStripeCredentialsForStore } from "@/lib/payments/stripe-settings";
+import { missingStorePriceMessage, storePriceCentsFromMsrp } from "@/lib/store-pricing";
 import { PaymentProviderConfigError } from "@/lib/payments/types";
 import { saleChannelLocationCreateSchema } from "@/lib/validations/master-data";
 
@@ -301,7 +302,15 @@ export async function POST(request: Request) {
 
       const products = await tx.product.findMany({
         where: { id: { in: productIds }, storeId },
-        select: { id: true, name: true, sku: true, cost: true, price: true, editingStatus: true },
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          cost: true,
+          price: true,
+          msrp: true,
+          editingStatus: true,
+        },
       });
       if (products.length !== productIds.length) {
         throw new Error("PRODUCT_NOT_FOUND");
@@ -312,9 +321,14 @@ export async function POST(request: Request) {
         if (product.editingStatus === "discontinued") {
           throw new Error(`DISCONTINUED_PRODUCT:${product.sku}:${product.name}`);
         }
-        const priceCents = moneyToCents(product.price);
+        const priceCents =
+          saleChannel.type === "store"
+            ? storePriceCentsFromMsrp(product.msrp)
+            : moneyToCents(product.price);
         if (priceCents == null || priceCents <= 0) {
-          throw new Error(`MISSING_PRICE:${product.sku}:${product.name}`);
+          throw new Error(
+            `${saleChannel.type === "store" ? "MISSING_MSRP" : "MISSING_PRICE"}:${product.sku}:${product.name}`,
+          );
         }
         productMap.set(product.id, {
           id: product.id,
@@ -659,6 +673,10 @@ export async function POST(request: Request) {
       if (e.message.startsWith("MISSING_PRICE:")) {
         const [, sku, name] = e.message.split(":");
         return jsonError(`Product ${sku} - ${name} does not have a valid price`, 400);
+      }
+      if (e.message.startsWith("MISSING_MSRP:")) {
+        const [, sku, name] = e.message.split(":");
+        return jsonError(missingStorePriceMessage({ sku, name }), 400);
       }
     }
     const j = jsonFromPrisma(e);

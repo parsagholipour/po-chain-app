@@ -5,7 +5,10 @@ import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { z } from "zod";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import { requireStoreContext } from "@/lib/store-context";
-import { productPricingSnapshot } from "@/lib/purchase-order-line-pricing";
+import {
+  MissingStorePriceError,
+  productPricingSnapshot,
+} from "@/lib/purchase-order-line-pricing";
 import { purchaseOrderLineApiInclude } from "@/lib/purchase-order-include";
 import { purchaseOrderLineFromPrisma } from "@/lib/shipping-api";
 import { recomputeLineQuantities } from "@/lib/po/osd-recompute";
@@ -55,6 +58,10 @@ export async function PATCH(
         type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
       },
     },
+    select: {
+      id: true,
+      purchaseOrder: { select: { saleChannel: { select: { type: true } } } },
+    },
   });
   if (!existing) return jsonError("Line not found", 404);
 
@@ -74,7 +81,14 @@ export async function PATCH(
         400,
       );
     }
-    pricingSnapshot = productPricingSnapshot(product);
+    try {
+      pricingSnapshot = productPricingSnapshot(product, {
+        saleChannelType: existing.purchaseOrder.saleChannel?.type,
+      });
+    } catch (e) {
+      if (e instanceof MissingStorePriceError) return jsonError(e.message, 400);
+      throw e;
+    }
   }
 
   const { quantity, ...restPatch } = parsed.data;

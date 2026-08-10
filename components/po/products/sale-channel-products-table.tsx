@@ -3,6 +3,7 @@
 import {
   Fragment,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -22,7 +23,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { SaleChannelProduct } from "@/lib/types/api";
+import { useSaleChannelPricing } from "@/hooks/use-sale-channel-pricing";
 import { productEditingStatusLabels } from "@/lib/product-editing-status";
+import { saleChannelProductPrice, WHOLESALE_PRICE_LABEL } from "@/lib/store-pricing";
 import { storageDownloadUrl } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
 
@@ -83,7 +86,7 @@ const saleChannelProductHeaders: {
   { key: "collection", label: "Collection" },
   { key: "msrp", label: "MSRP", className: "text-end" },
   { key: "map", label: "MAP", className: "text-end" },
-  { key: "wholesalePrice", label: "Wholesale Price", className: "text-end" },
+  { key: "unitPrice", label: WHOLESALE_PRICE_LABEL, className: "text-end" },
   { key: "moq", label: "MOQ", className: "text-end" },
   { key: "imageLink", label: "Image Link" },
   { key: "barcode", label: "Barcode Image", className: "w-28" },
@@ -441,7 +444,7 @@ function SaleChannelProductRow({
         <PriceView value={row.map} />
       </TableCell>
       <TableCell className="text-end">
-        <PriceView value={row.wholesalePrice} />
+        <PriceView value={saleChannelProductPrice(row)} />
       </TableCell>
       <TableCell className="text-end">{emptyValue(row.moq)}</TableCell>
       <TableCell className="max-w-56 truncate">
@@ -480,6 +483,14 @@ export function SaleChannelProductsTable({
   onRowSelectionChange,
   onRowsSelectionChange,
 }: Props) {
+  const { priceLabel } = useSaleChannelPricing();
+  const headers = useMemo(
+    () =>
+      saleChannelProductHeaders.map((header) =>
+        header.key === "unitPrice" ? { ...header, label: priceLabel } : header,
+      ),
+    [priceLabel],
+  );
   const selectableRows = groups ? groups.flatMap((group) => group.rows) : rows;
   const selectedVisibleRowCount = selectedRowIds
     ? selectableRows.reduce((count, row) => count + (selectedRowIds.has(row.id) ? 1 : 0), 0)
@@ -532,7 +543,7 @@ export function SaleChannelProductsTable({
           >
             <TableHeader>
               <TableRow>
-                {saleChannelProductHeaders.map((header, index) => {
+                {headers.map((header, index) => {
                   const width = stickyHeaderState.columnWidths[index];
 
                   return (
@@ -596,7 +607,7 @@ export function SaleChannelProductsTable({
         >
           <TableHeader>
             <TableRow data-sale-channel-products-table-header-row>
-              {saleChannelProductHeaders.map((header) => (
+              {headers.map((header) => (
                 <TableHead
                   key={header.key}
                   className={cn(

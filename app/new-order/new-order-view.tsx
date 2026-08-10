@@ -19,6 +19,7 @@ import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { useWizardDocumentUpload } from "@/lib/use-wizard-document-upload";
 import { moneyToCents } from "@/lib/distributor-orders/money";
+import { saleChannelProductPrice } from "@/lib/store-pricing";
 import type { SaleChannel, SaleChannelLocation, SaleChannelProduct } from "@/lib/types/api";
 import { cn } from "@/lib/utils";
 import { documentDisplayName } from "@/components/po/purchase-order-wizard/wizard-step-basics";
@@ -795,7 +796,7 @@ function setQuantity(row: OrderRow, locationId: string, quantity: number): Order
 }
 
 function productPriceCents(product: SaleChannelProduct | undefined) {
-  return product ? moneyToCents(product.wholesalePrice) : null;
+  return product ? moneyToCents(saleChannelProductPrice(product)) : null;
 }
 
 function canShowProductImageLink(value: string) {
@@ -2300,7 +2301,7 @@ export function NewOrderView() {
                           ) : null}
                         </TableCell>
                         <TableCell className="text-end">
-                          <PriceView value={product?.wholesalePrice} />
+                          <PriceView value={saleChannelProductPrice(product)} />
                         </TableCell>
                         <TableCell className="text-end">
                           <AvailableStockCell product={product} />
