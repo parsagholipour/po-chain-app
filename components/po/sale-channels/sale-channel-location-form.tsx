@@ -70,11 +70,22 @@ type Props = {
   defaultValues: SaleChannelLocationFormValues;
   onSubmit: (values: SaleChannelLocationFormValues) => Promise<void>;
   onCancel: () => void;
+  /** Store magic-link sessions do not manage identifiers; the location name is used instead. */
+  showIdentifier?: boolean;
 };
 
-export function SaleChannelLocationForm({ defaultValues, onSubmit, onCancel }: Props) {
+export function SaleChannelLocationForm({
+  defaultValues,
+  onSubmit,
+  onCancel,
+  showIdentifier = true,
+}: Props) {
   const form = useForm<SaleChannelLocationFormValues>({
-    resolver: zodResolver(saleChannelLocationCreateSchema) as Resolver<SaleChannelLocationFormValues>,
+    resolver: zodResolver(
+      showIdentifier
+        ? saleChannelLocationCreateSchema
+        : saleChannelLocationCreateSchema.extend({ identifier: z.string().default("") }),
+    ) as Resolver<SaleChannelLocationFormValues>,
     defaultValues,
   });
   const { isSubmitting } = useFormState({ control: form.control });
@@ -85,18 +96,22 @@ export function SaleChannelLocationForm({ defaultValues, onSubmit, onCancel }: P
     <form
       className="space-y-4"
       onSubmit={(event) => {
-        void form.handleSubmit(onSubmit)(event);
+        void form.handleSubmit((values) =>
+          onSubmit(showIdentifier ? values : { ...values, identifier: values.name }),
+        )(event);
       }}
     >
       <FieldSet>
         <FieldGroup className="grid gap-4 md:grid-cols-2">
-          <Field data-invalid={!!form.formState.errors.identifier}>
-            <FieldLabel htmlFor="scl-identifier" required>Identifier</FieldLabel>
-            <FieldContent>
-              <Input id="scl-identifier" {...form.register("identifier")} />
-              <FieldError errors={[form.formState.errors.identifier]} />
-            </FieldContent>
-          </Field>
+          {showIdentifier ? (
+            <Field data-invalid={!!form.formState.errors.identifier}>
+              <FieldLabel htmlFor="scl-identifier" required>Identifier</FieldLabel>
+              <FieldContent>
+                <Input id="scl-identifier" {...form.register("identifier")} />
+                <FieldError errors={[form.formState.errors.identifier]} />
+              </FieldContent>
+            </Field>
+          ) : null}
           <Field data-invalid={!!form.formState.errors.name}>
             <FieldLabel htmlFor="scl-name" required>Location Name</FieldLabel>
             <FieldContent>

@@ -2103,10 +2103,7 @@ export function NewOrderView() {
             <div className="space-y-3 rounded-lg border border-border/80 p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  <p className="font-medium">Session locations</p>
-                  <p className="text-sm text-muted-foreground">
-                    These locations are saved in this browser and shared across tabs.
-                  </p>
+                  <p className="font-medium">Locations</p>
                 </div>
                 <Button
                   type="button"
@@ -2681,6 +2678,7 @@ export function NewOrderView() {
       />
       {isStoreSaleChannel ? (
         <SaleChannelLocationUpsertDialog
+          showIdentifier={false}
           open={sessionLocationOpen}
           onOpenChange={(next) => {
             setSessionLocationOpen(next);

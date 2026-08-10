@@ -19,6 +19,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   editing: SaleChannelLocation | null;
   onSave: (payload: { id?: string; values: SaleChannelLocationFormValues }) => Promise<string>;
+  showIdentifier?: boolean;
 };
 
 export function SaleChannelLocationUpsertDialog({
@@ -26,6 +27,7 @@ export function SaleChannelLocationUpsertDialog({
   onOpenChange,
   editing,
   onSave,
+  showIdentifier = true,
 }: Props) {
   const resetKey = editing?.id ?? "new";
   const defaultValues = editing
@@ -41,6 +43,7 @@ export function SaleChannelLocationUpsertDialog({
         <SaleChannelLocationForm
           key={open ? resetKey : "idle"}
           defaultValues={defaultValues}
+          showIdentifier={showIdentifier}
           onCancel={() => onOpenChange(false)}
           onSubmit={async (values) => {
             await onSave({ id: editing?.id, values });
