@@ -440,10 +440,14 @@ export function ProductPickerDialog({
       ? products.filter((product) => productMatchesSearch(product, searchTokens))
       : products;
 
-    return [...matchingProducts].sort(
-      (left, right) => stockSortRank(left) - stockSortRank(right),
-    );
-  }, [products, query]);
+    return [...matchingProducts].sort((left, right) => {
+      const addedRank =
+        Number(selectedProductIds.has(left.id)) -
+        Number(selectedProductIds.has(right.id));
+      if (addedRank !== 0) return addedRank;
+      return stockSortRank(left) - stockSortRank(right);
+    });
+  }, [products, query, selectedProductIds]);
 
   const addableCheckedProductIds = useMemo(
     () =>
