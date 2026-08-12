@@ -8,20 +8,13 @@ import {
   generateMagicLinkToken,
   hashMagicLinkToken,
   STORE_MAGIC_LINK_TTL_DAYS,
+  storeMagicLinkOrigin,
   storeMagicLinkUrl,
 } from "@/lib/sale-channel-magic-links";
 
 export const runtime = "nodejs";
 
 const paramsSchema = z.object({ id: z.uuid() });
-
-function appOrigin(request: Request) {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
-    process.env.AUTH_URL?.trim() ||
-    new URL(request.url).origin
-  ).replace(/\/$/, "");
-}
 
 function magicLinkResponse(row: {
   id: string;
@@ -129,7 +122,7 @@ export async function POST(
     return NextResponse.json(
       {
         ...magicLinkResponse(row),
-        url: storeMagicLinkUrl(appOrigin(request), token),
+        url: storeMagicLinkUrl(storeMagicLinkOrigin(request.url), token),
       },
       { status: 201 },
     );

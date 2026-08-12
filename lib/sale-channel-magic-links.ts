@@ -24,6 +24,41 @@ export function storeMagicLinkUrl(origin: string, token: string) {
   return `${origin.replace(/\/$/, "")}${STORE_MAGIC_LINK_PATH_PREFIX}/${encodeURIComponent(token)}`;
 }
 
+function originFromEnv(...values: (string | undefined)[]) {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (!trimmed) continue;
+    try {
+      return new URL(trimmed).origin;
+    } catch {
+      // Ignore a malformed value and try the next candidate.
+    }
+  }
+  return null;
+}
+
+/**
+ * Origin next-auth signs users in on. The session cookie is host-only and next-auth builds
+ * its post-sign-in redirect from AUTH_URL, so anything issuing or consuming a magic link
+ * has to agree with this host - otherwise the cookie is written for the host the user is
+ * leaving and they arrive at the redirect target signed out.
+ */
+export function storeMagicLinkAuthOrigin() {
+  return originFromEnv(process.env.AUTH_URL, process.env.NEXTAUTH_URL);
+}
+
+/**
+ * Origin a newly issued magic link points at. AUTH_URL wins over NEXT_PUBLIC_APP_URL here
+ * (unlike elsewhere in the app) because the link's only job is to establish a session.
+ */
+export function storeMagicLinkOrigin(requestUrl: string) {
+  return (
+    storeMagicLinkAuthOrigin() ??
+    originFromEnv(process.env.NEXT_PUBLIC_APP_URL) ??
+    new URL(requestUrl).origin
+  );
+}
+
 async function availableStoreAppEmail(
   tx: Prisma.TransactionClient,
   saleChannelId: string,
