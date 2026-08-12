@@ -213,16 +213,94 @@ function ProductImage({
   );
 }
 
+/** Description clamped to two lines, with a "Show more" escape hatch when it overflows. */
+function ProductDescription({
+  description,
+  onShowMore,
+}: {
+  description: string;
+  onShowMore: () => void;
+}) {
+  const descriptionRef = useRef<HTMLParagraphElement>(null);
+  const [isTruncated, setIsTruncated] = useState(false);
+
+  useEffect(() => {
+    const element = descriptionRef.current;
+    if (!element) return;
+
+    const update = () => {
+      setIsTruncated(element.scrollHeight - element.clientHeight > 1);
+    };
+
+    const frame = window.requestAnimationFrame(update);
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [description]);
+
+  return (
+    <div className="space-y-0.5">
+      <p ref={descriptionRef} className="line-clamp-2 text-xs text-muted-foreground">
+        {description}
+      </p>
+      {isTruncated ? (
+        <Button
+          type="button"
+          variant="link"
+          size="xs"
+          className="h-auto px-0 text-xs"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onShowMore();
+          }}
+        >
+          Show more
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function ProductDescriptionDialog({
+  product,
+  onOpenChange,
+}: {
+  product: SaleChannelProduct | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (!product) return null;
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent size="2xl">
+        <DialogHeader>
+          <DialogTitle>{product.name}</DialogTitle>
+          <DialogDescription>Description for {product.sku}.</DialogDescription>
+        </DialogHeader>
+        <p className="text-sm whitespace-pre-wrap text-muted-foreground">
+          {product.description}
+        </p>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function ProductPickerRow({
   product,
   alreadyAdded,
   checked,
   onToggle,
+  onShowDescription,
 }: {
   product: SaleChannelProduct;
   alreadyAdded: boolean;
   checked: boolean;
   onToggle: (productId: string, checked: boolean) => void;
+  onShowDescription: (product: SaleChannelProduct) => void;
 }) {
   const { priceShortLabel, isStorePricing } = useSaleChannelPricing();
   const checkboxId = `product-picker-${product.id}`;
@@ -307,9 +385,10 @@ function ProductPickerRow({
           </div>
 
           {product.description ? (
-            <p className="max-h-10 overflow-hidden text-xs text-muted-foreground">
-              {product.description}
-            </p>
+            <ProductDescription
+              description={product.description}
+              onShowMore={() => onShowDescription(product)}
+            />
           ) : null}
         </div>
       </div>
@@ -333,6 +412,9 @@ export function ProductPickerDialog({
   onAddProducts: (productIds: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [descriptionProduct, setDescriptionProduct] = useState<SaleChannelProduct | null>(
+    null,
+  );
   const productListRef = useRef<HTMLDivElement>(null);
   const checkedProductStorageKey = storageKey ?? DEFAULT_PICKER_STORAGE_KEY;
   const productIdSet = useMemo(
@@ -528,6 +610,7 @@ export function ProductPickerDialog({
                         alreadyAdded={alreadyAdded}
                         checked={checked}
                         onToggle={toggleProduct}
+                        onShowDescription={setDescriptionProduct}
                       />
                     </div>
                   );
@@ -539,6 +622,13 @@ export function ProductPickerDialog({
             </div>
           )}
         </div>
+
+        <ProductDescriptionDialog
+          product={descriptionProduct}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setDescriptionProduct(null);
+          }}
+        />
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
