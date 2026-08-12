@@ -2093,11 +2093,11 @@ export function NewOrderView() {
       <Card className="border-border/80">
         <CardHeader>
           <CardTitle>Order Details</CardTitle>
-          <CardDescription>
-            {isStoreSaleChannel
-              ? "One purchase order will be created for each location with quantity after payment."
-              : "One purchase order will be created for each location with quantity."}
-          </CardDescription>
+          {!isStoreSaleChannel ? (
+            <CardDescription>
+              One purchase order will be created for each location with quantity.
+            </CardDescription>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-4">
           {isStoreSaleChannel ? (
