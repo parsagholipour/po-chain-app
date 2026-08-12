@@ -2018,76 +2018,76 @@ export function NewOrderView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">New Order</h1>
-          <p className="text-sm text-muted-foreground">
-            {isStoreSaleChannel
-              ? "Select products, enter quantities by location, then pay securely with Stripe."
-              : "Select products, enter quantities by location, then place your order."}
-          </p>
-        </div>
-        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:justify-end">
-          <Input
-            ref={orderImportInputRef}
-            type="file"
-            accept={ORDER_IMPORT_ACCEPT}
-            className="hidden"
-            disabled={!canImportOrderFile}
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0] ?? null;
-              event.currentTarget.value = "";
-              if (file) void importOrderFile(file);
-            }}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => orderImportInputRef.current?.click()}
-            disabled={!canImportOrderFile}
-            className="w-full sm:w-auto"
-          >
-            {isImportingOrderFile ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <FileSpreadsheet className="size-4" />
-            )}
-            Import File
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              void requestRemoveAllOrderDraft();
-            }}
-            disabled={!hasOrderDraftContent || submitOrder.isPending}
-            className="w-full sm:w-auto"
-          >
-            <Trash2 className="size-4" />
-            Remove all
-          </Button>
-          <Button
-            type="button"
-            onClick={requestSubmitOrder}
-            disabled={!canSubmit}
-            className="w-full sm:w-auto"
-          >
-            {submitOrder.isPending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : isStoreSaleChannel ? (
-              <CreditCard className="size-4" />
-            ) : (
-              <ShoppingCart className="size-4" />
-            )}
-            {isStoreSaleChannel ? (
-              <>
-                Pay {grandTotalCents > 0 ? <PriceView value={grandTotalCents / 100} /> : null}
-              </>
-            ) : (
-              "Place order"
-            )}
-          </Button>
-        </div>
+      <div className="min-w-0">
+        <h1 className="text-2xl font-semibold tracking-tight">New Order</h1>
+        <p className="text-sm text-muted-foreground">
+          {isStoreSaleChannel
+            ? "Select products, enter quantities by location, then pay securely with Stripe."
+            : "Select products, enter quantities by location, then place your order."}
+        </p>
+      </div>
+
+      {/* Sticky action bar — stays in view while the order table scrolls */}
+      <div className="sticky top-0 z-20 -mx-3 flex flex-wrap items-center justify-end gap-2 border-b border-border/80 bg-background/90 px-3 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <Input
+          ref={orderImportInputRef}
+          type="file"
+          accept={ORDER_IMPORT_ACCEPT}
+          className="hidden"
+          disabled={!canImportOrderFile}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0] ?? null;
+            event.currentTarget.value = "";
+            if (file) void importOrderFile(file);
+          }}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => orderImportInputRef.current?.click()}
+          disabled={!canImportOrderFile}
+          className="grow sm:grow-0"
+        >
+          {isImportingOrderFile ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <FileSpreadsheet className="size-4" />
+          )}
+          Import File
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            void requestRemoveAllOrderDraft();
+          }}
+          disabled={!hasOrderDraftContent || submitOrder.isPending}
+          className="grow sm:grow-0"
+        >
+          <Trash2 className="size-4" />
+          Remove all
+        </Button>
+        <Button
+          type="button"
+          onClick={requestSubmitOrder}
+          disabled={!canSubmit}
+          className="grow sm:grow-0"
+        >
+          {submitOrder.isPending ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : isStoreSaleChannel ? (
+            <CreditCard className="size-4" />
+          ) : (
+            <ShoppingCart className="size-4" />
+          )}
+          {isStoreSaleChannel ? (
+            <>
+              Pay {grandTotalCents > 0 ? <PriceView value={grandTotalCents / 100} /> : null}
+            </>
+          ) : (
+            "Place order"
+          )}
+        </Button>
       </div>
 
       <Card className="border-border/80">
