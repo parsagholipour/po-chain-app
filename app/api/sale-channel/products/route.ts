@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { CustomFieldDefinition, CustomFieldValue } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { productStockStatus } from "@/lib/product-stock-status";
 import { isStoreSaleChannelContext, requireStoreContext } from "@/lib/store-context";
 import { storePriceFromMsrp } from "@/lib/store-pricing";
 
@@ -46,6 +47,7 @@ export async function GET() {
   const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
+  /** Store accounts see neither the catalog reference prices nor the barcode/stock count. */
   const storePricing = isStoreSaleChannelContext(authz.context);
 
   const [products, customDefinitions] = await Promise.all([
@@ -109,8 +111,9 @@ export async function GET() {
       moq: product.mop,
       imageLink: product.imageLink,
       imageKey: product.imageKey,
-      barcodeKey: product.barcodeKey,
-      stockCount: product.stockCount,
+      barcodeKey: storePricing ? null : product.barcodeKey,
+      stockCount: storePricing ? null : product.stockCount,
+      stockStatus: productStockStatus(product.stockCount),
       quantityPerCarton: product.quantityPerCarton,
       description: product.description,
       orderByDate: product.orderByDate,

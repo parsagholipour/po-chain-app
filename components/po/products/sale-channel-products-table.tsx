@@ -25,6 +25,7 @@ import {
 import type { SaleChannelProduct } from "@/lib/types/api";
 import { useSaleChannelPricing } from "@/hooks/use-sale-channel-pricing";
 import { productEditingStatusLabels } from "@/lib/product-editing-status";
+import type { ProductStockStatus } from "@/lib/product-stock-status";
 import { saleChannelProductPrice, WHOLESALE_PRICE_LABEL } from "@/lib/store-pricing";
 import { storageDownloadUrl } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
@@ -49,6 +50,8 @@ export type SaleChannelProductsTableGroup = {
 
 /** Store accounts only ever see their own store price, never the catalog reference prices. */
 const retailPriceHeaderKeys = new Set(["msrp", "map"]);
+/** Store accounts see stock availability only, never the barcode image or the exact count. */
+const inventoryHeaderKeys = new Set(["barcode", "stockCount"]);
 const stickySkuColumnClassName = "w-44 min-w-44 max-w-44";
 const stickyProductNameColumnClassName = "w-72 min-w-72 max-w-72";
 const stickySkuClassName =
@@ -253,12 +256,12 @@ function canOpenLink(value: string) {
   return /^https?:\/\//i.test(value);
 }
 
-function StockStatus({ stockCount }: { stockCount: number | null }) {
-  if (stockCount == null) {
+function StockStatus({ status }: { status: ProductStockStatus }) {
+  if (status === "unknown") {
     return <Badge variant="outline">Unknown</Badge>;
   }
 
-  if (stockCount <= 0) {
+  if (status === "out_of_stock") {
     return (
       <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
         Out of stock
@@ -386,11 +389,13 @@ function SaleChannelProductRow({
   row,
   selected = false,
   showRetailPrices,
+  showInventoryDetails,
   onSelectionChange,
 }: {
   row: SaleChannelProduct;
   selected?: boolean;
   showRetailPrices: boolean;
+  showInventoryDetails: boolean;
   onSelectionChange?: (rowId: string, selected: boolean) => void;
 }) {
   const selectionEnabled = Boolean(onSelectionChange);
@@ -457,13 +462,17 @@ function SaleChannelProductRow({
       <TableCell className="max-w-56 truncate">
         <ImageLinkCell value={row.imageLink} />
       </TableCell>
+      {showInventoryDetails ? (
+        <TableCell>
+          <BarcodeImageDownload product={row} />
+        </TableCell>
+      ) : null}
       <TableCell>
-        <BarcodeImageDownload product={row} />
+        <StockStatus status={row.stockStatus} />
       </TableCell>
-      <TableCell>
-        <StockStatus stockCount={row.stockCount} />
-      </TableCell>
-      <TableCell className="text-end">{emptyValue(row.stockCount)}</TableCell>
+      {showInventoryDetails ? (
+        <TableCell className="text-end">{emptyValue(row.stockCount)}</TableCell>
+      ) : null}
       <TableCell className="text-end">{emptyValue(row.quantityPerCarton)}</TableCell>
       <TableCell className="max-w-72 truncate" title={row.description ?? undefined}>
         {emptyValue(row.description)}
@@ -492,14 +501,19 @@ export function SaleChannelProductsTable({
 }: Props) {
   const { priceLabel, isStorePricing } = useSaleChannelPricing();
   const showRetailPrices = !isStorePricing;
+  const showInventoryDetails = !isStorePricing;
   const headers = useMemo(
     () =>
       saleChannelProductHeaders
-        .filter((header) => showRetailPrices || !retailPriceHeaderKeys.has(header.key))
+        .filter(
+          (header) =>
+            (showRetailPrices || !retailPriceHeaderKeys.has(header.key)) &&
+            (showInventoryDetails || !inventoryHeaderKeys.has(header.key)),
+        )
         .map((header) =>
           header.key === "unitPrice" ? { ...header, label: priceLabel } : header,
         ),
-    [priceLabel, showRetailPrices],
+    [priceLabel, showInventoryDetails, showRetailPrices],
   );
   const columnCount = headers.length;
   const selectableRows = groups ? groups.flatMap((group) => group.rows) : rows;
@@ -759,6 +773,7 @@ export function SaleChannelProductsTable({
                         row={row}
                         selected={selectedRowIds?.has(row.id)}
                         showRetailPrices={showRetailPrices}
+                        showInventoryDetails={showInventoryDetails}
                         onSelectionChange={onRowSelectionChange}
                       />
                     ))}
@@ -772,6 +787,7 @@ export function SaleChannelProductsTable({
                   row={row}
                   selected={selectedRowIds?.has(row.id)}
                   showRetailPrices={showRetailPrices}
+                  showInventoryDetails={showInventoryDetails}
                   onSelectionChange={onRowSelectionChange}
                 />
               ))

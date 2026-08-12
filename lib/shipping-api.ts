@@ -287,6 +287,13 @@ export function purchaseOrderLineFromPrisma(line: PurchaseOrderLineApiPayload) {
 
 type ProductCostRedactable = Record<string, unknown> & {
   cost?: unknown;
+  stockCount?: unknown;
+  barcodeKey?: unknown;
+};
+
+/** Store sale channels additionally lose the stock count and barcode image of every product. */
+export type PurchaseOrderRedactionOptions = {
+  hideInventoryDetails?: boolean;
 };
 
 type PurchaseOrderLineRedactable = Record<string, unknown> & {
@@ -314,23 +321,26 @@ type PurchaseOrderDetailRedactable = {
   warehouseOrderPurchaseOrders: unknown[];
 };
 
-function redactProductCost<T extends ProductCostRedactable | null | undefined>(
+function redactDistributorProduct<T extends ProductCostRedactable | null | undefined>(
   product: T,
+  options: PurchaseOrderRedactionOptions,
 ): T {
   if (!product) return product;
   return {
     ...product,
     cost: null,
+    ...(options.hideInventoryDetails ? { stockCount: null, barcodeKey: null } : {}),
   } as T;
 }
 
 export function redactDistributorPurchaseOrderLine<T extends PurchaseOrderLineRedactable>(
   line: T,
+  options: PurchaseOrderRedactionOptions = {},
 ): T {
   return {
     ...line,
     unitCost: null,
-    product: redactProductCost(line.product),
+    product: redactDistributorProduct(line.product, options),
     allocations: [],
     warehouseAllocations: [],
   } as T;
@@ -338,6 +348,7 @@ export function redactDistributorPurchaseOrderLine<T extends PurchaseOrderLineRe
 
 function redactDistributorPurchaseOrderOsd<T extends PurchaseOrderOsdRedactable>(
   osd: T,
+  options: PurchaseOrderRedactionOptions,
 ): T {
   return {
     ...osd,
@@ -346,7 +357,7 @@ function redactDistributorPurchaseOrderOsd<T extends PurchaseOrderOsdRedactable>
     lines: osd.lines?.map((line) => ({
       ...line,
       purchaseOrderLine: line.purchaseOrderLine
-        ? redactDistributorPurchaseOrderLine(line.purchaseOrderLine)
+        ? redactDistributorPurchaseOrderLine(line.purchaseOrderLine, options)
         : line.purchaseOrderLine,
     })),
   } as T;
@@ -354,11 +365,12 @@ function redactDistributorPurchaseOrderOsd<T extends PurchaseOrderOsdRedactable>
 
 export function redactDistributorPurchaseOrderDetail<T extends PurchaseOrderDetailRedactable>(
   row: T,
+  options: PurchaseOrderRedactionOptions = {},
 ): T {
   return {
     ...row,
-    lines: row.lines.map((line) => redactDistributorPurchaseOrderLine(line)),
-    osds: row.osds.map((osd) => redactDistributorPurchaseOrderOsd(osd)),
+    lines: row.lines.map((line) => redactDistributorPurchaseOrderLine(line, options)),
+    osds: row.osds.map((osd) => redactDistributorPurchaseOrderOsd(osd, options)),
     statusLogs: [],
     manufacturingOrderPurchaseOrders: [],
     warehouseOrderPurchaseOrders: [],

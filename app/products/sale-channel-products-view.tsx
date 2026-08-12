@@ -26,6 +26,7 @@ import {
   useListFilterState,
 } from "@/hooks/use-list-filters";
 import { productEditingStatusLabels } from "@/lib/product-editing-status";
+import { productStockStatusLabels } from "@/lib/product-stock-status";
 import { saleChannelProductPrice } from "@/lib/store-pricing";
 import { storageDownloadUrl } from "@/lib/upload-client";
 import { cn } from "@/lib/utils";
@@ -85,11 +86,6 @@ function formatExportDate(value: string | null): string | null {
   return date.toISOString().slice(0, 10);
 }
 
-function stockStatusLabel(stockCount: number | null) {
-  if (stockCount == null) return "Unknown";
-  return stockCount > 0 ? "In stock" : "Out of stock";
-}
-
 function absoluteAppUrl(path: string) {
   return new URL(path, window.location.origin).toString();
 }
@@ -102,6 +98,7 @@ function barcodeDownloadUrl(row: SaleChannelProduct) {
 const saleChannelProductExportColumns = (
   priceLabel: string,
   showRetailPrices: boolean,
+  showInventoryDetails: boolean,
 ): SaleChannelProductExportColumn[] => [
   { label: "SKU", value: (row) => row.sku, width: 120 },
   { label: "Product Name", value: (row) => row.name, width: 260 },
@@ -129,9 +126,23 @@ const saleChannelProductExportColumns = (
   },
   { label: "MOQ", value: (row) => numericExportValue(row.moq), width: 70 },
   { label: "Image Link", value: (row) => row.imageLink, width: 260 },
-  { label: "Barcode Image", value: barcodeDownloadUrl, width: 260 },
-  { label: "Stock Status", value: (row) => stockStatusLabel(row.stockCount), width: 110 },
-  { label: "Stock Count", value: (row) => numericExportValue(row.stockCount), width: 90 },
+  ...(showInventoryDetails
+    ? [{ label: "Barcode Image", value: barcodeDownloadUrl, width: 260 }]
+    : []),
+  {
+    label: "Stock Status",
+    value: (row) => productStockStatusLabels[row.stockStatus],
+    width: 110,
+  },
+  ...(showInventoryDetails
+    ? [
+        {
+          label: "Stock Count",
+          value: (row: SaleChannelProduct) => numericExportValue(row.stockCount),
+          width: 90,
+        },
+      ]
+    : []),
   {
     label: "Qty/Carton",
     value: (row) => numericExportValue(row.quantityPerCarton),
@@ -240,9 +251,14 @@ function buildSaleChannelProductsWorkbook(
   rows: SaleChannelProduct[],
   priceLabel: string,
   showRetailPrices: boolean,
+  showInventoryDetails: boolean,
 ) {
   const usedSheetNames = new Set<string>();
-  const exportColumns = saleChannelProductExportColumns(priceLabel, showRetailPrices);
+  const exportColumns = saleChannelProductExportColumns(
+    priceLabel,
+    showRetailPrices,
+    showInventoryDetails,
+  );
   const columns = exportColumns
     .map((column) => `<Column ss:AutoFitWidth="0" ss:Width="${column.width}"/>`)
     .join("");
@@ -273,10 +289,16 @@ function downloadSaleChannelProductsWorkbook(
   rows: SaleChannelProduct[],
   priceLabel: string,
   showRetailPrices: boolean,
+  showInventoryDetails: boolean,
 ) {
   if (rows.length === 0) return;
 
-  const workbook = buildSaleChannelProductsWorkbook(rows, priceLabel, showRetailPrices);
+  const workbook = buildSaleChannelProductsWorkbook(
+    rows,
+    priceLabel,
+    showRetailPrices,
+    showInventoryDetails,
+  );
   const blob = new Blob([workbook], {
     type: "application/vnd.ms-excel;charset=utf-8",
   });
@@ -373,6 +395,7 @@ export function SaleChannelProductsView() {
   const router = useRouter();
   const { priceLabel, isStorePricing } = useSaleChannelPricing();
   const showRetailPrices = !isStorePricing;
+  const showInventoryDetails = !isStorePricing;
   const productFilters = useListFilterState({ initialFilters: filterDefaults });
   const debouncedSearch = useDebouncedValue(productFilters.search);
   const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
@@ -776,7 +799,14 @@ export function SaleChannelProductsView() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => downloadSaleChannelProductsWorkbook(data, priceLabel, showRetailPrices)}
+          onClick={() =>
+            downloadSaleChannelProductsWorkbook(
+              data,
+              priceLabel,
+              showRetailPrices,
+              showInventoryDetails,
+            )
+          }
           disabled={isPending || data.length === 0}
           className="w-fit"
         >

@@ -136,16 +136,18 @@ function sameProductIdSet(left: Set<string>, right: Set<string>) {
 }
 
 function isOutOfStock(product: SaleChannelProduct) {
-  return product.stockCount != null && product.stockCount <= 0;
+  return product.stockStatus === "out_of_stock";
 }
 
 function stockSortRank(product: SaleChannelProduct) {
-  if (product.stockCount == null) return 1;
+  if (product.stockStatus === "unknown") return 1;
   return isOutOfStock(product) ? 2 : 0;
 }
 
 function stockBadge(product: SaleChannelProduct) {
-  if (product.stockCount == null) return <Badge variant="outline">Stock unknown</Badge>;
+  if (product.stockStatus === "unknown") {
+    return <Badge variant="outline">Stock unknown</Badge>;
+  }
   if (isOutOfStock(product)) {
     return (
       <Badge
@@ -374,10 +376,11 @@ function ProductPickerRow({
                 {emptyValue(product.quantityPerCarton)}
               </span>
             </div>
-            <div>
-              Stock:{" "}
-              <span className="text-foreground">{emptyValue(product.stockCount)}</span>
-            </div>
+            {product.stockCount == null ? null : (
+              <div>
+                Stock: <span className="text-foreground">{product.stockCount}</span>
+              </div>
+            )}
             {!product.orderByDate ? null : <div>
               Order by Date:{" "}
               <span className="text-foreground">{formatDate(product.orderByDate)}</span>

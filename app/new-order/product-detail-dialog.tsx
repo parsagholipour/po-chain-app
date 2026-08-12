@@ -97,9 +97,9 @@ function ProductDetailImage({ product }: { product: SaleChannelProduct }) {
 }
 
 function stockLabel(product: SaleChannelProduct) {
-  if (product.stockCount == null) return "Stock unknown";
-  if (product.stockCount <= 0) return "Out of stock";
-  return `In stock (${product.stockCount})`;
+  if (product.stockStatus === "unknown") return "Stock unknown";
+  if (product.stockStatus === "out_of_stock") return "Out of stock";
+  return product.stockCount == null ? "In stock" : `In stock (${product.stockCount})`;
 }
 
 export function ProductDetailDialog({

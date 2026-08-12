@@ -18,6 +18,7 @@ import {
 import {
   distributorWriteForbidden,
   isDistributorContext,
+  isStoreSaleChannelContext,
   requireStoreContext,
 } from "@/lib/store-context";
 
@@ -98,7 +99,13 @@ export async function GET(
   });
   if (!row) return jsonError("Not found", 404);
   const payload = purchaseOrderDetailFromPrisma(row);
-  return NextResponse.json(isDistributor ? redactDistributorPurchaseOrderDetail(payload) : payload);
+  return NextResponse.json(
+    isDistributor
+      ? redactDistributorPurchaseOrderDetail(payload, {
+          hideInventoryDetails: isStoreSaleChannelContext(authz.context),
+        })
+      : payload,
+  );
 }
 
 export async function PATCH(

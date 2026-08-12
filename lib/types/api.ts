@@ -1,5 +1,7 @@
 /** API response shapes for JSON HTTP responses in this app. */
 
+import type { ProductStockStatus } from "@/lib/product-stock-status";
+
 export type PaginatedResponse<T> = {
   rows: T[];
   total: number;
@@ -475,8 +477,11 @@ export type SaleChannelProduct = {
   moq: number | null;
   imageLink: string;
   imageKey: string | null;
+  /** Null for store sale channels, which never see the barcode image. */
   barcodeKey: string | null;
+  /** Null for store sale channels, which only ever see `stockStatus`. */
   stockCount: number | null;
+  stockStatus: ProductStockStatus;
   quantityPerCarton: number | null;
   description: string | null;
   orderByDate: string | null;

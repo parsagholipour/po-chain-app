@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/confirm-provider";
+import { useSaleChannelPricing } from "@/hooks/use-sale-channel-pricing";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { useWizardDocumentUpload } from "@/lib/use-wizard-document-upload";
@@ -1088,6 +1089,10 @@ export function NewOrderView() {
     undo: undoBackOrderReview,
     redo: redoBackOrderReview,
   } = useUndoRedoState<BackOrderReview | null>(null, areBackOrderReviewsEqual);
+
+  /** Store accounts never receive stock counts, so the available-stock column has nothing to show. */
+  const { isStorePricing } = useSaleChannelPricing();
+  const showAvailableStock = !isStorePricing;
 
   const { data: saleChannels = [], isLoading: saleChannelsLoading } = useQuery({
     queryKey: ["sale-channels"],
@@ -2217,7 +2222,9 @@ export function NewOrderView() {
                 <TableRow>
                   <TableHead className="w-64 max-w-64 sm:w-72 sm:max-w-72">Product</TableHead>
                   <TableHead className="w-32 text-end">Unit price</TableHead>
-                  <TableHead className="w-24 text-end">Available</TableHead>
+                  {showAvailableStock ? (
+                    <TableHead className="w-24 text-end">Available</TableHead>
+                  ) : null}
                   {locations.map((location) => (
                     <TableHead key={location.id} className="min-w-32 text-end">
                       {location.name} Qty
@@ -2231,7 +2238,7 @@ export function NewOrderView() {
                 {productsLoading || locationsPending || saleChannelsLoading ? (
                   <TableRow>
                     <TableCell
-                      colSpan={locations.length + 5}
+                      colSpan={locations.length + (showAvailableStock ? 5 : 4)}
                       className="h-24 text-center text-muted-foreground"
                     >
                       Loading...
@@ -2240,7 +2247,7 @@ export function NewOrderView() {
                 ) : products.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={locations.length + 5}
+                      colSpan={locations.length + (showAvailableStock ? 5 : 4)}
                       className="h-24 text-center text-muted-foreground"
                     >
                       No products are available.
@@ -2303,9 +2310,11 @@ export function NewOrderView() {
                         <TableCell className="text-end">
                           <PriceView value={saleChannelProductPrice(product)} />
                         </TableCell>
-                        <TableCell className="text-end">
-                          <AvailableStockCell product={product} />
-                        </TableCell>
+                        {showAvailableStock ? (
+                          <TableCell className="text-end">
+                            <AvailableStockCell product={product} />
+                          </TableCell>
+                        ) : null}
                         {locations.map((location) => {
                           const quantity = quantityValue(row, location.id);
                           const moqInvalid =

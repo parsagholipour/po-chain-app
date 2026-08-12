@@ -7,6 +7,7 @@ import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import {
   distributorWriteForbidden,
   isDistributorContext,
+  isStoreSaleChannelContext,
   requireStoreContext,
 } from "@/lib/store-context";
 import {
@@ -67,8 +68,13 @@ export async function GET(
     orderBy: { createdAt: "asc" },
   });
   const payload = lines.map((l) => purchaseOrderLineFromPrisma(l));
+  const redactionOptions = {
+    hideInventoryDetails: isStoreSaleChannelContext(authz.context),
+  };
   return NextResponse.json(
-    isDistributor ? payload.map((line) => redactDistributorPurchaseOrderLine(line)) : payload,
+    isDistributor
+      ? payload.map((line) => redactDistributorPurchaseOrderLine(line, redactionOptions))
+      : payload,
   );
 }
 
