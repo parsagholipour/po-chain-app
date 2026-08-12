@@ -1,23 +1,37 @@
+import { randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
-import { centsToMoney, moneyToCents } from "@/lib/distributor-orders/money";
+import {
+  centsToMoney,
+  moneyToCents,
+  normalizeCurrency,
+} from "@/lib/distributor-orders/money";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import {
   isDistributorContext,
   requireStoreContext,
 } from "@/lib/store-context";
 import { createStripeCheckoutSession, STRIPE_PROVIDER } from "@/lib/payments/stripe";
+import { SHOPIFY_PROVIDER } from "@/lib/payments/providers";
+import { resolveStoreCheckoutProvider } from "@/lib/payments/checkout-provider";
 import {
   PaymentProviderConfigError,
   PaymentProviderError,
   type CheckoutLineItem,
 } from "@/lib/payments/types";
-import { getStripeCredentialsForStore } from "@/lib/payments/stripe-settings";
+import { deleteShopifyDraftOrder, ShopifyApiError } from "@/lib/shopify/admin";
+import {
+  createShopifyDraftOrderCheckout,
+  type ShopifyCheckoutDestination,
+} from "@/lib/shopify/checkout";
 
 export const runtime = "nodejs";
 
 const paramsSchema = z.object({ id: z.uuid() });
+
+const SHOPIFY_MAX_DRAFT_ORDER_LINES = 250;
 
 function appOrigin(request: Request) {
   return (
@@ -41,6 +55,29 @@ function compactCheckoutLineItems(
       unitAmountCents: amountCents,
     },
   ];
+}
+
+async function failCheckoutAttempt(paymentAttemptId: string, e: unknown) {
+  await prisma.paymentAttempt.update({
+    where: { id: paymentAttemptId },
+    data: {
+      status: "failed",
+      failureMessage: e instanceof Error ? e.message : "Could not create checkout session",
+    },
+  });
+
+  if (e instanceof PaymentProviderConfigError) {
+    return jsonError(e.message, 503);
+  }
+  if (e instanceof PaymentProviderError) {
+    return jsonError(e.message, 400);
+  }
+  if (e instanceof ShopifyApiError) {
+    return jsonError(e.message, 502);
+  }
+  const j = jsonFromPrisma(e);
+  if (j) return j;
+  throw e;
 }
 
 export async function POST(
@@ -133,15 +170,154 @@ export async function POST(
   const successUrl = `${origin}/new-order/success?invoiceId=${invoice.id}&session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = `${origin}/new-order/cancelled?invoiceId=${invoice.id}`;
 
-  let stripeCredentials: Awaited<ReturnType<typeof getStripeCredentialsForStore>>;
+  // A second "Pay" click must reuse the live checkout instead of creating a second one.
+  const pendingAttempt = await prisma.paymentAttempt.findFirst({
+    where: {
+      storeId,
+      invoiceId: invoice.id,
+      status: "pending",
+      checkoutUrl: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, provider: true, checkoutUrl: true },
+  });
+  if (pendingAttempt?.checkoutUrl) {
+    return NextResponse.json({
+      provider: pendingAttempt.provider,
+      checkoutUrl: pendingAttempt.checkoutUrl,
+      paymentAttemptId: pendingAttempt.id,
+    });
+  }
+
+  let resolved: Awaited<ReturnType<typeof resolveStoreCheckoutProvider>>;
   try {
-    stripeCredentials = await getStripeCredentialsForStore(storeId);
+    resolved = await resolveStoreCheckoutProvider(storeId);
   } catch (e) {
     if (e instanceof PaymentProviderConfigError) {
       return jsonError(e.message, 503);
     }
     throw e;
   }
+
+  if (normalizeCurrency(invoice.currency) !== resolved.currency) {
+    return jsonError(
+      `This order was priced in ${invoice.currency.toUpperCase()} but checkout now charges in ${resolved.currency.toUpperCase()}. Start a new order.`,
+      409,
+    );
+  }
+
+  const checkoutLineItems = Array.from(lineItemByProduct.values());
+  const customerEmail = invoice.draftPurchaseOrders[0]?.saleChannel.email ?? null;
+
+  if (resolved.provider === SHOPIFY_PROVIDER) {
+    // Compacting the lines away would destroy the SKU -> variant matching, so cap instead.
+    if (checkoutLineItems.length > SHOPIFY_MAX_DRAFT_ORDER_LINES) {
+      return jsonError(
+        `This order has too many distinct products for Shopify checkout (max ${SHOPIFY_MAX_DRAFT_ORDER_LINES}).`,
+        400,
+      );
+    }
+
+    const destinations: ShopifyCheckoutDestination[] = invoice.draftPurchaseOrders.map(
+      (draft) => ({
+        label: draft.name,
+        isBackOrder: draft.isBackOrder,
+        recipientName: draft.shipToRecipientName,
+        companyName: draft.shipToCompanyName,
+        phone: draft.shipToPhoneNumber,
+        email: draft.shipToEmail,
+        addressLine1: draft.shipToAddressLine1,
+        addressLine2: draft.shipToAddressLine2,
+        city: draft.shipToCity,
+        stateProvince: draft.shipToStateProvince,
+        postalCode: draft.shipToPostalCode,
+        country: draft.shipToCountry,
+        lines: draft.lines.map((line) => ({
+          name: line.product.name,
+          sku: line.product.sku,
+          quantity: line.quantity,
+        })),
+      }),
+    );
+
+    const correlationToken = randomBytes(32).toString("hex");
+    // Created before the Shopify call so an orphaned draft order is always recoverable.
+    const shopifyAttempt = await prisma.paymentAttempt.create({
+      data: {
+        provider: SHOPIFY_PROVIDER,
+        status: "created",
+        amount: centsToMoney(amountCents),
+        currency: invoice.currency,
+        correlationToken,
+        invoiceId: invoice.id,
+        storeId,
+        createdById: userId,
+      },
+      select: { id: true },
+    });
+
+    let createdDraftOrderId: string | null = null;
+    try {
+      const checkout = await createShopifyDraftOrderCheckout({
+        shopDomain: resolved.shopify.shopDomain,
+        accessToken: resolved.shopify.accessToken,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        storeId,
+        paymentAttemptId: shopifyAttempt.id,
+        correlationToken,
+        amountCents,
+        currency: invoice.currency,
+        lineItems: checkoutLineItems,
+        customerEmail,
+        destinations,
+      });
+      createdDraftOrderId = checkout.draftOrderId;
+
+      await prisma.$transaction([
+        prisma.paymentAttempt.update({
+          where: { id: shopifyAttempt.id },
+          data: {
+            status: "pending",
+            providerSessionId: checkout.draftOrderId,
+            checkoutUrl: checkout.checkoutUrl,
+            providerMetadata: checkout.metadata as unknown as Prisma.InputJsonValue,
+          },
+        }),
+        prisma.invoice.update({
+          where: { id: invoice.id },
+          data: { paymentStatus: "pending" },
+        }),
+      ]);
+
+      return NextResponse.json({
+        provider: SHOPIFY_PROVIDER,
+        checkoutUrl: checkout.checkoutUrl,
+        paymentAttemptId: shopifyAttempt.id,
+      });
+    } catch (e) {
+      // The draft order survived creation but we never persisted its id, so nothing else can
+      // reach it — delete it now rather than leave a payable order in the merchant's admin.
+      if (createdDraftOrderId) {
+        try {
+          await deleteShopifyDraftOrder({
+            shopDomain: resolved.shopify.shopDomain,
+            accessToken: resolved.shopify.accessToken,
+            id: createdDraftOrderId,
+          });
+        } catch (cleanupError) {
+          console.error(
+            "[shopify-checkout] could not delete an unrecorded draft order",
+            createdDraftOrderId,
+            cleanupError,
+          );
+        }
+      }
+      return await failCheckoutAttempt(shopifyAttempt.id, e);
+    }
+  }
+
+  const stripeCredentials = resolved.stripe;
 
   const paymentAttempt = await prisma.paymentAttempt.create({
     data: {
@@ -166,11 +342,11 @@ export async function POST(
         lineItems: compactCheckoutLineItems(
           invoice.invoiceNumber,
           amountCents,
-          Array.from(lineItemByProduct.values()),
+          checkoutLineItems,
         ),
         successUrl,
         cancelUrl,
-        customerEmail: invoice.draftPurchaseOrders[0]?.saleChannel.email ?? null,
+        customerEmail,
         metadata: {
           invoiceId: invoice.id,
           paymentAttemptId: paymentAttempt.id,
@@ -203,22 +379,6 @@ export async function POST(
       paymentAttemptId: paymentAttempt.id,
     });
   } catch (e) {
-    await prisma.paymentAttempt.update({
-      where: { id: paymentAttempt.id },
-      data: {
-        status: "failed",
-        failureMessage: e instanceof Error ? e.message : "Could not create checkout session",
-      },
-    });
-
-    if (e instanceof PaymentProviderConfigError) {
-      return jsonError(e.message, 503);
-    }
-    if (e instanceof PaymentProviderError) {
-      return jsonError(e.message, 400);
-    }
-    const j = jsonFromPrisma(e);
-    if (j) return j;
-    throw e;
+    return await failCheckoutAttempt(paymentAttempt.id, e);
   }
 }

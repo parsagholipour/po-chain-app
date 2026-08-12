@@ -2,6 +2,7 @@ import "server-only";
 
 import schedule from "node-schedule";
 import { createDailyProductStockSnapshots } from "@/lib/product-stock-snapshot-backups";
+import { sweepStaleShopifyCheckouts } from "@/lib/shopify/checkout-sweeper";
 import { syncAllEnabledShopifyIntegrations } from "@/lib/shopify/sync";
 
 const SHOPIFY_SYNC_RULE = "0 0 * * * *";
@@ -25,6 +26,11 @@ export function startShopifyInventoryScheduler() {
     async () => {
       try {
         await syncAllEnabledShopifyIntegrations();
+        try {
+          await sweepStaleShopifyCheckouts();
+        } catch (error) {
+          console.error("[shopify-checkout-sweep] scheduled sweep failed", error);
+        }
         const snapshotResults = await createDailyProductStockSnapshots();
         const createdCount = snapshotResults.filter((result) => !result.skipped)
           .length;

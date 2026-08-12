@@ -16,6 +16,8 @@ import type {
   ShopifyInventoryCountsResponse,
   ShopifyInventoryLocationOption,
   ShopifyInventoryMovementsResponse,
+  ShopifyHealthCheckStatus,
+  ShopifyIntegrationHealth,
   ShopifyIntegrationSettings,
   ShopifySyncResult,
   StripeIntegrationSettings,
@@ -46,6 +48,7 @@ const shopifyIntegrationKey = ["shopify-integration"] as const;
 const cjDropshippingIntegrationKey = ["cjdropshipping-integration"] as const;
 const stripeIntegrationKey = ["stripe-integration"] as const;
 const productStockBackupsKey = ["product-stock-snapshot-backups"] as const;
+const shopifyHealthKey = ["shopify-integration-health"] as const;
 const shopifyInventoryCountsKey = ["shopify-inventory-counts"] as const;
 const shopifyInventoryMovementsKey = ["shopify-inventory-movements"] as const;
 const cjDropshippingInventoryCountsKey = ["cjdropshipping-inventory-counts"] as const;
@@ -713,6 +716,124 @@ function ProductStockBackupsCard() {
   );
 }
 
+const healthCheckTone: Record<ShopifyHealthCheckStatus, string> = {
+  ok: "text-emerald-600 dark:text-emerald-400",
+  warning: "text-amber-600 dark:text-amber-400",
+  error: "text-destructive",
+  skipped: "text-muted-foreground",
+};
+
+const healthCheckMark: Record<ShopifyHealthCheckStatus, string> = {
+  ok: "PASS",
+  warning: "WARN",
+  error: "FAIL",
+  skipped: "SKIP",
+};
+
+const healthSummary: Record<ShopifyIntegrationHealth["status"], string> = {
+  ok: "All checks passed",
+  warning: "Working, with warnings",
+  error: "Action required",
+  not_configured: "Not configured",
+};
+
+/**
+ * Probes Shopify live. Every failure worth catching here — a revoked scope, a subscription
+ * Shopify deleted after 8 failed deliveries, a stale tunnel URL, a changed shop currency —
+ * leaves the stored integration row looking perfectly healthy.
+ */
+function ShopifyHealthCard({ enabled }: { enabled: boolean }) {
+  const { data, isFetching, isError, error, refetch } = useQuery({
+    queryKey: shopifyHealthKey,
+    queryFn: async () => {
+      const { data: health } = await api.get<ShopifyIntegrationHealth>(
+        "/api/integrations/shopify/health",
+      );
+      return health;
+    },
+    enabled,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const tone =
+    data?.status === "error"
+      ? "text-destructive"
+      : data?.status === "warning"
+        ? "text-amber-600 dark:text-amber-400"
+        : data?.status === "ok"
+          ? "text-emerald-600 dark:text-emerald-400"
+          : "text-muted-foreground";
+
+  return (
+    <div className="rounded-lg border bg-background p-4 sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold">Health checks</h2>
+          <p className="text-sm text-muted-foreground">
+            Live probes against Shopify: access, scopes, registered webhooks and checkout
+            readiness.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => refetch()}
+          disabled={!enabled || isFetching}
+        >
+          <RefreshCw className={isFetching ? "size-4 animate-spin" : "size-4"} />
+          Run checks
+        </Button>
+      </div>
+
+      {!enabled ? (
+        <p className="py-4 text-sm text-muted-foreground">
+          Enable the integration and save an Admin API token to run health checks.
+        </p>
+      ) : isError ? (
+        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {apiErrorMessage(error)}
+        </p>
+      ) : !data ? (
+        <p className="py-4 text-sm text-muted-foreground">Running checks...</p>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <p className={`text-sm font-medium ${tone}`}>{healthSummary[data.status]}</p>
+            <p className="text-xs text-muted-foreground">
+              Checked {formatDate(data.checkedAt)} in {formatElapsedMs(data.durationMs)}
+            </p>
+          </div>
+
+          <div className="overflow-hidden rounded-md border divide-y">
+            {data.checks.map((check) => (
+              <div
+                key={check.key}
+                className="grid gap-1 px-3 py-3 text-sm sm:grid-cols-[4rem_12rem_1fr] sm:items-baseline sm:gap-3"
+              >
+                <span
+                  className={`text-xs font-semibold tabular-nums ${healthCheckTone[check.status]}`}
+                >
+                  {healthCheckMark[check.status]}
+                </span>
+                <span className="font-medium">{check.label}</span>
+                <span>
+                  <span className="text-muted-foreground">{check.detail}</span>
+                  {check.hint ? (
+                    <span className={`mt-1 block text-xs ${healthCheckTone[check.status]}`}>
+                      {check.hint}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function configuredPlaceholder(last4: string | null) {
   return last4 ? `Configured ending in ${last4}` : "Configured";
 }
@@ -841,6 +962,7 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
   const qc = useQueryClient();
   const [shopDomain, setShopDomain] = useState(data.shopDomain);
   const [enabled, setEnabled] = useState(data.enabled);
+  const [checkoutEnabled, setCheckoutEnabled] = useState(data.checkoutEnabled);
   const [accessToken, setAccessToken] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -850,11 +972,13 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
       const body: {
         shopDomain: string;
         enabled: boolean;
+        checkoutEnabled: boolean;
         accessToken?: string;
         webhookSecret?: string;
       } = {
         shopDomain,
         enabled,
+        checkoutEnabled: enabled && checkoutEnabled,
       };
       if (accessToken.trim()) body.accessToken = accessToken.trim();
       if (webhookSecret.trim()) body.webhookSecret = webhookSecret.trim();
@@ -867,6 +991,7 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
     },
     onSuccess: (row) => {
       qc.setQueryData(shopifyIntegrationKey, row);
+      qc.invalidateQueries({ queryKey: shopifyHealthKey });
       setAccessToken("");
       setWebhookSecret("");
       toast.success(row.enabled ? "Shopify integration enabled" : "Shopify integration saved");
@@ -947,6 +1072,18 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
     if (data.enabled) return "text-emerald-600 dark:text-emerald-400";
     return "text-muted-foreground";
   }, [data.enabled, data.lastSyncStatus]);
+  const checkoutStatus = useMemo(() => {
+    if (!data.checkoutEnabled) {
+      return { label: "Disabled", tone: "text-muted-foreground" };
+    }
+    if (!data.checkoutWebhookRegistered) {
+      return { label: "Webhook missing", tone: "text-amber-600 dark:text-amber-400" };
+    }
+    return {
+      label: `Ready (${data.checkoutCurrency?.toUpperCase() ?? "—"})`,
+      tone: "text-emerald-600 dark:text-emerald-400",
+    };
+  }, [data.checkoutCurrency, data.checkoutEnabled, data.checkoutWebhookRegistered]);
 
   return (
     <div className="space-y-6">
@@ -958,11 +1095,24 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
               Inventory sync for catalog stock counts.
             </p>
           </div>
-          <Checkbox
-            checked={enabled}
-            onCheckedChange={(value) => setEnabled(value === true)}
-            label="Enabled"
-          />
+          <div className="flex flex-col gap-2">
+            <Checkbox
+              checked={enabled}
+              onCheckedChange={(value) => setEnabled(value === true)}
+              label="Enabled"
+            />
+            <Checkbox
+              checked={enabled && checkoutEnabled}
+              onCheckedChange={(value) => setCheckoutEnabled(value === true)}
+              disabled={!enabled}
+              label="Store checkout"
+            />
+            <FieldDescription className="max-w-xs">
+              Store orders are paid through a Shopify draft order instead of Stripe. Draft orders
+              are created tax-exempt with no Shopify shipping charge, because fulfilment and
+              totals are managed in this app.
+            </FieldDescription>
+          </div>
         </div>
 
         <FieldGroup>
@@ -1035,7 +1185,7 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
       </div>
 
       <div className="rounded-lg border bg-background p-4 sm:p-5">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Status
@@ -1078,14 +1228,33 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
               {data.lastSyncAt ? "Ready" : "Waiting"}
             </p>
           </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Checkout
+            </p>
+            <p className={`mt-1 text-sm font-medium ${checkoutStatus.tone}`}>
+              {checkoutStatus.label}
+            </p>
+          </div>
         </div>
         {data.lastSyncError ? (
           <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {data.lastSyncError}
           </p>
         ) : null}
+        {data.checkoutLastError ? (
+          <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {data.checkoutLastError}
+          </p>
+        ) : null}
+        {data.id ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Webhook: /api/webhooks/shopify/{data.id}/orders-paid
+          </p>
+        ) : null}
       </div>
 
+      <ShopifyHealthCard enabled={data.enabled && data.hasAccessToken} />
       <ShopifyInventoryMirrorCard />
       <ProductStockBackupsCard />
     </div>

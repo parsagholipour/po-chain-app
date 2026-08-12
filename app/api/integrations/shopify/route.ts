@@ -5,12 +5,20 @@ import { requireInternalStoreContext } from "@/lib/store-context";
 import { shopifyIntegrationUpdateSchema } from "@/lib/validations/shopify-integration";
 import {
   createInventoryWebhook,
-  deleteInventoryWebhook,
+  createShopifyWebhook,
+  deleteShopifyWebhook,
+  readShopifyShopCurrency,
+  SHOPIFY_WEBHOOK_TOPIC,
   ShopifyApiError,
   validateShopifyAccess,
+  validateShopifyCheckoutScopes,
   validateShopifyInventoryScopes,
 } from "@/lib/shopify/admin";
-import { buildShopifyInventoryWebhookUrl, normalizeShopifyDomain } from "@/lib/shopify/domain";
+import {
+  buildShopifyInventoryWebhookUrl,
+  buildShopifyOrdersPaidWebhookUrl,
+  normalizeShopifyDomain,
+} from "@/lib/shopify/domain";
 import {
   decryptShopifySecret,
   encryptShopifySecret,
@@ -32,6 +40,10 @@ function integrationResponse(row: {
   lastSyncedProductCount: number;
   lastMatchedSkuCount: number;
   lastUnmatchedLocalSkuCount: number;
+  checkoutEnabled: boolean;
+  checkoutCurrency: string | null;
+  checkoutLastError: string | null;
+  ordersPaidWebhookSubscriptionId: string | null;
   updatedAt: Date;
 } | null) {
   if (!row) {
@@ -48,6 +60,11 @@ function integrationResponse(row: {
       lastSyncedProductCount: 0,
       lastMatchedSkuCount: 0,
       lastUnmatchedLocalSkuCount: 0,
+      checkoutEnabled: false,
+      checkoutCurrency: null,
+      checkoutLastError: null,
+      ordersPaidWebhookSubscriptionId: null,
+      checkoutWebhookRegistered: false,
       updatedAt: null,
     };
   }
@@ -65,6 +82,11 @@ function integrationResponse(row: {
     lastSyncedProductCount: row.lastSyncedProductCount,
     lastMatchedSkuCount: row.lastMatchedSkuCount,
     lastUnmatchedLocalSkuCount: row.lastUnmatchedLocalSkuCount,
+    checkoutEnabled: row.checkoutEnabled,
+    checkoutCurrency: row.checkoutCurrency,
+    checkoutLastError: row.checkoutLastError,
+    ordersPaidWebhookSubscriptionId: row.ordersPaidWebhookSubscriptionId,
+    checkoutWebhookRegistered: row.ordersPaidWebhookSubscriptionId != null,
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -72,15 +94,15 @@ function integrationResponse(row: {
 async function tryDeleteWebhook(input: {
   shopDomain: string;
   accessTokenEncrypted: string | null;
-  webhookSubscriptionId: string | null;
+  subscriptionId: string | null;
 }) {
-  if (!input.accessTokenEncrypted || !input.webhookSubscriptionId) return null;
+  if (!input.accessTokenEncrypted || !input.subscriptionId) return null;
 
   try {
-    await deleteInventoryWebhook({
+    await deleteShopifyWebhook({
       shopDomain: input.shopDomain,
       accessToken: await decryptShopifySecret(input.accessTokenEncrypted),
-      id: input.webhookSubscriptionId,
+      id: input.subscriptionId,
     });
     return null;
   } catch (error) {
@@ -112,6 +134,10 @@ function webhookRegistrationIsRequired() {
 
 function skippedWebhookMessage(reason: string) {
   return `${reason} Scheduled and manual Shopify inventory sync remain enabled, but Shopify webhooks were not registered.`;
+}
+
+function skippedCheckoutWebhookMessage(reason: string) {
+  return `${reason} Shopify store checkout is on, but the orders/paid webhook was not registered, so paid orders are only picked up by the hourly recovery sweep.`;
 }
 
 export async function GET() {
@@ -178,6 +204,12 @@ export async function PATCH(request: Request) {
         shopDomain: nextShopDomain,
         accessToken: effectiveAccessToken,
       });
+      if (parsed.data.checkoutEnabled) {
+        await validateShopifyCheckoutScopes({
+          shopDomain: nextShopDomain,
+          accessToken: effectiveAccessToken,
+        });
+      }
     }
 
     const saved = await prisma.shopifyIntegration.upsert({
@@ -186,29 +218,42 @@ export async function PATCH(request: Request) {
         storeId,
         shopDomain: nextShopDomain,
         enabled: false,
+        checkoutEnabled: false,
         accessTokenEncrypted: nextAccessTokenEncrypted,
         webhookSecretEncrypted: nextWebhookSecretEncrypted,
       },
       update: {
         shopDomain: nextShopDomain,
         enabled: false,
+        checkoutEnabled: false,
         accessTokenEncrypted: nextAccessTokenEncrypted,
         webhookSecretEncrypted: nextWebhookSecretEncrypted,
       },
     });
 
+    const previousWebhookOwner = {
+      shopDomain: existing?.shopDomain ?? nextShopDomain,
+      accessTokenEncrypted: existing?.accessTokenEncrypted ?? nextAccessTokenEncrypted,
+    };
+
     if (!parsed.data.enabled) {
       const deleteError = await tryDeleteWebhook({
-        shopDomain: existing?.shopDomain ?? nextShopDomain,
-        accessTokenEncrypted: existing?.accessTokenEncrypted ?? nextAccessTokenEncrypted,
-        webhookSubscriptionId: existing?.webhookSubscriptionId ?? null,
+        ...previousWebhookOwner,
+        subscriptionId: existing?.webhookSubscriptionId ?? null,
+      });
+      const checkoutDeleteError = await tryDeleteWebhook({
+        ...previousWebhookOwner,
+        subscriptionId: existing?.ordersPaidWebhookSubscriptionId ?? null,
       });
       const disabled = await prisma.shopifyIntegration.update({
         where: { id: saved.id },
         data: {
           enabled: false,
+          checkoutEnabled: false,
           webhookSubscriptionId: null,
+          ordersPaidWebhookSubscriptionId: null,
           lastSyncError: deleteError,
+          checkoutLastError: checkoutDeleteError,
         },
       });
       return NextResponse.json(integrationResponse(disabled));
@@ -219,13 +264,16 @@ export async function PATCH(request: Request) {
     }
 
     await tryDeleteWebhook({
-      shopDomain: existing?.shopDomain ?? nextShopDomain,
-      accessTokenEncrypted: existing?.accessTokenEncrypted ?? nextAccessTokenEncrypted,
-      webhookSubscriptionId: existing?.webhookSubscriptionId ?? null,
+      ...previousWebhookOwner,
+      subscriptionId: existing?.webhookSubscriptionId ?? null,
+    });
+    await tryDeleteWebhook({
+      ...previousWebhookOwner,
+      subscriptionId: existing?.ordersPaidWebhookSubscriptionId ?? null,
     });
     await prisma.shopifyIntegration.update({
       where: { id: saved.id },
-      data: { webhookSubscriptionId: null },
+      data: { webhookSubscriptionId: null, ordersPaidWebhookSubscriptionId: null },
     });
 
     let webhookSubscriptionId: string | null = null;
@@ -248,9 +296,55 @@ export async function PATCH(request: Request) {
           uri: webhookUrl,
         });
         webhookSubscriptionId = webhook.id;
+        // Recorded immediately: a failure in the checkout steps below must not strand a live
+        // subscription that no row references, which would double-register on the next save.
+        await prisma.shopifyIntegration.update({
+          where: { id: saved.id },
+          data: { webhookSubscriptionId },
+        });
       }
     } else {
       webhookWarning = skippedWebhookMessage("Webhook signing secret is not configured.");
+    }
+
+    let checkoutCurrency: string | null = null;
+    let ordersPaidWebhookSubscriptionId: string | null = null;
+    let checkoutWarning: string | null = null;
+
+    if (parsed.data.checkoutEnabled) {
+      checkoutCurrency = await readShopifyShopCurrency({
+        shopDomain: nextShopDomain,
+        accessToken: effectiveAccessToken,
+      });
+
+      if (nextWebhookSecretEncrypted) {
+        let ordersPaidWebhookUrl: string | null = null;
+        try {
+          ordersPaidWebhookUrl = buildShopifyOrdersPaidWebhookUrl(saved.id);
+        } catch (error) {
+          const message = errorMessage(error);
+          if (webhookRegistrationIsRequired()) return jsonError(message, 400);
+          checkoutWarning = skippedCheckoutWebhookMessage(message);
+        }
+
+        if (ordersPaidWebhookUrl) {
+          const webhook = await createShopifyWebhook({
+            shopDomain: nextShopDomain,
+            accessToken: effectiveAccessToken,
+            topic: SHOPIFY_WEBHOOK_TOPIC.ordersPaid,
+            uri: ordersPaidWebhookUrl,
+          });
+          ordersPaidWebhookSubscriptionId = webhook.id;
+          await prisma.shopifyIntegration.update({
+            where: { id: saved.id },
+            data: { ordersPaidWebhookSubscriptionId },
+          });
+        }
+      } else {
+        checkoutWarning = skippedCheckoutWebhookMessage(
+          "Webhook signing secret is not configured.",
+        );
+      }
     }
 
     const enabled = await prisma.shopifyIntegration.update({
@@ -259,6 +353,10 @@ export async function PATCH(request: Request) {
         enabled: true,
         webhookSubscriptionId,
         lastSyncError: webhookWarning,
+        checkoutEnabled: parsed.data.checkoutEnabled,
+        checkoutCurrency,
+        ordersPaidWebhookSubscriptionId,
+        checkoutLastError: checkoutWarning,
       },
     });
 

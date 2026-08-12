@@ -12,6 +12,7 @@ const optionalSecret = z.preprocess(
 export const shopifyIntegrationUpdateSchema = z.object({
   shopDomain: z.string().trim().min(1, "Shop domain is required").max(255),
   enabled: z.boolean(),
+  checkoutEnabled: z.boolean().optional().default(false),
   accessToken: optionalSecret,
   webhookSecret: optionalSecret,
 });

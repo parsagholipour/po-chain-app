@@ -278,6 +278,14 @@ model ShopifyIntegration {
   lastMatchedSkuCount        Int       @default(0)
   lastUnmatchedLocalSkuCount Int       @default(0)
   syncLockUntil              DateTime?
+  /// Route store sale-channel checkout through Shopify draft orders instead of Stripe.
+  checkoutEnabled            Boolean   @default(false)
+  /// Shop currency cached at enable time so pricing needs no network call.
+  checkoutCurrency           String?
+  /// Checkout-specific failures; kept apart from lastSyncError so inventory sync status stays readable.
+  checkoutLastError          String?   @db.Text
+  /// ORDERS_PAID subscription; never overload webhookSubscriptionId (INVENTORY_LEVELS_UPDATE).
+  ordersPaidWebhookSubscriptionId String?
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 
@@ -975,6 +983,10 @@ model PaymentAttempt {
   providerPaymentIntentId String?
   checkoutUrl             String?
   failureMessage          String?
+  /// Unguessable secret echoed back by the provider (Shopify note attributes) to prove the callback is ours.
+  correlationToken        String?              @unique
+  /// Provider-specific checkout detail (Shopify: line plan, warnings, draft order id).
+  providerMetadata        Json?
   invoiceId               String               @db.Uuid
   invoice                 Invoice              @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   storeId                 String               @db.Uuid
@@ -989,6 +1001,7 @@ model PaymentAttempt {
   @@index([storeId, invoiceId])
   @@index([storeId, provider, status])
   @@index([storeId, createdAt])
+  @@index([provider, status, createdAt])
 }
 
 model PaymentWebhookEvent {

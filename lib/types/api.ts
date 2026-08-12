@@ -103,7 +103,29 @@ export type ShopifyIntegrationSettings = {
   lastSyncedProductCount: number;
   lastMatchedSkuCount: number;
   lastUnmatchedLocalSkuCount: number;
+  checkoutEnabled: boolean;
+  checkoutCurrency: string | null;
+  checkoutLastError: string | null;
+  ordersPaidWebhookSubscriptionId: string | null;
+  checkoutWebhookRegistered: boolean;
   updatedAt: string | null;
+};
+
+export type ShopifyHealthCheckStatus = "ok" | "warning" | "error" | "skipped";
+
+export type ShopifyHealthCheck = {
+  key: string;
+  label: string;
+  status: ShopifyHealthCheckStatus;
+  detail: string;
+  hint: string | null;
+};
+
+export type ShopifyIntegrationHealth = {
+  checkedAt: string;
+  durationMs: number;
+  status: "ok" | "warning" | "error" | "not_configured";
+  checks: ShopifyHealthCheck[];
 };
 
 export type CjDropshippingIntegrationSettings = {

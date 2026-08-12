@@ -3,6 +3,7 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 const INVENTORY_LEVELS_TOPIC_HEADER = "inventory_levels/update";
+const ORDERS_PAID_TOPIC_HEADER = "orders/paid";
 
 export function verifyShopifyWebhookHmac({
   rawBody,
@@ -29,4 +30,10 @@ export function isInventoryLevelsUpdateTopic(topic: string | null) {
     normalized === INVENTORY_LEVELS_TOPIC_HEADER ||
     normalized === "inventory_levels_update"
   );
+}
+
+export function isOrdersPaidTopic(topic: string | null) {
+  if (!topic) return false;
+  const normalized = topic.trim().toLowerCase();
+  return normalized === ORDERS_PAID_TOPIC_HEADER || normalized === "orders_paid";
 }

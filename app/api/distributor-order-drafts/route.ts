@@ -15,7 +15,7 @@ import {
   isDistributorContext,
   requireStoreContext,
 } from "@/lib/store-context";
-import { getStripeCredentialsForStore } from "@/lib/payments/stripe-settings";
+import { resolveStoreCheckoutCurrency } from "@/lib/payments/checkout-provider";
 import { missingStorePriceMessage, storePriceCentsFromMsrp } from "@/lib/store-pricing";
 import { PaymentProviderConfigError } from "@/lib/payments/types";
 import { saleChannelLocationCreateSchema } from "@/lib/validations/master-data";
@@ -185,7 +185,7 @@ export async function POST(request: Request) {
 
     const paymentCurrency =
       saleChannelPaymentType.type === "store"
-        ? (await getStripeCredentialsForStore(storeId)).currency
+        ? await resolveStoreCheckoutCurrency(storeId)
         : DEFAULT_PAYMENT_CURRENCY;
 
     for (const doc of parsed.data.documents) {

@@ -146,3 +146,7 @@ export function getShopifyWebhookBaseUrl() {
 export function buildShopifyInventoryWebhookUrl(integrationId: string) {
   return `${getShopifyWebhookBaseUrl()}/api/webhooks/shopify/${integrationId}/inventory-levels-update`;
 }
+
+export function buildShopifyOrdersPaidWebhookUrl(integrationId: string) {
+  return `${getShopifyWebhookBaseUrl()}/api/webhooks/shopify/${integrationId}/orders-paid`;
+}

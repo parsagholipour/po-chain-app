@@ -102,7 +102,7 @@ function statusCopy(invoice: DistributorOrderInvoice | undefined) {
     icon: Clock,
     title: paymentRequired ? "Payment is processing" : "Order is processing",
     description: paymentRequired
-      ? "Stripe is confirming the payment. This page will update automatically."
+      ? "The payment provider is confirming the payment. This page will update automatically."
       : "Your purchase orders are being created. This page will update automatically.",
     tone: "text-amber-600 dark:text-amber-400",
     spin: false,
