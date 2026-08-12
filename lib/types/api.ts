@@ -464,7 +464,9 @@ export type SaleChannelProduct = {
   upcGtin: string | null;
   category: ProductCategory | null;
   collection: ProductCollection | null;
+  /** Null for store sale channels, which only ever see `storePrice`. */
   msrp: string | number | null;
+  /** Null for store sale channels, which only ever see `storePrice`. */
   map: string | number | null;
   /** Null for store sale channels, which pay `storePrice` instead. */
   wholesalePrice: string | number | null;

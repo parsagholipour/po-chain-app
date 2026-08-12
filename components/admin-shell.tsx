@@ -156,6 +156,7 @@ const distributorNav: readonly NavItem[] = [
 
 const storeNav: readonly NavItem[] = [
   { kind: "link", href: "/new-order", label: "New Order", icon: ShoppingCart },
+  { kind: "link", href: "/products", label: "Products", icon: Boxes },
 ] as const;
 
 type StoreOption = {

@@ -224,7 +224,7 @@ function ProductPickerRow({
   checked: boolean;
   onToggle: (productId: string, checked: boolean) => void;
 }) {
-  const { priceShortLabel } = useSaleChannelPricing();
+  const { priceShortLabel, isStorePricing } = useSaleChannelPricing();
   const checkboxId = `product-picker-${product.id}`;
 
   return (
@@ -277,12 +277,16 @@ function ProductPickerRow({
               Category:{" "}
               <span className="text-foreground">{product.category?.name ?? "None"}</span>
             </div>
-            <div>
-              MSRP: <PriceView value={product.msrp} className="text-foreground" />
-            </div>
-            <div>
-              MAP: <PriceView value={product.map} className="text-foreground" />
-            </div>
+            {isStorePricing ? null : (
+              <>
+                <div>
+                  MSRP: <PriceView value={product.msrp} className="text-foreground" />
+                </div>
+                <div>
+                  MAP: <PriceView value={product.map} className="text-foreground" />
+                </div>
+              </>
+            )}
             <div>
               MOQ: <span className="text-foreground">{emptyValue(product.moq)}</span>
             </div>

@@ -47,7 +47,8 @@ export type SaleChannelProductsTableGroup = {
   rows: SaleChannelProduct[];
 };
 
-const columnCount = 17;
+/** Store accounts only ever see their own store price, never the catalog reference prices. */
+const retailPriceHeaderKeys = new Set(["msrp", "map"]);
 const stickySkuColumnClassName = "w-44 min-w-44 max-w-44";
 const stickyProductNameColumnClassName = "w-72 min-w-72 max-w-72";
 const stickySkuClassName =
@@ -384,10 +385,12 @@ function shouldIgnoreSelectionCellClick(target: EventTarget | null) {
 function SaleChannelProductRow({
   row,
   selected = false,
+  showRetailPrices,
   onSelectionChange,
 }: {
   row: SaleChannelProduct;
   selected?: boolean;
+  showRetailPrices: boolean;
   onSelectionChange?: (rowId: string, selected: boolean) => void;
 }) {
   const selectionEnabled = Boolean(onSelectionChange);
@@ -437,12 +440,16 @@ function SaleChannelProductRow({
       <TableCell className="max-w-44 truncate" title={row.collection?.name ?? undefined}>
         {row.collection?.name ?? <span className="text-muted-foreground">None</span>}
       </TableCell>
-      <TableCell className="text-end text-muted-foreground">
-        <PriceView value={row.msrp} />
-      </TableCell>
-      <TableCell className="text-end text-muted-foreground">
-        <PriceView value={row.map} />
-      </TableCell>
+      {showRetailPrices ? (
+        <>
+          <TableCell className="text-end text-muted-foreground">
+            <PriceView value={row.msrp} />
+          </TableCell>
+          <TableCell className="text-end text-muted-foreground">
+            <PriceView value={row.map} />
+          </TableCell>
+        </>
+      ) : null}
       <TableCell className="text-end">
         <PriceView value={saleChannelProductPrice(row)} />
       </TableCell>
@@ -483,14 +490,18 @@ export function SaleChannelProductsTable({
   onRowSelectionChange,
   onRowsSelectionChange,
 }: Props) {
-  const { priceLabel } = useSaleChannelPricing();
+  const { priceLabel, isStorePricing } = useSaleChannelPricing();
+  const showRetailPrices = !isStorePricing;
   const headers = useMemo(
     () =>
-      saleChannelProductHeaders.map((header) =>
-        header.key === "unitPrice" ? { ...header, label: priceLabel } : header,
-      ),
-    [priceLabel],
+      saleChannelProductHeaders
+        .filter((header) => showRetailPrices || !retailPriceHeaderKeys.has(header.key))
+        .map((header) =>
+          header.key === "unitPrice" ? { ...header, label: priceLabel } : header,
+        ),
+    [priceLabel, showRetailPrices],
   );
+  const columnCount = headers.length;
   const selectableRows = groups ? groups.flatMap((group) => group.rows) : rows;
   const selectedVisibleRowCount = selectedRowIds
     ? selectableRows.reduce((count, row) => count + (selectedRowIds.has(row.id) ? 1 : 0), 0)
@@ -747,6 +758,7 @@ export function SaleChannelProductsTable({
                         key={row.id}
                         row={row}
                         selected={selectedRowIds?.has(row.id)}
+                        showRetailPrices={showRetailPrices}
                         onSelectionChange={onRowSelectionChange}
                       />
                     ))}
@@ -759,6 +771,7 @@ export function SaleChannelProductsTable({
                   key={row.id}
                   row={row}
                   selected={selectedRowIds?.has(row.id)}
+                  showRetailPrices={showRetailPrices}
                   onSelectionChange={onRowSelectionChange}
                 />
               ))
