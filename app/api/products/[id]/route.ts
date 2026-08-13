@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
   productUpdateSchema,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/webhooks/product-events";
 import { z } from "zod";
 import { productShopifySnapshotOmit } from "@/lib/product-shopify-omit";
+import { refreshShopifyVariantSnapshotAfterProductSave } from "@/lib/shopify/variant-snapshot";
 
 export const runtime = "nodejs";
 
@@ -129,6 +130,7 @@ export async function PATCH(
       omit: productShopifySnapshotOmit,
     });
     await emitProductEvent({ storeId, productId: row.id, event: "product.updated" });
+    after(() => refreshShopifyVariantSnapshotAfterProductSave(storeId, row.sku));
     return NextResponse.json(row);
   } catch (e) {
     const j = jsonFromPrisma(e);

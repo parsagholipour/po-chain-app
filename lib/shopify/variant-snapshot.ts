@@ -7,6 +7,7 @@ import {
   shopifyGraphql,
   ShopifyApiError,
 } from "@/lib/shopify/admin";
+import { decryptShopifySecret } from "@/lib/shopify/encryption";
 
 const METAFIELDS_PAGE_SIZE = 30;
 const MAX_METAFIELD_PAGES = 10;
@@ -607,4 +608,73 @@ export async function refreshShopifyVariantSnapshotsForWebhook({
 
 export async function clearShopifyVariantSnapshotsForStore(storeId: string) {
   await clearSnapshotRows(storeId, {});
+}
+
+async function enabledShopifyCredentials(storeId: string) {
+  const integration = await prisma.shopifyIntegration.findUnique({
+    where: { storeId },
+    select: {
+      enabled: true,
+      shopDomain: true,
+      accessTokenEncrypted: true,
+    },
+  });
+  if (!integration?.enabled || !integration.accessTokenEncrypted) return null;
+
+  return {
+    shopDomain: integration.shopDomain,
+    accessToken: await decryptShopifySecret(integration.accessTokenEncrypted),
+  };
+}
+
+/**
+ * Refetch one SKU after a local product create/update. Never throws: a Shopify
+ * miss must not turn a successful product save into a failed API response.
+ */
+export async function refreshShopifyVariantSnapshotAfterProductSave(
+  storeId: string,
+  sku: string | null | undefined,
+) {
+  const trimmed = sku?.trim();
+  if (!trimmed) return;
+
+  try {
+    const credentials = await enabledShopifyCredentials(storeId);
+    if (!credentials) return;
+
+    await refreshShopifyVariantSnapshotForSku({
+      storeId,
+      sku: trimmed,
+      ...credentials,
+    });
+  } catch (error) {
+    console.error("[shopify-variant-snapshot] post-save refresh failed", {
+      storeId,
+      sku: trimmed,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/** Backfill every local SKU after the Shopify integration is saved enabled. */
+export async function refreshShopifyVariantSnapshotsAfterIntegrationSave(storeId: string) {
+  try {
+    const credentials = await enabledShopifyCredentials(storeId);
+    if (!credentials) return;
+
+    const products = await prisma.product.findMany({
+      where: { storeId },
+      select: { sku: true },
+    });
+    await refreshShopifyVariantSnapshotsForStore({
+      storeId,
+      skus: products.map((product) => product.sku),
+      ...credentials,
+    });
+  } catch (error) {
+    console.error("[shopify-variant-snapshot] post-integration-save refresh failed", {
+      storeId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

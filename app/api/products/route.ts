@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import {
@@ -10,6 +10,7 @@ import { requireStoreContext } from "@/lib/store-context";
 import { emitProductEvent } from "@/lib/webhooks/product-events";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { productShopifySnapshotOmit } from "@/lib/product-shopify-omit";
+import { refreshShopifyVariantSnapshotAfterProductSave } from "@/lib/shopify/variant-snapshot";
 
 export const runtime = "nodejs";
 
@@ -186,6 +187,7 @@ export async function POST(request: Request) {
       omit: productShopifySnapshotOmit,
     });
     await emitProductEvent({ storeId, productId: row.id, event: "product.created" });
+    after(() => refreshShopifyVariantSnapshotAfterProductSave(storeId, row.sku));
     return NextResponse.json(row, { status: 201 });
   } catch (e) {
     const j = jsonFromPrisma(e);

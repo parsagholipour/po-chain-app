@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { requireInternalStoreContext } from "@/lib/store-context";
@@ -25,7 +25,7 @@ import {
   encryptShopifySecret,
   isLegacyShopifySecret,
 } from "@/lib/shopify/encryption";
-import { clearShopifyVariantSnapshotsForStore } from "@/lib/shopify/variant-snapshot";
+import { clearShopifyVariantSnapshotsForStore, refreshShopifyVariantSnapshotsAfterIntegrationSave } from "@/lib/shopify/variant-snapshot";
 
 export const runtime = "nodejs";
 
@@ -444,6 +444,7 @@ export async function PATCH(request: Request) {
       },
     });
 
+    after(() => refreshShopifyVariantSnapshotsAfterIntegrationSave(storeId));
     return NextResponse.json(integrationResponse(enabled));
   } catch (error) {
     const j = jsonFromPrisma(error);
