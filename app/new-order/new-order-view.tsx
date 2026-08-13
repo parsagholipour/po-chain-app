@@ -2034,32 +2034,36 @@ export function NewOrderView() {
 
       {/* Sticky action bar — stays in view while the order table scrolls */}
       <div className="sticky top-0 z-20 -mx-3 flex flex-wrap items-center justify-end gap-2 border-b border-border/80 bg-background/90 px-3 py-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-        <Input
-          ref={orderImportInputRef}
-          type="file"
-          accept={ORDER_IMPORT_ACCEPT}
-          className="hidden"
-          disabled={!canImportOrderFile}
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0] ?? null;
-            event.currentTarget.value = "";
-            if (file) void importOrderFile(file);
-          }}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => orderImportInputRef.current?.click()}
-          disabled={!canImportOrderFile}
-          className="grow sm:grow-0"
-        >
-          {isImportingOrderFile ? (
-            <Loader2 className="size-4 animate-spin" />
-          ) : (
-            <FileSpreadsheet className="size-4" />
-          )}
-          Import File
-        </Button>
+        {!isStoreSaleChannel ? (
+          <>
+            <Input
+              ref={orderImportInputRef}
+              type="file"
+              accept={ORDER_IMPORT_ACCEPT}
+              className="hidden"
+              disabled={!canImportOrderFile}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0] ?? null;
+                event.currentTarget.value = "";
+                if (file) void importOrderFile(file);
+              }}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => orderImportInputRef.current?.click()}
+              disabled={!canImportOrderFile}
+              className="grow sm:grow-0"
+            >
+              {isImportingOrderFile ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="size-4" />
+              )}
+              Import File
+            </Button>
+          </>
+        ) : null}
         <Button
           type="button"
           variant="outline"
