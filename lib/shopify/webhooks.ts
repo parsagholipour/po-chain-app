@@ -4,6 +4,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 const INVENTORY_LEVELS_TOPIC_HEADER = "inventory_levels/update";
 const ORDERS_PAID_TOPIC_HEADER = "orders/paid";
+const PRODUCTS_CREATE_TOPIC_HEADER = "products/create";
+const PRODUCTS_UPDATE_TOPIC_HEADER = "products/update";
+const PRODUCTS_DELETE_TOPIC_HEADER = "products/delete";
 
 export function verifyShopifyWebhookHmac({
   rawBody,
@@ -36,4 +39,26 @@ export function isOrdersPaidTopic(topic: string | null) {
   if (!topic) return false;
   const normalized = topic.trim().toLowerCase();
   return normalized === ORDERS_PAID_TOPIC_HEADER || normalized === "orders_paid";
+}
+
+export function isProductsCreateTopic(topic: string | null) {
+  if (!topic) return false;
+  const normalized = topic.trim().toLowerCase();
+  return normalized === PRODUCTS_CREATE_TOPIC_HEADER || normalized === "products_create";
+}
+
+export function isProductsUpdateTopic(topic: string | null) {
+  if (!topic) return false;
+  const normalized = topic.trim().toLowerCase();
+  return normalized === PRODUCTS_UPDATE_TOPIC_HEADER || normalized === "products_update";
+}
+
+export function isProductsDeleteTopic(topic: string | null) {
+  if (!topic) return false;
+  const normalized = topic.trim().toLowerCase();
+  return normalized === PRODUCTS_DELETE_TOPIC_HEADER || normalized === "products_delete";
+}
+
+export function isProductCatalogTopic(topic: string | null) {
+  return isProductsCreateTopic(topic) || isProductsUpdateTopic(topic) || isProductsDeleteTopic(topic);
 }

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { publicApiError, requireApiToken } from "@/lib/api-tokens";
 import { publicProductInclude, serializePublicProduct } from "@/lib/public-api/product";
+import { productShopifySnapshotOmit } from "@/lib/product-shopify-omit";
 
 export const runtime = "nodejs";
 
@@ -39,7 +40,11 @@ export async function GET(
     where = { storeId, id: parsed.data };
   }
 
-  const row = await prisma.product.findFirst({ where, include: publicProductInclude });
+  const row = await prisma.product.findFirst({
+    where,
+    include: publicProductInclude,
+    omit: productShopifySnapshotOmit,
+  });
   if (!row) return publicApiError("not_found", "Product not found.", 404);
 
   return NextResponse.json({ data: serializePublicProduct(row) });

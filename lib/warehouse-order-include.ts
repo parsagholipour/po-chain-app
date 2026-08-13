@@ -1,4 +1,5 @@
 import { orderStatusLogInclude } from "@/lib/order-status-log";
+import { productShopifySnapshotOmit } from "@/lib/product-shopify-omit";
 
 /** Prisma `include` for warehouse order detail API responses. */
 export const warehouseOrderDetailInclude = {
@@ -17,6 +18,7 @@ export const warehouseOrderDetailInclude = {
       purchaseOrderLine: {
         include: {
           product: {
+            omit: productShopifySnapshotOmit,
             include: {
               defaultManufacturer: true,
               category: true,

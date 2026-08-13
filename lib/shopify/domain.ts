@@ -150,3 +150,7 @@ export function buildShopifyInventoryWebhookUrl(integrationId: string) {
 export function buildShopifyOrdersPaidWebhookUrl(integrationId: string) {
   return `${getShopifyWebhookBaseUrl()}/api/webhooks/shopify/${integrationId}/orders-paid`;
 }
+
+export function buildShopifyProductsWebhookUrl(integrationId: string) {
+  return `${getShopifyWebhookBaseUrl()}/api/webhooks/shopify/${integrationId}/products`;
+}

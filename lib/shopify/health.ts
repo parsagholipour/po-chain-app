@@ -9,12 +9,14 @@ import {
   validateShopifyAccess,
   validateShopifyCheckoutScopes,
   validateShopifyInventoryScopes,
+  validateShopifyMetaobjectScopes,
   type ShopifyWebhookSubscription,
 } from "@/lib/shopify/admin";
 import { checkoutTtlMinutes } from "@/lib/shopify/checkout-sweeper";
 import {
   buildShopifyInventoryWebhookUrl,
   buildShopifyOrdersPaidWebhookUrl,
+  buildShopifyProductsWebhookUrl,
 } from "@/lib/shopify/domain";
 import { decryptShopifySecret } from "@/lib/shopify/encryption";
 
@@ -223,6 +225,9 @@ export async function checkShopifyIntegrationHealth(
       webhookSecretEncrypted: true,
       webhookSubscriptionId: true,
       ordersPaidWebhookSubscriptionId: true,
+      productsCreateWebhookSubscriptionId: true,
+      productsUpdateWebhookSubscriptionId: true,
+      productsDeleteWebhookSubscriptionId: true,
     },
   });
 
@@ -288,7 +293,7 @@ export async function checkShopifyIntegrationHealth(
     label: "Webhook signing secret",
     status: integration.webhookSecretEncrypted ? "ok" : "error",
     detail: integration.webhookSecretEncrypted
-      ? "Configured; both webhook topics are signed with it"
+      ? "Configured; all webhook topics are signed with it"
       : "Not configured, so no webhook can be verified",
     hint: integration.webhookSecretEncrypted
       ? null
@@ -311,6 +316,25 @@ export async function checkShopifyIntegrationHealth(
       status: "error",
       detail: errorMessage(error),
       hint: "Grant read_products and read_inventory to the app in Shopify, then reinstall it.",
+    });
+  }
+
+  try {
+    await validateShopifyMetaobjectScopes(credentials);
+    checks.push({
+      key: "metaobject_scopes",
+      label: "Metaobject scopes",
+      status: "ok",
+      detail: "read_metaobjects is granted; variant snapshots can expand metaobjects",
+      hint: null,
+    });
+  } catch (error) {
+    checks.push({
+      key: "metaobject_scopes",
+      label: "Metaobject scopes",
+      status: "warning",
+      detail: errorMessage(error),
+      hint: "Grant read_metaobjects to expand referenced metaobjects in stored variant snapshots. Snapshots still save metafield jsonValue without it.",
     });
   }
 
@@ -338,6 +362,37 @@ export async function checkShopifyIntegrationHealth(
       recordedId: integration.webhookSubscriptionId,
       expectedUrl: inventoryUrl.url,
       expectedUrlError: inventoryUrl.error,
+      subscriptions,
+    }),
+  );
+
+  const productsUrl = expectedUrl(buildShopifyProductsWebhookUrl);
+  checks.push(
+    webhookCheck({
+      key: "products_create_webhook",
+      label: "Products create webhook",
+      topic: SHOPIFY_WEBHOOK_TOPIC.productsCreate,
+      recordedId: integration.productsCreateWebhookSubscriptionId,
+      expectedUrl: productsUrl.url,
+      expectedUrlError: productsUrl.error,
+      subscriptions,
+    }),
+    webhookCheck({
+      key: "products_update_webhook",
+      label: "Products update webhook",
+      topic: SHOPIFY_WEBHOOK_TOPIC.productsUpdate,
+      recordedId: integration.productsUpdateWebhookSubscriptionId,
+      expectedUrl: productsUrl.url,
+      expectedUrlError: productsUrl.error,
+      subscriptions,
+    }),
+    webhookCheck({
+      key: "products_delete_webhook",
+      label: "Products delete webhook",
+      topic: SHOPIFY_WEBHOOK_TOPIC.productsDelete,
+      recordedId: integration.productsDeleteWebhookSubscriptionId,
+      expectedUrl: productsUrl.url,
+      expectedUrlError: productsUrl.error,
       subscriptions,
     }),
   );

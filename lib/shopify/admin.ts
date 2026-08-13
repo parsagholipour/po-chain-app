@@ -114,6 +114,16 @@ const VALIDATE_CHECKOUT_SCOPES_QUERY = /* GraphQL */ `
   }
 `;
 
+const VALIDATE_METAOBJECT_SCOPES_QUERY = /* GraphQL */ `
+  query ValidateMetaobjectScopes {
+    metaobjectDefinitions(first: 1) {
+      nodes {
+        id
+      }
+    }
+  }
+`;
+
 const PRODUCT_VARIANTS_BY_SKU_QUERY = /* GraphQL */ `
   query ProductVariantsBySku($query: String!, $after: String) {
     productVariants(first: 250, after: $after, query: $query) {
@@ -279,6 +289,9 @@ const WEBHOOK_CREATE_MUTATION = /* GraphQL */ `
 export const SHOPIFY_WEBHOOK_TOPIC = {
   inventoryLevelsUpdate: "INVENTORY_LEVELS_UPDATE",
   ordersPaid: "ORDERS_PAID",
+  productsCreate: "PRODUCTS_CREATE",
+  productsUpdate: "PRODUCTS_UPDATE",
+  productsDelete: "PRODUCTS_DELETE",
 } as const;
 
 export type ShopifyWebhookTopic =
@@ -519,6 +532,18 @@ export async function validateShopifyCheckoutScopes(input: {
   }>({
     ...input,
     query: VALIDATE_CHECKOUT_SCOPES_QUERY,
+  });
+}
+
+export async function validateShopifyMetaobjectScopes(input: {
+  shopDomain: string;
+  accessToken: string;
+}) {
+  await shopifyGraphql<{
+    metaobjectDefinitions: { nodes: Array<{ id: string }> };
+  }>({
+    ...input,
+    query: VALIDATE_METAOBJECT_SCOPES_QUERY,
   });
 }
 

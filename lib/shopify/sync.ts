@@ -9,6 +9,7 @@ import {
   isLegacyShopifySecret,
 } from "@/lib/shopify/encryption";
 import { readOnHandInventoryForSku } from "@/lib/shopify/admin";
+import { refreshShopifyVariantSnapshotsForStore } from "@/lib/shopify/variant-snapshot";
 
 const SYNC_LOCK_MS = 10 * 60 * 1000;
 
@@ -620,12 +621,36 @@ export async function syncShopifyIntegrationById(
       movementCount,
     };
 
+    let snapshotError: string | null = null;
+    if (trigger !== "webhook") {
+      try {
+        const snapshotResult = await refreshShopifyVariantSnapshotsForStore({
+          storeId: integration.storeId,
+          shopDomain: integration.shopDomain,
+          accessToken,
+          skus: productsBySku.keys(),
+        });
+        console.info("[shopify-sync] variant snapshots refreshed", {
+          integrationId,
+          trigger,
+          ...snapshotResult,
+        });
+      } catch (error) {
+        snapshotError = errorMessage(error);
+        console.error("[shopify-sync] variant snapshot refresh failed", {
+          integrationId,
+          trigger,
+          error: snapshotError,
+        });
+      }
+    }
+
     await prisma.shopifyIntegration.update({
       where: { id: integration.id },
       data: {
         lastSyncAt: new Date(),
         lastSyncStatus: trigger,
-        lastSyncError: null,
+        lastSyncError: snapshotError,
         lastSyncedProductCount: result.syncedProductCount,
         lastMatchedSkuCount: result.matchedSkuCount,
         lastUnmatchedLocalSkuCount: result.unmatchedLocalSkuCount,

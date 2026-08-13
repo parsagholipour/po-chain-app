@@ -17,6 +17,7 @@ import {
 import {
   buildShopifyInventoryWebhookUrl,
   buildShopifyOrdersPaidWebhookUrl,
+  buildShopifyProductsWebhookUrl,
   normalizeShopifyDomain,
 } from "@/lib/shopify/domain";
 import {
@@ -24,6 +25,7 @@ import {
   encryptShopifySecret,
   isLegacyShopifySecret,
 } from "@/lib/shopify/encryption";
+import { clearShopifyVariantSnapshotsForStore } from "@/lib/shopify/variant-snapshot";
 
 export const runtime = "nodejs";
 
@@ -140,6 +142,21 @@ function skippedCheckoutWebhookMessage(reason: string) {
   return `${reason} Shopify store checkout is on, but the orders/paid webhook was not registered, so paid orders are only picked up by the hourly recovery sweep.`;
 }
 
+const PRODUCT_WEBHOOK_TOPICS = [
+  {
+    topic: SHOPIFY_WEBHOOK_TOPIC.productsCreate,
+    field: "productsCreateWebhookSubscriptionId",
+  },
+  {
+    topic: SHOPIFY_WEBHOOK_TOPIC.productsUpdate,
+    field: "productsUpdateWebhookSubscriptionId",
+  },
+  {
+    topic: SHOPIFY_WEBHOOK_TOPIC.productsDelete,
+    field: "productsDeleteWebhookSubscriptionId",
+  },
+] as const;
+
 export async function GET() {
   const authz = await requireInternalStoreContext();
   if (!authz.ok) return authz.response;
@@ -245,6 +262,19 @@ export async function PATCH(request: Request) {
         ...previousWebhookOwner,
         subscriptionId: existing?.ordersPaidWebhookSubscriptionId ?? null,
       });
+      await tryDeleteWebhook({
+        ...previousWebhookOwner,
+        subscriptionId: existing?.productsCreateWebhookSubscriptionId ?? null,
+      });
+      await tryDeleteWebhook({
+        ...previousWebhookOwner,
+        subscriptionId: existing?.productsUpdateWebhookSubscriptionId ?? null,
+      });
+      await tryDeleteWebhook({
+        ...previousWebhookOwner,
+        subscriptionId: existing?.productsDeleteWebhookSubscriptionId ?? null,
+      });
+      await clearShopifyVariantSnapshotsForStore(storeId);
       const disabled = await prisma.shopifyIntegration.update({
         where: { id: saved.id },
         data: {
@@ -252,6 +282,9 @@ export async function PATCH(request: Request) {
           checkoutEnabled: false,
           webhookSubscriptionId: null,
           ordersPaidWebhookSubscriptionId: null,
+          productsCreateWebhookSubscriptionId: null,
+          productsUpdateWebhookSubscriptionId: null,
+          productsDeleteWebhookSubscriptionId: null,
           lastSyncError: deleteError,
           checkoutLastError: checkoutDeleteError,
         },
@@ -271,18 +304,41 @@ export async function PATCH(request: Request) {
       ...previousWebhookOwner,
       subscriptionId: existing?.ordersPaidWebhookSubscriptionId ?? null,
     });
+    await tryDeleteWebhook({
+      ...previousWebhookOwner,
+      subscriptionId: existing?.productsCreateWebhookSubscriptionId ?? null,
+    });
+    await tryDeleteWebhook({
+      ...previousWebhookOwner,
+      subscriptionId: existing?.productsUpdateWebhookSubscriptionId ?? null,
+    });
+    await tryDeleteWebhook({
+      ...previousWebhookOwner,
+      subscriptionId: existing?.productsDeleteWebhookSubscriptionId ?? null,
+    });
     await prisma.shopifyIntegration.update({
       where: { id: saved.id },
-      data: { webhookSubscriptionId: null, ordersPaidWebhookSubscriptionId: null },
+      data: {
+        webhookSubscriptionId: null,
+        ordersPaidWebhookSubscriptionId: null,
+        productsCreateWebhookSubscriptionId: null,
+        productsUpdateWebhookSubscriptionId: null,
+        productsDeleteWebhookSubscriptionId: null,
+      },
     });
 
     let webhookSubscriptionId: string | null = null;
     let webhookWarning: string | null = null;
+    let productsCreateWebhookSubscriptionId: string | null = null;
+    let productsUpdateWebhookSubscriptionId: string | null = null;
+    let productsDeleteWebhookSubscriptionId: string | null = null;
 
     if (nextWebhookSecretEncrypted) {
       let webhookUrl: string | null = null;
+      let productsWebhookUrl: string | null = null;
       try {
         webhookUrl = buildShopifyInventoryWebhookUrl(saved.id);
+        productsWebhookUrl = buildShopifyProductsWebhookUrl(saved.id);
       } catch (error) {
         const message = errorMessage(error);
         if (webhookRegistrationIsRequired()) return jsonError(message, 400);
@@ -302,6 +358,31 @@ export async function PATCH(request: Request) {
           where: { id: saved.id },
           data: { webhookSubscriptionId },
         });
+      }
+
+      if (productsWebhookUrl) {
+        const productWebhookIds: Record<(typeof PRODUCT_WEBHOOK_TOPICS)[number]["field"], string> =
+          {
+            productsCreateWebhookSubscriptionId: "",
+            productsUpdateWebhookSubscriptionId: "",
+            productsDeleteWebhookSubscriptionId: "",
+          };
+        for (const item of PRODUCT_WEBHOOK_TOPICS) {
+          const webhook = await createShopifyWebhook({
+            shopDomain: nextShopDomain,
+            accessToken: effectiveAccessToken,
+            topic: item.topic,
+            uri: productsWebhookUrl,
+          });
+          productWebhookIds[item.field] = webhook.id;
+          await prisma.shopifyIntegration.update({
+            where: { id: saved.id },
+            data: { [item.field]: webhook.id },
+          });
+        }
+        productsCreateWebhookSubscriptionId = productWebhookIds.productsCreateWebhookSubscriptionId;
+        productsUpdateWebhookSubscriptionId = productWebhookIds.productsUpdateWebhookSubscriptionId;
+        productsDeleteWebhookSubscriptionId = productWebhookIds.productsDeleteWebhookSubscriptionId;
       }
     } else {
       webhookWarning = skippedWebhookMessage("Webhook signing secret is not configured.");
@@ -357,6 +438,9 @@ export async function PATCH(request: Request) {
         checkoutCurrency,
         ordersPaidWebhookSubscriptionId,
         checkoutLastError: checkoutWarning,
+        productsCreateWebhookSubscriptionId,
+        productsUpdateWebhookSubscriptionId,
+        productsDeleteWebhookSubscriptionId,
       },
     });
 

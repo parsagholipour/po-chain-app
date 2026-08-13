@@ -1138,6 +1138,10 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
                 placeholder={tokenPlaceholder}
                 autoComplete="off"
               />
+              <FieldDescription>
+                Needs read_products and read_inventory. Grant read_metaobjects to expand
+                referenced metaobjects in stored variant snapshots.
+              </FieldDescription>
               {data.hasAccessToken ? (
                 <FieldDescription>Leave blank to keep the saved token.</FieldDescription>
               ) : null}

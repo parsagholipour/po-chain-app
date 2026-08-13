@@ -286,6 +286,10 @@ model ShopifyIntegration {
   checkoutLastError          String?   @db.Text
   /// ORDERS_PAID subscription; never overload webhookSubscriptionId (INVENTORY_LEVELS_UPDATE).
   ordersPaidWebhookSubscriptionId String?
+  /// PRODUCTS_CREATE/UPDATE/DELETE; used to refresh Product.shopifyVariant. Never overload inventory or checkout ids.
+  productsCreateWebhookSubscriptionId String?
+  productsUpdateWebhookSubscriptionId String?
+  productsDeleteWebhookSubscriptionId String?
   createdAt                  DateTime  @default(now())
   updatedAt                  DateTime  @updatedAt
 
@@ -749,6 +753,10 @@ model Product {
   collectionId          String?              @db.Uuid
   collection            ProductCollection?   @relation(fields: [collectionId], references: [id], onDelete: Restrict)
   verified              Boolean              @default(false)
+  /// Shopify ProductVariant snapshot (nested Product + resolved metaobjects). Kept off product APIs.
+  shopifyVariant        Json?
+  /// `gid://shopify/ProductVariant/...` for webhook retargeting when the Shopify SKU changes.
+  shopifyVariantGid     String?
   storeId               String               @db.Uuid
   store                 Store                @relation(fields: [storeId], references: [id], onDelete: Restrict)
   createdAt             DateTime             @default(now())
@@ -774,6 +782,7 @@ model Product {
   @@index([storeId, orderByDate])
   @@index([storeId, createdAt])
   @@index([storeId, verified])
+  @@index([storeId, shopifyVariantGid])
   @@index([storeId], where: raw("\"cost\" IS NULL OR \"price\" IS NULL"), name: "Product_storeId_missing_pricing_idx")
 }
 

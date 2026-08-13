@@ -9,6 +9,7 @@ import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { requireStoreContext } from "@/lib/store-context";
 import { emitProductEvent } from "@/lib/webhooks/product-events";
 import type { Prisma } from "@/app/generated/prisma/client";
+import { productShopifySnapshotOmit } from "@/lib/product-shopify-omit";
 
 export const runtime = "nodejs";
 
@@ -92,6 +93,7 @@ export async function GET(request: Request) {
         where,
         orderBy: { name: "asc" },
         include: productInclude,
+        omit: productShopifySnapshotOmit,
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
@@ -103,6 +105,7 @@ export async function GET(request: Request) {
     where,
     orderBy: { name: "asc" },
     include: productInclude,
+    omit: productShopifySnapshotOmit,
   });
   return NextResponse.json(rows);
 }
@@ -180,6 +183,7 @@ export async function POST(request: Request) {
         createdById: userId,
       },
       include: { defaultManufacturer: true, category: true, type: true, collection: true },
+      omit: productShopifySnapshotOmit,
     });
     await emitProductEvent({ storeId, productId: row.id, event: "product.created" });
     return NextResponse.json(row, { status: 201 });

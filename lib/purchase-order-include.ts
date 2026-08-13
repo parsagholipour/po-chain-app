@@ -1,8 +1,12 @@
 import { orderStatusLogInclude } from "@/lib/order-status-log";
+import { productShopifySnapshotOmit } from "@/lib/product-shopify-omit";
 
 /** Single PO line shape for API responses (detail, line PATCH/POST/GET). */
 export const purchaseOrderLineApiInclude = {
-  product: { include: { defaultManufacturer: true, category: true, type: true, collection: true } },
+  product: {
+    omit: productShopifySnapshotOmit,
+    include: { defaultManufacturer: true, category: true, type: true, collection: true },
+  },
   manufacturingOrderLines: {
     select: {
       manufacturingOrderId: true,
@@ -26,7 +30,7 @@ export const purchaseOrderOsdListInclude = {
   lines: {
     include: {
       purchaseOrderLine: {
-        include: { product: { include: { defaultManufacturer: true, category: true, type: true, collection: true } } },
+        include: { product: { omit: productShopifySnapshotOmit, include: { defaultManufacturer: true, category: true, type: true, collection: true } } },
       },
     },
   },

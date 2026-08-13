@@ -4,6 +4,7 @@ import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { publicApiError, requireApiToken } from "@/lib/api-tokens";
 import { publicProductInclude, serializePublicProduct } from "@/lib/public-api/product";
+import { productShopifySnapshotOmit } from "@/lib/product-shopify-omit";
 
 export const runtime = "nodejs";
 
@@ -108,6 +109,7 @@ export async function GET(request: Request) {
       where,
       orderBy: { [sortField]: order },
       include: publicProductInclude,
+      omit: productShopifySnapshotOmit,
       skip: (page - 1) * pageSize,
       take: pageSize,
     }),

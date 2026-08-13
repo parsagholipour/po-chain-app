@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { publicProductInclude, serializePublicProduct } from "@/lib/public-api/product";
+import { productShopifySnapshotOmit } from "@/lib/product-shopify-omit";
 import { enqueueWebhookEvent } from "@/lib/webhooks/delivery";
 
 /**
@@ -21,6 +22,7 @@ export async function emitProductEvent({
     const row = await prisma.product.findFirst({
       where: { id: productId, storeId },
       include: publicProductInclude,
+      omit: productShopifySnapshotOmit,
     });
     if (!row) return;
 

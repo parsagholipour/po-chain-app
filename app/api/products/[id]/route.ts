@@ -11,6 +11,7 @@ import {
   emitProductEvent,
 } from "@/lib/webhooks/product-events";
 import { z } from "zod";
+import { productShopifySnapshotOmit } from "@/lib/product-shopify-omit";
 
 export const runtime = "nodejs";
 
@@ -31,6 +32,7 @@ export async function GET(
   const row = await prisma.product.findFirst({
     where: { id: pid.data.id, storeId },
     include: { defaultManufacturer: true, category: true, type: true, collection: true },
+    omit: productShopifySnapshotOmit,
   });
   if (!row) return jsonError("Not found", 404);
   return NextResponse.json(row);
@@ -124,6 +126,7 @@ export async function PATCH(
       where: { id: pid.data.id },
       data: productUpdateToPrisma(parsed.data),
       include: { defaultManufacturer: true, category: true, type: true, collection: true },
+      omit: productShopifySnapshotOmit,
     });
     await emitProductEvent({ storeId, productId: row.id, event: "product.updated" });
     return NextResponse.json(row);

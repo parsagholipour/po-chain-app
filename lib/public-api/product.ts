@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Prisma } from "@/app/generated/prisma/client";
+import { productShopifySnapshotOmit } from "@/lib/product-shopify-omit";
 
 /**
  * Relations embedded in every public product representation. External services
@@ -18,6 +19,7 @@ export const publicProductInclude = {
 
 export type PublicProductRow = Prisma.ProductGetPayload<{
   include: typeof publicProductInclude;
+  omit: typeof productShopifySnapshotOmit;
 }>;
 
 type DecimalLike = { toString(): string } | null;
