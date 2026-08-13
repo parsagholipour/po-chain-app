@@ -454,6 +454,49 @@ function snapshotGids(envelope: ShopifyVariantSnapshotEnvelope) {
     .filter((gid): gid is string => Boolean(gid));
 }
 
+function httpUrl(value: unknown) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "https:" || url.protocol === "http:" ? trimmed : null;
+  } catch {
+    return null;
+  }
+}
+
+function nestedUrl(value: unknown, key: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return httpUrl((value as JsonRecord)[key]);
+}
+
+function imageUrlFromVariant(variant: JsonRecord | undefined) {
+  if (!variant) return null;
+  const variantImage = nestedUrl(variant.image, "url");
+  if (variantImage) return variantImage;
+
+  const product =
+    variant.product && typeof variant.product === "object" && !Array.isArray(variant.product)
+      ? (variant.product as JsonRecord)
+      : null;
+  const featuredMedia = product?.featuredMedia;
+  const featuredImage =
+    featuredMedia && typeof featuredMedia === "object" && !Array.isArray(featuredMedia)
+      ? nestedUrl((featuredMedia as JsonRecord).image, "url")
+      : null;
+  return featuredImage ?? nestedUrl(featuredMedia, "url");
+}
+
+function imageUrlFromEnvelope(envelope: ShopifyVariantSnapshotEnvelope) {
+  if (envelope.variant) return imageUrlFromVariant(envelope.variant);
+  for (const variant of envelope.variants ?? []) {
+    const url = imageUrlFromVariant(variant);
+    if (url) return url;
+  }
+  return null;
+}
+
 async function clearSnapshotRows(
   storeId: string,
   where: Prisma.ProductWhereInput,
@@ -492,6 +535,19 @@ async function writeSnapshotToSku({
       shopifyVariantGid: primaryGid,
     },
   });
+
+  const imageUrl = imageUrlFromEnvelope(envelope);
+  if (imageUrl) {
+    await prisma.product.updateMany({
+      where: {
+        storeId,
+        sku,
+        imageKey: null,
+        imageLink: "",
+      },
+      data: { imageLink: imageUrl },
+    });
+  }
 }
 
 export async function refreshShopifyVariantSnapshotForSku({

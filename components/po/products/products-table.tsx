@@ -197,6 +197,45 @@ function canOpenLink(value: string) {
   return /^https?:\/\//i.test(value);
 }
 
+function ProductImageCell({ row }: { row: Product }) {
+  const [imageLinkFailed, setImageLinkFailed] = useState(false);
+  const canShowImageLink = canOpenLink(row.imageLink) && !imageLinkFailed;
+
+  if (row.imageKey) {
+    return (
+      <StorageObjectImage
+        reference={row.imageKey}
+        className="size-8 shrink-0"
+        objectFit="cover"
+      />
+    );
+  }
+
+  if (!canShowImageLink) {
+    return (
+      <StorageObjectImage
+        reference={null}
+        className="size-8 shrink-0"
+        objectFit="cover"
+      />
+    );
+  }
+
+  return (
+    <div className="relative size-8 shrink-0 overflow-hidden rounded-md border border-border bg-muted/30">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={row.imageLink}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        className="absolute inset-0 size-full object-cover"
+        onError={() => setImageLinkFailed(true)}
+      />
+    </div>
+  );
+}
+
 export function ProductsTable({
   rows,
   isPending,
@@ -299,11 +338,7 @@ export function ProductsTable({
               rows.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell>
-                    <StorageObjectImage
-                      reference={row.imageKey}
-                      className="size-8 shrink-0"
-                      objectFit="cover"
-                    />
+                    <ProductImageCell row={row} />
                   </TableCell>
                   <TableCell className="min-w-56 max-w-72 whitespace-normal font-medium leading-snug">
                     {row.name}
