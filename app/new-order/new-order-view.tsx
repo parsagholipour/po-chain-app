@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/confirm-provider";
-import { useSaleChannelPricing } from "@/hooks/use-sale-channel-pricing";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { useWizardDocumentUpload } from "@/lib/use-wizard-document-upload";
@@ -910,6 +909,24 @@ function availableOrderQuantity(
   );
 }
 
+function remainingStockForQuantity({
+  stockCount,
+  orderedQuantity,
+  quantity,
+}: {
+  stockCount: number | null | undefined;
+  orderedQuantity: number;
+  quantity: number;
+}) {
+  if (stockCount == null) return null;
+  return Math.max(0, stockCount - (orderedQuantity - Math.max(0, quantity)));
+}
+
+function isQuantityWithinStock(quantity: number, remainingStock: number | null) {
+  if (quantity <= 0 || remainingStock == null) return true;
+  return quantity <= remainingStock;
+}
+
 function sessionDestinationKey(locationId: string) {
   return `session:${locationId}`;
 }
@@ -1089,10 +1106,6 @@ export function NewOrderView() {
     undo: undoBackOrderReview,
     redo: redoBackOrderReview,
   } = useUndoRedoState<BackOrderReview | null>(null, areBackOrderReviewsEqual);
-
-  /** Store accounts never receive stock counts, so the available-stock column has nothing to show. */
-  const { isStorePricing } = useSaleChannelPricing();
-  const showAvailableStock = !isStorePricing;
 
   const { data: saleChannels = [], isLoading: saleChannelsLoading } = useQuery({
     queryKey: ["sale-channels"],
@@ -1493,6 +1506,32 @@ export function NewOrderView() {
     return violations;
   }, [locations, productById, rowsWithActiveQuantity]);
 
+  const stockViolations = useMemo(() => {
+    if (!isStoreSaleChannel) return [];
+
+    const orderedByProductId = new Map<string, number>();
+    for (const row of rowsWithActiveQuantity) {
+      orderedByProductId.set(
+        row.productId,
+        (orderedByProductId.get(row.productId) ?? 0) + rowQuantityTotal(row),
+      );
+    }
+
+    const violations: Array<{
+      product: SaleChannelProduct;
+      ordered: number;
+      stockCount: number;
+    }> = [];
+
+    for (const [productId, ordered] of orderedByProductId) {
+      const product = productById.get(productId);
+      if (!product || product.stockCount == null || ordered <= product.stockCount) continue;
+      violations.push({ product, ordered, stockCount: product.stockCount });
+    }
+
+    return violations;
+  }, [isStoreSaleChannel, productById, rowsWithActiveQuantity]);
+
   const locationTotals = useMemo(() => {
     const totals = new Map<string, number>();
     for (const location of locations) totals.set(location.id, 0);
@@ -1683,6 +1722,8 @@ export function NewOrderView() {
   }
 
   function getBackOrderReview(): BackOrderReview | null {
+    if (isStoreSaleChannel) return null;
+
     const lines = rowsWithActiveQuantity.flatMap((row): BackOrderDraftLine[] => {
       const product = productById.get(row.productId);
       if (!product || product.stockCount == null) return [];
@@ -1770,6 +1811,15 @@ export function NewOrderView() {
             0,
             backOrderDraft?.quantity ?? quantityValue(row, location.id),
           );
+
+          if (isStoreSaleChannel) {
+            return {
+              sessionLocation: location,
+              quantity: requestedQuantity,
+              backOrderQuantity: 0,
+            };
+          }
+
           let quantity = requestedQuantity;
           let backOrderQuantity = 0;
 
@@ -1786,17 +1836,11 @@ export function NewOrderView() {
             backOrderQuantity = backOrderDraft?.backOrder ? overflowQuantity : 0;
           }
 
-          return isStoreSaleChannel
-            ? {
-                sessionLocation: location,
-                quantity,
-                backOrderQuantity,
-              }
-            : {
-                saleChannelLocationId: location.id,
-                quantity,
-                backOrderQuantity,
-              };
+          return {
+            saleChannelLocationId: location.id,
+            quantity,
+            backOrderQuantity,
+          };
         });
 
         return {
@@ -1929,6 +1973,7 @@ export function NewOrderView() {
     invalidPriceProducts.length === 0 &&
     moqViolations.length === 0 &&
     cartonViolations.length === 0 &&
+    stockViolations.length === 0 &&
     !isUploading &&
     !submitOrder.isPending &&
     !saleChannelsLoading &&
@@ -2219,6 +2264,17 @@ export function NewOrderView() {
               ].join(", ")}
             </div>
           ) : null}
+          {stockViolations.length > 0 ? (
+            <div className="rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-sm text-destructive">
+              Quantities cannot exceed available stock:{" "}
+              {stockViolations
+                .map(
+                  ({ product, stockCount }) =>
+                    `${product.sku} - ${product.name} (${stockCount} available)`,
+                )
+                .join(", ")}
+            </div>
+          ) : null}
 
           <div className="overflow-hidden rounded-lg border border-border/80">
             <Table>
@@ -2226,9 +2282,7 @@ export function NewOrderView() {
                 <TableRow>
                   <TableHead className="w-64 max-w-64 sm:w-72 sm:max-w-72">Product</TableHead>
                   <TableHead className="w-32 text-end">Unit price</TableHead>
-                  {showAvailableStock ? (
-                    <TableHead className="w-24 text-end">Available</TableHead>
-                  ) : null}
+                  <TableHead className="w-24 text-end">Available</TableHead>
                   {locations.map((location) => (
                     <TableHead key={location.id} className="min-w-32 text-end">
                       {location.name} Qty
@@ -2242,7 +2296,7 @@ export function NewOrderView() {
                 {productsLoading || locationsPending || saleChannelsLoading ? (
                   <TableRow>
                     <TableCell
-                      colSpan={locations.length + (showAvailableStock ? 5 : 4)}
+                      colSpan={locations.length + 5}
                       className="h-24 text-center text-muted-foreground"
                     >
                       Loading...
@@ -2251,7 +2305,7 @@ export function NewOrderView() {
                 ) : products.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={locations.length + (showAvailableStock ? 5 : 4)}
+                      colSpan={locations.length + 5}
                       className="h-24 text-center text-muted-foreground"
                     >
                       No products are available.
@@ -2314,13 +2368,16 @@ export function NewOrderView() {
                         <TableCell className="text-end">
                           <PriceView value={saleChannelProductPrice(product)} />
                         </TableCell>
-                        {showAvailableStock ? (
-                          <TableCell className="text-end">
-                            <AvailableStockCell product={product} />
-                          </TableCell>
-                        ) : null}
+                        <TableCell className="text-end">
+                          <AvailableStockCell product={product} />
+                        </TableCell>
                         {locations.map((location) => {
                           const quantity = quantityValue(row, location.id);
+                          const remainingStock = remainingStockForQuantity({
+                            stockCount: product?.stockCount,
+                            orderedQuantity: rowQuantityTotal(row),
+                            quantity,
+                          });
                           const moqInvalid =
                             Boolean(row.productId) &&
                             moq != null &&
@@ -2329,7 +2386,11 @@ export function NewOrderView() {
                             Boolean(row.productId) &&
                             itemsPerCarton != null &&
                             !isQuantityCartonValid(quantity, itemsPerCarton);
-                          const quantityInvalid = moqInvalid || cartonInvalid;
+                          const stockInvalid =
+                            isStoreSaleChannel &&
+                            Boolean(row.productId) &&
+                            !isQuantityWithinStock(quantity, remainingStock);
+                          const quantityInvalid = moqInvalid || cartonInvalid || stockInvalid;
 
                           return (
                             <TableCell key={location.id}>
@@ -2337,6 +2398,11 @@ export function NewOrderView() {
                                 <Input
                                   type="number"
                                   min={0}
+                                  max={
+                                    isStoreSaleChannel && remainingStock != null
+                                      ? remainingStock
+                                      : undefined
+                                  }
                                   step={itemsPerCarton ?? 1}
                                   disabled={!row.productId}
                                   aria-invalid={quantityInvalid}
@@ -2356,10 +2422,23 @@ export function NewOrderView() {
                                     )
                                   }
                                   onBlur={() => {
-                                    if (!row.productId || itemsPerCarton == null) return;
-                                    const snapped = snapQuantityToCarton(quantity, itemsPerCarton);
-                                    if (snapped !== quantity) {
-                                      updateRowQuantity(row.id, location.id, snapped);
+                                    if (!row.productId) return;
+                                    let nextQuantity = quantity;
+                                    if (itemsPerCarton != null) {
+                                      nextQuantity = snapQuantityToCarton(
+                                        nextQuantity,
+                                        itemsPerCarton,
+                                      );
+                                    }
+                                    if (isStoreSaleChannel && remainingStock != null) {
+                                      nextQuantity = availableOrderQuantity(
+                                        nextQuantity,
+                                        remainingStock,
+                                        itemsPerCarton,
+                                      );
+                                    }
+                                    if (nextQuantity !== quantity) {
+                                      updateRowQuantity(row.id, location.id, nextQuantity);
                                     }
                                   }}
                                 />
@@ -2376,6 +2455,13 @@ export function NewOrderView() {
                                 {cartonInvalid ? (
                                   <p className="text-end text-xs text-destructive">
                                     Full cartons only
+                                  </p>
+                                ) : null}
+                                {stockInvalid ? (
+                                  <p className="text-end text-xs text-destructive">
+                                    {remainingStock != null && remainingStock > 0
+                                      ? `Only ${remainingStock} available`
+                                      : "Out of stock"}
                                   </p>
                                 ) : null}
                               </div>

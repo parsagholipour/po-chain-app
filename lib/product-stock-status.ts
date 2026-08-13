@@ -9,8 +9,8 @@ export const productStockStatusLabels: Record<ProductStockStatus, string> = {
 };
 
 /**
- * Availability derived from the stock count. Store sale channels never receive the count itself,
- * so stock status has to be resolved server-side and sent alongside it.
+ * Availability derived from the stock count. Stock status is also sent so catalog views can
+ * show in/out of stock without exposing the exact count.
  */
 export function productStockStatus(
   stockCount: number | null | undefined,

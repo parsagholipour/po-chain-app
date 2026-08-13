@@ -47,7 +47,7 @@ export async function GET() {
   const authz = await requireStoreContext({ allowDistributor: true });
   if (!authz.ok) return authz.response;
   const { storeId } = authz.context;
-  /** Store accounts see neither the catalog reference prices nor the barcode/stock count. */
+  /** Store accounts see neither the catalog reference prices nor the barcode image. */
   const storePricing = isStoreSaleChannelContext(authz.context);
 
   const [products, customDefinitions] = await Promise.all([
@@ -112,7 +112,7 @@ export async function GET() {
       imageLink: product.imageLink,
       imageKey: product.imageKey,
       barcodeKey: storePricing ? null : product.barcodeKey,
-      stockCount: storePricing ? null : product.stockCount,
+      stockCount: product.stockCount,
       stockStatus: productStockStatus(product.stockCount),
       quantityPerCarton: product.quantityPerCarton,
       description: product.description,

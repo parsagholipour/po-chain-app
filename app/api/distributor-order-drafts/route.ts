@@ -67,6 +67,7 @@ type ProductPricing = {
   sku: string;
   costCents: number | null;
   priceCents: number;
+  stockCount: number | null;
 };
 
 type DestinationSnapshot = {
@@ -309,6 +310,7 @@ export async function POST(request: Request) {
           cost: true,
           price: true,
           msrp: true,
+          stockCount: true,
           editingStatus: true,
         },
       });
@@ -336,6 +338,7 @@ export async function POST(request: Request) {
           sku: product.sku,
           costCents: moneyToCents(product.cost),
           priceCents,
+          stockCount: product.stockCount,
         });
       }
 
@@ -356,6 +359,7 @@ export async function POST(request: Request) {
         }>
       >();
       let totalCents = 0;
+      const remainingStockByProductId = new Map<string, number>();
 
       for (const line of parsed.data.lines) {
         const product = productMap.get(line.productId);
@@ -375,6 +379,19 @@ export async function POST(request: Request) {
           if (regularQuantity <= 0 && backOrderQuantity <= 0) continue;
           if (!destinationByKey.has(destinationKey)) {
             throw new Error("LOCATION_NOT_FOUND");
+          }
+          if (saleChannel.type === "store" && backOrderQuantity > 0) {
+            throw new Error("STORE_BACK_ORDER_NOT_ALLOWED");
+          }
+          if (saleChannel.type === "store" && product.stockCount != null && regularQuantity > 0) {
+            const remaining =
+              remainingStockByProductId.get(product.id) ?? Math.max(0, product.stockCount);
+            if (regularQuantity > remaining) {
+              throw new Error(
+                `EXCEEDS_STOCK:${product.sku}:${product.stockCount}:${product.name}`,
+              );
+            }
+            remainingStockByProductId.set(product.id, remaining - regularQuantity);
           }
 
           if (regularQuantity > 0) {
@@ -608,7 +625,9 @@ export async function POST(request: Request) {
       }
 
       await createDraftsForLines(activeLinesByDestination, false);
-      await createDraftsForLines(activeBackOrderLinesByDestination, true);
+      if (saleChannel.type !== "store") {
+        await createDraftsForLines(activeBackOrderLinesByDestination, true);
+      }
 
       return { type: "invoice_drafts" as const, invoice, drafts };
     });
@@ -657,6 +676,16 @@ export async function POST(request: Request) {
       }
       if (e.message === "DUPLICATE_LOCATION_QUANTITY") {
         return jsonError("Each product can only have one quantity per location", 400);
+      }
+      if (e.message === "STORE_BACK_ORDER_NOT_ALLOWED") {
+        return jsonError("Store orders cannot include back-ordered quantities", 400);
+      }
+      if (e.message.startsWith("EXCEEDS_STOCK:")) {
+        const [, sku, stockCount, ...nameParts] = e.message.split(":");
+        return jsonError(
+          `Quantity for ${sku} - ${nameParts.join(":")} exceeds available stock (${stockCount})`,
+          400,
+        );
       }
       if (e.message === "NO_ACTIVE_QUANTITIES") {
         return jsonError("Enter a quantity for at least one product and location", 400);
