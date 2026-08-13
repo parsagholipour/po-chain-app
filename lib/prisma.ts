@@ -5,13 +5,20 @@ const REQUIRED_GENERATED_MODELS = [
   "CjDropshippingIntegration",
   "CjDropshippingInventoryCount",
   "CjDropshippingInventoryTransaction",
+  "OperatorWarning",
+  "OperatorWarningScanState",
 ] as const;
 
 const REQUIRED_CLIENT_DELEGATES = [
   "cjDropshippingIntegration",
   "cjDropshippingInventoryCount",
   "cjDropshippingInventoryTransaction",
+  "operatorWarning",
+  "operatorWarningScanState",
 ] as const;
+
+/** pg.Pool default is 10; set explicitly so background jobs cannot assume an unbounded pool. */
+const DEFAULT_PG_POOL_MAX = 10;
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -58,6 +65,16 @@ function assertGeneratedClientIsCurrent() {
   );
 }
 
+function pgPoolMax() {
+  const raw = process.env.DATABASE_POOL_MAX;
+  if (!raw) return DEFAULT_PG_POOL_MAX;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new Error("DATABASE_POOL_MAX must be a positive integer");
+  }
+  return parsed;
+}
+
 function createPrismaClient() {
   assertGeneratedClientIsCurrent();
 
@@ -65,7 +82,10 @@ function createPrismaClient() {
   if (!url) {
     throw new Error("DATABASE_URL is not set");
   }
-  const adapter = new PrismaPg(url);
+  const adapter = new PrismaPg({
+    connectionString: url,
+    max: pgPoolMax(),
+  });
   const client = new PrismaClient({ adapter });
 
   const missingDelegates = missingClientDelegates(client);

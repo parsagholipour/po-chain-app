@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { DataQualityView } from "@/components/analytics/views/data-quality-view";
+import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
-  title: "Analytics - Data Quality",
+  title: "Warnings",
 };
 
 export default function DataQualityAnalyticsPage() {
-  return <DataQualityView />;
+  redirect("/warnings");
 }

@@ -1000,3 +1000,53 @@ export type WebhookDeliveryRow = {
   createdAt: string;
   endpoint: { id: string; url: string };
 };
+
+export type OperatorWarningType =
+  | "product_missing_sku"
+  | "product_missing_wholesale"
+  | "product_missing_cost"
+  | "product_unverified"
+  | "po_line_missing_cost"
+  | "po_line_missing_price"
+  | "mo_line_missing_cost"
+  | "mo_allocation_unverified"
+  | "mo_missing_eta"
+  | "po_stale_in_transit";
+
+export type OperatorWarningTier = "low" | "medium" | "high" | "critical";
+
+export type OperatorWarningStatus = "open" | "disregarded";
+
+export type OperatorWarningRow = {
+  id: string;
+  fingerprint: string;
+  type: OperatorWarningType;
+  tier: OperatorWarningTier;
+  status: OperatorWarningStatus;
+  entityType: string;
+  entityId: string;
+  title: string;
+  message: string;
+  href: string | null;
+  issuePresent: boolean;
+  lastCheckedAt: string;
+  lastSeenAt: string;
+  disregardedAt: string | null;
+  disregardReason: string | null;
+  disregardedBy: { id: string; name: string | null; email: string } | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type OperatorWarningScanStateRow = {
+  lastStartedAt: string | null;
+  lastFinishedAt: string | null;
+  lastStatus: string | null;
+  lastError: string | null;
+  lastOpenCount: number;
+  lockUntil: string | null;
+};
+
+export type OperatorWarningsResponse = PaginatedResponse<OperatorWarningRow> & {
+  scan: OperatorWarningScanStateRow | null;
+};

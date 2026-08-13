@@ -199,6 +199,31 @@ enum WebhookDeliveryStatus {
   failed
 }
 
+enum OperatorWarningTier {
+  low
+  medium
+  high
+  critical
+}
+
+enum OperatorWarningStatus {
+  open
+  disregarded
+}
+
+enum OperatorWarningType {
+  product_missing_sku
+  product_missing_wholesale
+  product_missing_cost
+  product_unverified
+  po_line_missing_cost
+  po_line_missing_price
+  mo_line_missing_cost
+  mo_allocation_unverified
+  mo_missing_eta
+  po_stale_in_transit
+}
+
 model Store {
   id        String   @id @default(uuid()) @db.Uuid
   slug      String   @unique
@@ -258,6 +283,8 @@ model Store {
   apiTokens                            ApiToken[]
   webhookEndpoints                     WebhookEndpoint[]
   webhookDeliveries                    WebhookDelivery[]
+  operatorWarnings                     OperatorWarning[]
+  operatorWarningScanState             OperatorWarningScanState?
 
   @@index([name])
 }
@@ -578,6 +605,7 @@ model User {
   apiTokensCreated                            ApiToken[]                            @relation("ApiTokenCreatedBy")
   apiTokensRevoked                            ApiToken[]                            @relation("ApiTokenRevokedBy")
   webhookEndpointsCreated                     WebhookEndpoint[]                     @relation("WebhookEndpointCreatedBy")
+  operatorWarningsDisregarded                 OperatorWarning[]                     @relation("OperatorWarningDisregardedBy")
 }
 
 model AppSession {
@@ -1600,4 +1628,50 @@ model WebhookDelivery {
   @@index([status, nextAttemptAt, createdAt])
   @@index([storeId, createdAt])
   @@index([endpointId, createdAt])
+}
+
+model OperatorWarning {
+  id              String                @id @default(uuid()) @db.Uuid
+  fingerprint     String
+  type            OperatorWarningType
+  tier            OperatorWarningTier
+  status          OperatorWarningStatus @default(open)
+  entityType      String
+  entityId        String
+  title           String
+  message         String
+  href            String?
+  issuePresent    Boolean               @default(true)
+  lastCheckedAt   DateTime
+  lastSeenAt      DateTime
+  disregardedAt   DateTime?
+  disregardReason String?               @db.Text
+  disregardedById String?               @db.Uuid
+  disregardedBy   User?                 @relation("OperatorWarningDisregardedBy", fields: [disregardedById], references: [id], onDelete: SetNull)
+  storeId         String                @db.Uuid
+  store           Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  @@unique([storeId, fingerprint])
+  @@index([storeId, status, lastSeenAt])
+  @@index([storeId, status, tier])
+  @@index([storeId, type])
+  @@index([storeId, lastSeenAt])
+  @@index([disregardedById])
+}
+
+model OperatorWarningScanState {
+  storeId        String    @id @db.Uuid
+  store          Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  lastStartedAt  DateTime?
+  lastFinishedAt DateTime?
+  lastStatus     String?
+  lastError      String?   @db.Text
+  lastOpenCount  Int       @default(0)
+  lockUntil      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([lockUntil])
 }

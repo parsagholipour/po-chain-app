@@ -7,8 +7,12 @@ export async function register() {
       "@/lib/cjdropshipping/scheduler"
     );
     const { startWebhookDeliveryScheduler } = await import("@/lib/webhooks/scheduler");
+    const { startOperatorWarningScheduler } = await import(
+      "@/lib/operator-warnings/scheduler"
+    );
     startShopifyInventoryScheduler();
     startCjDropshippingInventoryScheduler();
     startWebhookDeliveryScheduler();
+    startOperatorWarningScheduler();
   }
 }

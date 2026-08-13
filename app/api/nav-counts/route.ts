@@ -32,10 +32,11 @@ export async function GET() {
       stockOrders: 0,
       manufacturingOrders: 0,
       warehouseOrders: 0,
+      warnings: 0,
     });
   }
 
-  const [purchaseOrders, stockOrders, manufacturingOrders, warehouseOrders] = await Promise.all([
+  const [purchaseOrders, stockOrders, manufacturingOrders, warehouseOrders, warnings] = await Promise.all([
     prisma.purchaseOrder.count({
       where: {
         storeId,
@@ -63,7 +64,16 @@ export async function GET() {
         status: { not: "closed" },
       },
     }),
+    prisma.operatorWarning.count({
+      where: { storeId, status: "open" },
+    }),
   ]);
 
-  return NextResponse.json({ purchaseOrders, stockOrders, manufacturingOrders, warehouseOrders });
+  return NextResponse.json({
+    purchaseOrders,
+    stockOrders,
+    manufacturingOrders,
+    warehouseOrders,
+    warnings,
+  });
 }

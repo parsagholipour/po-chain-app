@@ -23,6 +23,7 @@ import {
   Store,
   Settings,
   ShoppingCart,
+  TriangleAlert,
   Truck,
   Warehouse,
 } from "lucide-react";
@@ -92,6 +93,7 @@ type CollapsedNavPreview = {
 
 const nav: readonly NavItem[] = [
   { kind: "link", href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { kind: "link", href: "/warnings", label: "Warnings", icon: TriangleAlert },
   {
     kind: "group",
     href: "/analytics",
@@ -364,6 +366,7 @@ function NavList({
     "/stock-orders": navCounts?.stockOrders,
     "/manufacturing-orders": navCounts?.manufacturingOrders,
     "/warehouse-orders": navCounts?.warehouseOrders,
+    "/warnings": navCounts?.warnings,
   };
 
   const showCollapsedPreview = (
