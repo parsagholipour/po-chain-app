@@ -65,9 +65,9 @@ export function AppChromeClient({
 
   useEffect(() => {
     if (isDistributor && !distributorAllowed) {
-      router.replace("/");
+      router.replace(isStoreSaleChannel ? "/new-order" : "/");
     }
-  }, [distributorAllowed, isDistributor, router]);
+  }, [distributorAllowed, isDistributor, isStoreSaleChannel, router]);
 
   useEffect(() => {
     if (!authenticated && !isPublicPath) {

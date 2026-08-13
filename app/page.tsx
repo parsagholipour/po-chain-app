@@ -11,6 +11,10 @@ export default async function HomePage() {
     redirect(keycloakSignInPath("/"));
   }
 
+  if (session.user.type === "distributor" && session.user.saleChannelType === "store") {
+    redirect("/new-order");
+  }
+
   if (session.user.type === "distributor") {
     return <DistributorDashboardView />;
   }
