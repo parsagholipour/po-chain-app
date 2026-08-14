@@ -63,7 +63,7 @@ export function WarningsTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[92px]">Tier</TableHead>
+          <TableHead className="w-[110px]">Severity</TableHead>
           <TableHead className="w-[180px]">Type</TableHead>
           <TableHead>Item</TableHead>
           <TableHead>Details</TableHead>

@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   }
   if (tierRaw) {
     if (!isWarningTier(tierRaw)) {
-      return jsonError("Invalid warning tier", 400);
+      return jsonError("Invalid warning severity", 400);
     }
     where.tier = tierRaw;
   }

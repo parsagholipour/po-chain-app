@@ -260,9 +260,9 @@ export function WarningsView() {
                 filters.setFilter("tier", value);
                 resetPage();
               },
-              allLabel: "All tiers",
-              ariaLabel: "Filter by tier",
-              placeholder: "Tier",
+              allLabel: "All severities",
+              ariaLabel: "Filter by severity",
+              placeholder: "Severity",
               options: OPERATOR_WARNING_TIERS.map((tier) => ({
                 value: tier,
                 label: OPERATOR_WARNING_TIER_LABELS[tier],
