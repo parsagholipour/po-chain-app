@@ -5,6 +5,10 @@ const REQUIRED_GENERATED_MODELS = [
   "CjDropshippingIntegration",
   "CjDropshippingInventoryCount",
   "CjDropshippingInventoryTransaction",
+  "CrmIntegration",
+  "CrmLead",
+  "CrmLeadSampleProduct",
+  "CrmWebhookDelivery",
   "OperatorWarning",
   "OperatorWarningScanState",
 ] as const;
@@ -13,6 +17,10 @@ const REQUIRED_CLIENT_DELEGATES = [
   "cjDropshippingIntegration",
   "cjDropshippingInventoryCount",
   "cjDropshippingInventoryTransaction",
+  "crmIntegration",
+  "crmLead",
+  "crmLeadSampleProduct",
+  "crmWebhookDelivery",
   "operatorWarning",
   "operatorWarningScanState",
 ] as const;

@@ -10,6 +10,7 @@
     "test:sku-patterns": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test components/po/products/product-sku-patterns.test.mjs",
     "test:shopify-checkout": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test lib/shopify/checkout-line-plan.test.mjs",
     "test:shopify-product-webhook": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test lib/shopify/product-webhook.test.mjs",
+    "test:crm": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test lib/crm/domain.test.mjs lib/crm/lead.test.mjs lib/crm/webhooks.test.mjs",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",

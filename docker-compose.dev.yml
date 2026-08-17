@@ -23,6 +23,7 @@ services:
       WATCHPACK_POLLING: "1000"
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "1000"
+    command: ["sh", "scripts/docker-dev-entrypoint.sh"]
     ports:
       - "${APP_PORT:-4000}:4000"
     volumes:
@@ -44,14 +45,15 @@ services:
       POSTGRES_PASSWORD: po_app
       POSTGRES_DB: po_app
     ports:
-      - "${POSTGRES_PORT:-5433}:5432"
+      - "${POSTGRES_PORT:-5434}:5432"
     volumes:
       - po_app_postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U po_app -d po_app"]
-      interval: 5s
+      interval: 2s
       timeout: 5s
-      retries: 20
+      retries: 30
+      start_period: 10s
 
   mailhog:
     image: mailhog/mailhog:v1.0.1

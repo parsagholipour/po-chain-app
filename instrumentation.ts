@@ -10,8 +10,10 @@ export async function register() {
     const { startOperatorWarningScheduler } = await import(
       "@/lib/operator-warnings/scheduler"
     );
+    const { startCrmLeadScheduler } = await import("@/lib/crm/scheduler");
     startShopifyInventoryScheduler();
     startCjDropshippingInventoryScheduler();
+    startCrmLeadScheduler();
     startWebhookDeliveryScheduler();
     startOperatorWarningScheduler();
   }

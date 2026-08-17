@@ -25,13 +25,15 @@ const services = [
   },
   {
     name: "PostgreSQL",
-    url: `postgresql://po_app:po_app@localhost:${port("POSTGRES_PORT", 5433)}/po_app`,
+    url: `postgresql://po_app:po_app@localhost:${port("POSTGRES_PORT", 5434)}/po_app`,
     note: "database",
   },
 ];
 
 const smtpPort = port("MAILHOG_SMTP_PORT", 1025);
+const appUrl = services[0].url;
 
+console.log(`\nProject URL: ${appUrl}\n`);
 console.log("Docker dev services (host)\n");
 for (const { name, url, note } of services) {
   const label = name.padEnd(14);
@@ -39,4 +41,4 @@ for (const { name, url, note } of services) {
   if (note) console.log(`  ${" ".repeat(14)}  (${note})`);
 }
 console.log(`\n  MailHog SMTP   localhost:${smtpPort}  (SMTP, not HTTP)`);
-console.log("\nOverride ports via .env or APP_PORT=4001 make docker-dev-build");
+console.log("\nOverride ports via .env or APP_PORT=4001 make docker-dev-build\n");

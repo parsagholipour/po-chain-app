@@ -12,6 +12,9 @@ import type {
   CjDropshippingInventoryTransactionsResponse,
   CjDropshippingSyncResult,
   CjDropshippingWarehouseOption,
+  CrmIntegrationSettings,
+  CrmLeadsResponse,
+  CrmSyncResult,
   ProductStockSnapshotBackup,
   ShopifyInventoryCountsResponse,
   ShopifyInventoryLocationOption,
@@ -47,6 +50,8 @@ import {
 const shopifyIntegrationKey = ["shopify-integration"] as const;
 const cjDropshippingIntegrationKey = ["cjdropshipping-integration"] as const;
 const stripeIntegrationKey = ["stripe-integration"] as const;
+const crmIntegrationKey = ["crm-integration"] as const;
+const crmLeadsKey = ["crm-leads"] as const;
 const productStockBackupsKey = ["product-stock-snapshot-backups"] as const;
 const shopifyHealthKey = ["shopify-integration-health"] as const;
 const shopifyInventoryCountsKey = ["shopify-inventory-counts"] as const;
@@ -1475,6 +1480,322 @@ function CjDropshippingIntegrationForm({
   );
 }
 
+function leadDisplayName(row: {
+  firstName: string | null;
+  lastName: string | null;
+  company: string | null;
+}) {
+  const name = [row.firstName, row.lastName].filter(Boolean).join(" ").trim();
+  return name || row.company || "Untitled lead";
+}
+
+function CrmLeadsMirrorCard() {
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("pageSize", String(inventoryPageSize));
+  const trimmed = search.trim();
+  if (trimmed) params.set("q", trimmed);
+  const query = params.toString();
+
+  const leads = useQuery({
+    queryKey: [...crmLeadsKey, query],
+    queryFn: async () => {
+      const { data } = await api.get<CrmLeadsResponse>(
+        `/api/integrations/crm/leads?${query}`,
+      );
+      return data;
+    },
+  });
+
+  const rows = leads.data?.rows ?? [];
+
+  return (
+    <div className="rounded-lg border bg-background p-4 sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold">CRM leads</h2>
+          <p className="text-sm text-muted-foreground">
+            Read-only copy of Leads synced from CRM.
+          </p>
+        </div>
+        <Input
+          value={search}
+          onChange={(event) => {
+            setSearch(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search name, company, email, or status"
+          className="w-full sm:max-w-sm"
+        />
+      </div>
+
+      {leads.isPending ? (
+        <p className="py-4 text-sm text-muted-foreground">Loading leads...</p>
+      ) : leads.isError ? (
+        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {apiErrorMessage(leads.error)}
+        </p>
+      ) : rows.length === 0 ? (
+        <p className="py-4 text-sm text-muted-foreground">No mirrored leads yet.</p>
+      ) : (
+        <div className="overflow-hidden rounded-md border">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[680px] text-sm">
+              <thead className="border-b bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Lead</th>
+                  <th className="px-3 py-2 text-left font-medium">Email</th>
+                  <th className="px-3 py-2 text-left font-medium">Status</th>
+                  <th className="px-3 py-2 text-left font-medium">Updated</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {rows.map((row) => (
+                  <tr key={row.id} className={row.deletedAt ? "opacity-60" : undefined}>
+                    <td className="px-3 py-2">
+                      <p className="font-medium">{leadDisplayName(row)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {row.company && leadDisplayName(row) !== row.company
+                          ? row.company
+                          : row.crmLeadId}
+                      </p>
+                    </td>
+                    <td className="px-3 py-2">{row.email ?? "—"}</td>
+                    <td className="px-3 py-2">
+                      {row.deletedAt ? "Deleted" : row.status}
+                    </td>
+                    <td className="px-3 py-2">{formatDate(row.crmUpdatedAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <InventoryPagination
+            page={page}
+            total={leads.data?.total ?? 0}
+            onPageChange={setPage}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CrmIntegrationForm({ data }: { data: CrmIntegrationSettings }) {
+  const qc = useQueryClient();
+  const [baseUrl, setBaseUrl] = useState(data.baseUrl);
+  const [enabled, setEnabled] = useState(data.enabled);
+  const [apiToken, setApiToken] = useState("");
+  const [webhookSecret, setWebhookSecret] = useState("");
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+
+  const saveMut = useMutation({
+    mutationFn: async () => {
+      const body: {
+        baseUrl: string;
+        enabled: boolean;
+        apiToken?: string;
+        webhookSecret?: string;
+      } = { baseUrl, enabled };
+      if (apiToken.trim()) body.apiToken = apiToken.trim();
+      if (webhookSecret.trim()) body.webhookSecret = webhookSecret.trim();
+
+      const { data: row } = await api.patch<CrmIntegrationSettings>(
+        "/api/integrations/crm",
+        body,
+      );
+      return row;
+    },
+    onSuccess: (row) => {
+      qc.setQueryData(crmIntegrationKey, row);
+      qc.invalidateQueries({ queryKey: crmLeadsKey });
+      setApiToken("");
+      setWebhookSecret("");
+      toast.success(row.enabled ? "CRM integration enabled" : "CRM settings saved");
+    },
+    onError: (error: unknown) => toast.error(apiErrorMessage(error)),
+  });
+
+  const syncMut = useMutation({
+    mutationFn: async () => {
+      setSyncMessage("Starting CRM sync...");
+      return postSyncEventStream<CrmSyncResult>("/api/integrations/crm/sync-now", {
+        onEvent: (event) => {
+          const message = syncProgressMessage("CRM", event);
+          if (message) setSyncMessage(message);
+        },
+      });
+    },
+    onSuccess: (result) => {
+      setSyncMessage(null);
+      qc.invalidateQueries({ queryKey: crmIntegrationKey });
+      qc.invalidateQueries({ queryKey: crmLeadsKey });
+      if (result.skipped) {
+        toast.info(result.reason ?? "CRM sync skipped");
+      } else {
+        toast.success(
+          `Synced ${result.syncedLeadCount} lead(s)` +
+            (result.deletedLeadCount
+              ? `, ${result.deletedLeadCount} removed`
+              : ""),
+        );
+      }
+    },
+    onError: (error: unknown) => {
+      setSyncMessage(null);
+      toast.error(apiErrorMessage(error));
+    },
+  });
+
+  const canSync = Boolean(data.enabled && data.hasApiToken);
+  const statusTone = useMemo(() => {
+    if (data.lastSyncStatus === "error") return "text-destructive";
+    if (data.enabled) return "text-emerald-600 dark:text-emerald-400";
+    return "text-muted-foreground";
+  }, [data.enabled, data.lastSyncStatus]);
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border bg-background p-4 sm:p-5">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-semibold">CRM</h2>
+            <p className="text-sm text-muted-foreground">
+              Read-only Lead sync from the CRM public API.
+            </p>
+          </div>
+          <Checkbox
+            checked={enabled}
+            onCheckedChange={(value) => setEnabled(value === true)}
+            label="Enabled"
+          />
+        </div>
+
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="crm-base-url">CRM host URL</FieldLabel>
+            <Input
+              id="crm-base-url"
+              value={baseUrl}
+              onChange={(event) => setBaseUrl(event.target.value)}
+              placeholder="https://crm.example.com"
+              autoComplete="off"
+            />
+          </Field>
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="crm-api-token">API token</FieldLabel>
+              <Input
+                id="crm-api-token"
+                type="password"
+                value={apiToken}
+                onChange={(event) => setApiToken(event.target.value)}
+                placeholder={data.hasApiToken ? "Configured" : "crm_…"}
+                autoComplete="off"
+              />
+              {data.hasApiToken ? (
+                <FieldDescription>Leave blank to keep the saved token.</FieldDescription>
+              ) : (
+                <FieldDescription>
+                  Created in CRM Setup → API Access. Shown only once.
+                </FieldDescription>
+              )}
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="crm-webhook-secret">Webhook signing secret</FieldLabel>
+              <Input
+                id="crm-webhook-secret"
+                type="password"
+                value={webhookSecret}
+                onChange={(event) => setWebhookSecret(event.target.value)}
+                placeholder={data.hasWebhookSecret ? "Configured" : "whsec_…"}
+                autoComplete="off"
+              />
+              {data.hasWebhookSecret ? (
+                <FieldDescription>Leave blank to keep the saved secret.</FieldDescription>
+              ) : (
+                <FieldDescription>
+                  Paste the CRM webhook signing secret, then register the callback URL below.
+                </FieldDescription>
+              )}
+            </Field>
+          </div>
+        </FieldGroup>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            onClick={() => saveMut.mutate()}
+            disabled={saveMut.isPending}
+          >
+            <Save className="size-4" />
+            Save
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => syncMut.mutate()}
+            disabled={!canSync || syncMut.isPending}
+          >
+            <RefreshCw className={syncMut.isPending ? "size-4 animate-spin" : "size-4"} />
+            Sync now
+          </Button>
+        </div>
+        {syncMut.isPending && syncMessage ? (
+          <p className="mt-3 text-sm text-muted-foreground">{syncMessage}</p>
+        ) : null}
+      </div>
+
+      <div className="rounded-lg border bg-background p-4 sm:p-5">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Status
+            </p>
+            <p className={`mt-1 text-sm font-medium ${statusTone}`}>
+              {enabled ? statusLabel(data.lastSyncStatus) : "Disabled"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Last sync
+            </p>
+            <p className="mt-1 text-sm">{formatDate(data.lastSyncAt)}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Leads
+            </p>
+            <p className="mt-1 text-sm tabular-nums">{data.lastSyncedLeadCount}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Organization
+            </p>
+            <p className="mt-1 text-sm">{data.organizationName ?? "—"}</p>
+          </div>
+        </div>
+        {data.lastSyncError ? (
+          <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {data.lastSyncError}
+          </p>
+        ) : null}
+        {data.webhookUrl ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Webhook: {data.webhookUrl}
+          </p>
+        ) : null}
+      </div>
+
+      <CrmLeadsMirrorCard />
+    </div>
+  );
+}
+
 export function IntegrationsSettingsView() {
   const { data: shopifyData, isPending: shopifyPending } = useQuery({
     queryKey: shopifyIntegrationKey,
@@ -1503,14 +1824,25 @@ export function IntegrationsSettingsView() {
       return row;
     },
   });
+  const { data: crmData, isPending: crmPending } = useQuery({
+    queryKey: crmIntegrationKey,
+    queryFn: async () => {
+      const { data: row } = await api.get<CrmIntegrationSettings>(
+        "/api/integrations/crm",
+      );
+      return row;
+    },
+  });
 
   if (
     shopifyPending ||
     cjDropshippingPending ||
     stripePending ||
+    crmPending ||
     !shopifyData ||
     !cjDropshippingData ||
-    !stripeData
+    !stripeData ||
+    !crmData
   ) {
     return <p className="py-8 text-center text-sm text-muted-foreground">Loading...</p>;
   }
@@ -1528,6 +1860,10 @@ export function IntegrationsSettingsView() {
       <CjDropshippingIntegrationForm
         key={`cjdropshipping:${cjDropshippingData.id ?? "new"}:${cjDropshippingData.updatedAt ?? "never"}:${cjDropshippingData.enabled}`}
         data={cjDropshippingData}
+      />
+      <CrmIntegrationForm
+        key={`crm:${crmData.id ?? "new"}:${crmData.updatedAt ?? "never"}:${crmData.enabled}`}
+        data={crmData}
       />
     </div>
   );

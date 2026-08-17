@@ -163,6 +163,47 @@ export type StripeIntegrationSettings = {
   updatedAt: string | null;
 };
 
+export type CrmIntegrationSettings = {
+  id: string | null;
+  baseUrl: string;
+  enabled: boolean;
+  hasApiToken: boolean;
+  hasWebhookSecret: boolean;
+  organizationId: string | null;
+  organizationName: string | null;
+  organizationSlug: string | null;
+  lastSyncAt: string | null;
+  lastSyncStatus: string | null;
+  lastSyncError: string | null;
+  lastSyncedLeadCount: number;
+  webhookUrl: string | null;
+  updatedAt: string | null;
+};
+
+export type CrmSyncResult = {
+  integrationId: string;
+  skipped: boolean;
+  reason?: string;
+  lockExpiresAt?: string | null;
+  mode: "full" | "incremental";
+  syncedLeadCount: number;
+  deletedLeadCount: number;
+};
+
+export type CrmLeadRow = {
+  id: string;
+  crmLeadId: string;
+  firstName: string | null;
+  lastName: string | null;
+  company: string | null;
+  email: string | null;
+  status: string;
+  crmUpdatedAt: string;
+  deletedAt: string | null;
+};
+
+export type CrmLeadsResponse = PaginatedResponse<CrmLeadRow>;
+
 export type ShopifySyncResult = {
   integrationId: string;
   skipped: boolean;

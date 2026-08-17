@@ -66,7 +66,7 @@ The dev Compose stack starts:
 | Next.js app | [http://localhost:4000](http://localhost:4000) |
 | MailHog UI | [http://localhost:8025](http://localhost:8025) |
 | MailHog SMTP | `mailhog:1025` from Docker, `localhost:1025` from the host |
-| PostgreSQL | `postgres:5432` from Docker, `localhost:5433` from the host |
+| PostgreSQL | `postgres:5432` from Docker, `localhost:5434` from the host |
 | MinIO API | `minio:9000` from Docker, [http://localhost:9000](http://localhost:9000) from the host |
 | MinIO console | [http://localhost:9001](http://localhost:9001) |
 

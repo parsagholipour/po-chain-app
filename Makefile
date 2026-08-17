@@ -9,6 +9,7 @@ db-migrate:
 
 up:
 	docker compose -f docker-compose.dev.yml run --rm --no-deps app npm install
+	@$(MAKE) --no-print-directory dev-services
 	docker compose -f docker-compose.dev.yml up
 
 docker-dev-build:

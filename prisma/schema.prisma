@@ -266,6 +266,10 @@ model Store {
   cjdropshippingIntegration            CjDropshippingIntegration?
   cjdropshippingInventoryCounts        CjDropshippingInventoryCount[]
   cjdropshippingInventoryTransactions  CjDropshippingInventoryTransaction[]
+  crmIntegration                       CrmIntegration?
+  crmLeads                             CrmLead[]
+  crmLeadSampleProducts                CrmLeadSampleProduct[]
+  crmWebhookDeliveries                 CrmWebhookDelivery[]
   paymentProviderSettings              StorePaymentProviderSetting[]
   productStockSnapshotBackups          ProductStockSnapshotBackup[]
   productCategories                    ProductCategory[]
@@ -290,35 +294,35 @@ model Store {
 }
 
 model ShopifyIntegration {
-  id                         String    @id @default(uuid()) @db.Uuid
-  storeId                    String    @unique @db.Uuid
-  store                      Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  shopDomain                 String
-  enabled                    Boolean   @default(false)
-  accessTokenEncrypted       String?   @db.Text
-  webhookSecretEncrypted     String?   @db.Text
-  webhookSubscriptionId      String?
-  lastSyncAt                 DateTime?
-  lastSyncStatus             String?
-  lastSyncError              String?   @db.Text
-  lastSyncedProductCount     Int       @default(0)
-  lastMatchedSkuCount        Int       @default(0)
-  lastUnmatchedLocalSkuCount Int       @default(0)
-  syncLockUntil              DateTime?
+  id                                  String    @id @default(uuid()) @db.Uuid
+  storeId                             String    @unique @db.Uuid
+  store                               Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  shopDomain                          String
+  enabled                             Boolean   @default(false)
+  accessTokenEncrypted                String?   @db.Text
+  webhookSecretEncrypted              String?   @db.Text
+  webhookSubscriptionId               String?
+  lastSyncAt                          DateTime?
+  lastSyncStatus                      String?
+  lastSyncError                       String?   @db.Text
+  lastSyncedProductCount              Int       @default(0)
+  lastMatchedSkuCount                 Int       @default(0)
+  lastUnmatchedLocalSkuCount          Int       @default(0)
+  syncLockUntil                       DateTime?
   /// Route store sale-channel checkout through Shopify draft orders instead of Stripe.
-  checkoutEnabled            Boolean   @default(false)
+  checkoutEnabled                     Boolean   @default(false)
   /// Shop currency cached at enable time so pricing needs no network call.
-  checkoutCurrency           String?
+  checkoutCurrency                    String?
   /// Checkout-specific failures; kept apart from lastSyncError so inventory sync status stays readable.
-  checkoutLastError          String?   @db.Text
+  checkoutLastError                   String?   @db.Text
   /// ORDERS_PAID subscription; never overload webhookSubscriptionId (INVENTORY_LEVELS_UPDATE).
-  ordersPaidWebhookSubscriptionId String?
+  ordersPaidWebhookSubscriptionId     String?
   /// PRODUCTS_CREATE/UPDATE/DELETE; used to refresh Product.shopifyVariant. Never overload inventory or checkout ids.
   productsCreateWebhookSubscriptionId String?
   productsUpdateWebhookSubscriptionId String?
   productsDeleteWebhookSubscriptionId String?
-  createdAt                  DateTime  @default(now())
-  updatedAt                  DateTime  @updatedAt
+  createdAt                           DateTime  @default(now())
+  updatedAt                           DateTime  @updatedAt
 
   @@index([enabled])
   @@index([syncLockUntil])
@@ -434,6 +438,132 @@ model CjDropshippingIntegration {
 
   @@index([enabled])
   @@index([syncLockUntil])
+}
+
+model CrmIntegration {
+  id                     String    @id @default(uuid()) @db.Uuid
+  storeId                String    @unique @db.Uuid
+  store                  Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  baseUrl                String
+  enabled                Boolean   @default(false)
+  apiTokenEncrypted      String?   @db.Text
+  webhookSecretEncrypted String?   @db.Text
+  organizationId         String?
+  organizationName       String?
+  organizationSlug       String?
+  lastSyncAt             DateTime?
+  lastSyncStatus         String?
+  lastSyncError          String?   @db.Text
+  lastSyncedLeadCount    Int       @default(0)
+  lastIncrementalAt      DateTime?
+  syncLockUntil          DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  leads             CrmLead[]
+  webhookDeliveries CrmWebhookDelivery[]
+
+  @@index([enabled])
+  @@index([syncLockUntil])
+}
+
+model CrmLead {
+  id                     String         @id @default(uuid()) @db.Uuid
+  storeId                String         @db.Uuid
+  store                  Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  integrationId          String         @db.Uuid
+  integration            CrmIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  crmLeadId              String
+  organizationId         String
+  status                 String
+  salutation             String?
+  firstName              String?
+  lastName               String?
+  company                String?
+  title                  String?
+  website                String?
+  description            String?        @db.Text
+  ownerId                String
+  owner                  Json
+  rating                 String?
+  phone                  String?
+  email                  String?
+  country                String?
+  street                 String?
+  postalCode             String?
+  city                   String?
+  state                  String?
+  numberOfEmployees      Int?
+  annualRevenue          Decimal?       @db.Decimal(18, 2)
+  leadSource             String?
+  industry               String?
+  sampleRequestedDate    DateTime?
+  sampleStatus           String?
+  courier                String?
+  trackingNumber         String?
+  deliveryDate           DateTime?
+  convertedAt            DateTime?
+  convertedAccountId     String?
+  convertedContactId     String?
+  convertedOpportunityId String?
+  createdById            String
+  updatedById            String
+  crmCreatedAt           DateTime
+  crmUpdatedAt           DateTime
+  shipment               Json?
+  payload                Json
+  deletedAt              DateTime?
+  lastSyncedAt           DateTime
+  lastSyncTrigger        String
+  lastSeenInRunId        String?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  sampleProducts CrmLeadSampleProduct[]
+
+  @@unique([storeId, crmLeadId])
+  @@index([storeId, status])
+  @@index([storeId, email])
+  @@index([storeId, crmUpdatedAt])
+  @@index([storeId, deletedAt])
+  @@index([storeId, lastSeenInRunId])
+  @@index([integrationId])
+}
+
+model CrmLeadSampleProduct {
+  id           String   @id @default(uuid()) @db.Uuid
+  storeId      String   @db.Uuid
+  store        Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  leadId       String   @db.Uuid
+  lead         CrmLead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  crmLineId    String
+  crmProductId String
+  quantity     Decimal  @db.Decimal(18, 4)
+  unitPrice    Decimal  @db.Decimal(18, 2)
+  totalPrice   Decimal  @db.Decimal(18, 2)
+  description  String?  @db.Text
+  displayOrder Int
+  product      Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([leadId, crmLineId])
+  @@index([storeId, leadId])
+}
+
+model CrmWebhookDelivery {
+  id            String         @id @default(uuid()) @db.Uuid
+  storeId       String         @db.Uuid
+  store         Store          @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  integrationId String         @db.Uuid
+  integration   CrmIntegration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  deliveryId    String
+  event         String
+  processedAt   DateTime       @default(now())
+  createdAt     DateTime       @default(now())
+
+  @@unique([integrationId, deliveryId])
+  @@index([storeId, processedAt])
 }
 
 model CjDropshippingInventoryCount {
@@ -1556,24 +1686,24 @@ model NotificationEmailDelivery {
 /// Store-scoped bearer credential for the public /api/v1 surface.
 /// Only the SHA-256 hash is persisted; the plaintext is shown once at creation.
 model ApiToken {
-  id          String    @id @default(uuid()) @db.Uuid
-  name        String
-  tokenHash   String    @unique
-  tokenPrefix String
-  last4       String
-  scopes      String[]
-  expiresAt   DateTime?
-  lastUsedAt  DateTime?
-  requestCount Int      @default(0)
-  revokedAt   DateTime?
-  revokedById String?   @db.Uuid
-  revokedBy   User?     @relation("ApiTokenRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
-  storeId     String    @db.Uuid
-  store       Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  createdById String    @db.Uuid
-  createdBy   User      @relation("ApiTokenCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String
+  tokenHash    String    @unique
+  tokenPrefix  String
+  last4        String
+  scopes       String[]
+  expiresAt    DateTime?
+  lastUsedAt   DateTime?
+  requestCount Int       @default(0)
+  revokedAt    DateTime?
+  revokedById  String?   @db.Uuid
+  revokedBy    User?     @relation("ApiTokenRevokedBy", fields: [revokedById], references: [id], onDelete: SetNull)
+  storeId      String    @db.Uuid
+  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  createdById  String    @db.Uuid
+  createdBy    User      @relation("ApiTokenCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([storeId, createdAt])
   @@index([storeId, revokedAt])
