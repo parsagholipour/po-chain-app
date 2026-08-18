@@ -632,6 +632,7 @@ model CjDropshippingInventoryTransaction {
   @@index([storeId, productId, observedAt])
   @@index([storeId, sku, observedAt])
   @@index([storeId, cjInternalSku, observedAt], map: "CjDropshipTxn_storeId_cjInternalSku_observed_idx")
+  @@index([storeId, sku, cjAreaId, observedAt], map: "CjDropshipTxn_store_sku_area_observed_idx")
   @@index([storeId, cjAreaId, observedAt])
   @@index([storeId, syncRunId])
   @@index([storeId, movementType])

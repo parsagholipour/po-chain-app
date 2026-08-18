@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, RefreshCw, Save } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, RefreshCw, Save } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
@@ -98,6 +98,44 @@ function formatDateOnly(value: string) {
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
   }).format(new Date(year, month - 1, day));
+}
+
+function localDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function filenameFromContentDisposition(value: string | null) {
+  if (!value) return null;
+
+  const encoded = value.match(/filename\*\s*=\s*(?:UTF-8'')?([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded.trim().replace(/^"|"$/g, ""));
+    } catch {
+      return encoded.trim().replace(/^"|"$/g, "");
+    }
+  }
+
+  return value.match(/filename\s*=\s*("[^"]+"|[^;]+)/i)?.[1]?.trim().replace(/^"|"$/g, "") ?? null;
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+async function responseErrorMessage(response: Response) {
+  const data = (await response.json().catch(() => null)) as { message?: string } | null;
+  return data?.message ?? `Request failed (${response.status})`;
 }
 
 function formatBytes(bytes: number) {
@@ -426,6 +464,109 @@ function ShopifyInventoryMirrorCard() {
             onPageChange={setMovementsPage}
           />
         </div>
+      </div>
+    </div>
+  );
+}
+
+function CjDropshippingInventorySnapshotCard() {
+  const [date, setDate] = useState(() => localDateKey(new Date()));
+  const [warehouseId, setWarehouseId] = useState(allLocationsValue);
+  const [downloading, setDownloading] = useState(false);
+
+  const warehousesQuery = useQuery({
+    queryKey: [...cjDropshippingInventoryCountsKey, "snapshot-warehouses"],
+    queryFn: async () => {
+      const { data } = await api.get<CjDropshippingInventoryCountsResponse>(
+        "/api/integrations/cjdropshipping/inventory-counts?page=1&pageSize=1",
+      );
+      return data;
+    },
+  });
+  const warehouses = warehousesQuery.data?.warehouses ?? [];
+  const todayKey = localDateKey(new Date());
+
+  async function downloadSnapshot() {
+    if (!date || downloading) return;
+    setDownloading(true);
+    try {
+      const params = new URLSearchParams({ date });
+      if (warehouseId !== allLocationsValue) params.set("warehouseId", warehouseId);
+      const response = await fetch(
+        `/api/integrations/cjdropshipping/inventory-snapshot?${params}`,
+        { credentials: "include" },
+      );
+      if (!response.ok) {
+        throw new Error(await responseErrorMessage(response));
+      }
+
+      const blob = await response.blob();
+      const fileName =
+        filenameFromContentDisposition(response.headers.get("content-disposition")) ??
+        `cj-inventory-snapshot-${date}.csv`;
+      downloadBlob(blob, fileName);
+
+      const rowCount = Number(response.headers.get("x-row-count") ?? "0");
+      toast.success(
+        `Downloaded ${rowCount.toLocaleString()} warehouse count${rowCount === 1 ? "" : "s"}`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not download snapshot");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border bg-background p-4 sm:p-5">
+      <div className="mb-4">
+        <h2 className="text-base font-semibold">Download stock snapshot</h2>
+        <p className="text-sm text-muted-foreground">
+          Warehouse counts as of the end of the selected date, from synced CJ transactions.
+          CJ does not keep history for us; dates before the first sync have no rows. Quantity is
+          CJ available stock.
+        </p>
+      </div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
+        <Field className="sm:w-48">
+          <FieldLabel htmlFor="cjdropshipping-snapshot-date">Date</FieldLabel>
+          <Input
+            id="cjdropshipping-snapshot-date"
+            type="date"
+            value={date}
+            max={todayKey}
+            onChange={(event) => setDate(event.target.value)}
+          />
+        </Field>
+        <Field className="sm:w-56">
+          <FieldLabel>Warehouse</FieldLabel>
+          <Select
+            value={warehouseId}
+            onValueChange={(value) =>
+              setWarehouseId(typeof value === "string" ? value : allLocationsValue)
+            }
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={allLocationsValue}>All warehouses</SelectItem>
+              {warehouses.map((warehouse) => (
+                <SelectItem key={warehouse.id} value={warehouse.id}>
+                  {cjWarehouseLabel(warehouse)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Button
+          type="button"
+          onClick={() => void downloadSnapshot()}
+          disabled={!date || downloading}
+        >
+          <Download className="size-4" />
+          {downloading ? "Downloading..." : "Download"}
+        </Button>
       </div>
     </div>
   );
@@ -1517,7 +1658,8 @@ function CjDropshippingIntegrationForm({
         </div>
       </TabsContent>
 
-      <TabsContent value="inventory" className="pt-4">
+      <TabsContent value="inventory" className="space-y-4 pt-4">
+        <CjDropshippingInventorySnapshotCard />
         <CjDropshippingInventoryMirrorCard />
       </TabsContent>
     </Tabs>
