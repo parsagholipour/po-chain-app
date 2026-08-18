@@ -3,6 +3,10 @@ import "server-only";
 const CJ_API_BASE_URL = "https://developers.cjdropshipping.com/api2.0/v1";
 const CJ_WEB_API_BASE_URL = "https://cjdropshipping.com";
 const DEFAULT_REQUEST_INTERVAL_MS = 1100;
+const DEFAULT_MAX_ATTEMPTS = 4;
+const RETRY_BASE_DELAY_MS = 500;
+const TRANSIENT_CJ_CODES = new Set([100010]);
+const TRANSIENT_HTTP_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 export type CjAuthTokenData = {
   openId?: string | number | null;
@@ -171,18 +175,72 @@ function envelopeSucceeded<T>(envelope: CjApiEnvelope<T>) {
   return envelope.code === 0 || envelope.code === 200;
 }
 
+function formatCjApiFailure(endpoint: string, envelope: CjApiEnvelope<unknown>) {
+  const message = envelope.message?.trim() || "CJdropshipping API request failed";
+  const details = [
+    endpoint,
+    envelope.code != null ? `code ${envelope.code}` : null,
+    envelope.requestId ? `requestId ${envelope.requestId}` : null,
+  ].filter((part): part is string => Boolean(part));
+  return `${message} (${details.join(", ")})`;
+}
+
 function requireData<T>(envelope: CjApiEnvelope<T>, endpoint: string): T {
   if (!envelopeSucceeded(envelope)) {
-    throw new CjDropshippingApiError(
-      envelope.message || `CJdropshipping API request failed: ${endpoint}`,
-      {
-        code: envelope.code,
-        requestId: envelope.requestId,
-      },
-    );
+    throw new CjDropshippingApiError(formatCjApiFailure(endpoint, envelope), {
+      code: envelope.code,
+      requestId: envelope.requestId,
+    });
   }
 
   return envelope.data as T;
+}
+
+function isTransientCjError(error: unknown) {
+  if (error instanceof CjDropshippingApiError) {
+    if (error.code != null && TRANSIENT_CJ_CODES.has(error.code)) return true;
+    if (error.status != null && TRANSIENT_HTTP_STATUSES.has(error.status)) return true;
+    return /network (connection )?error|fetch failed|econnreset|etimedout|enotfound/i.test(
+      error.message,
+    );
+  }
+
+  if (error instanceof TypeError) return true;
+  if (!(error instanceof Error)) return false;
+  return /fetch failed|econnreset|etimedout|enotfound|socket/i.test(error.message);
+}
+
+function wrapFetchError(endpoint: string, error: unknown) {
+  if (error instanceof CjDropshippingApiError) return error;
+  const cause = error instanceof Error ? error.message : String(error);
+  return new CjDropshippingApiError(
+    `CJdropshipping API network error on ${endpoint}: ${cause}`,
+    {},
+  );
+}
+
+async function withRetries<T>(label: string, run: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= DEFAULT_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientCjError(error) || attempt === DEFAULT_MAX_ATTEMPTS) throw error;
+      const delayMs = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+      console.warn("[cjdropshipping-api] retrying transient error", {
+        label,
+        attempt,
+        maxAttempts: DEFAULT_MAX_ATTEMPTS,
+        delayMs,
+        code: error instanceof CjDropshippingApiError ? error.code : null,
+        status: error instanceof CjDropshippingApiError ? error.status : null,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await sleep(delayMs);
+    }
+  }
+  throw lastError;
 }
 
 function numericParam(value: number) {
@@ -236,42 +294,49 @@ export class CjDropshippingClient {
   }
 
   private async request<T>(method: "GET" | "POST", endpoint: string, options: RequestOptions = {}) {
-    await this.throttle();
+    return withRetries(`${method} ${endpoint}`, async () => {
+      await this.throttle();
 
-    const headers: Record<string, string> = {
-      Accept: "application/json",
-    };
-    if (options.accessToken) headers["CJ-Access-Token"] = options.accessToken;
+      const headers: Record<string, string> = {
+        Accept: "application/json",
+      };
+      if (options.accessToken) headers["CJ-Access-Token"] = options.accessToken;
 
-    const init: RequestInit = {
-      method,
-      headers,
-      cache: "no-store",
-    };
-    if (options.body !== undefined) {
-      headers["Content-Type"] = "application/json";
-      init.body = JSON.stringify(options.body);
-    }
+      const init: RequestInit = {
+        method,
+        headers,
+        cache: "no-store",
+      };
+      if (options.body !== undefined) {
+        headers["Content-Type"] = "application/json";
+        init.body = JSON.stringify(options.body);
+      }
 
-    const response = await fetch(this.url(endpoint, options.query), init);
-    const raw = await response.text();
-    const parsed = safeJsonParse(raw);
+      let response: Response;
+      try {
+        response = await fetch(this.url(endpoint, options.query), init);
+      } catch (error) {
+        throw wrapFetchError(endpoint, error);
+      }
+      const raw = await response.text();
+      const parsed = safeJsonParse(raw);
 
-    if (!response.ok) {
-      throw new CjDropshippingApiError(
-        `CJdropshipping API HTTP ${response.status} on ${endpoint}`,
-        { status: response.status },
-      );
-    }
+      if (!response.ok) {
+        throw new CjDropshippingApiError(
+          `CJdropshipping API HTTP ${response.status} on ${endpoint}`,
+          { status: response.status },
+        );
+      }
 
-    if (!parsed || typeof parsed !== "object") {
-      throw new CjDropshippingApiError(
-        `CJdropshipping API returned invalid JSON on ${endpoint}`,
-        { status: response.status },
-      );
-    }
+      if (!parsed || typeof parsed !== "object") {
+        throw new CjDropshippingApiError(
+          `CJdropshipping API returned invalid JSON on ${endpoint}`,
+          { status: response.status },
+        );
+      }
 
-    return requireData(parsed as CjApiEnvelope<T>, endpoint);
+      return requireData(parsed as CjApiEnvelope<T>, endpoint);
+    });
   }
 
   private async privateInventoryRequest<T>(
@@ -281,43 +346,50 @@ export class CjDropshippingClient {
       body?: unknown;
     },
   ) {
-    await this.throttle();
+    return withRetries(`POST ${endpoint}`, async () => {
+      await this.throttle();
 
-    const headers: Record<string, string> = {
-      Accept: "application/json, text/plain, */*",
-      "Content-Type": "application/json;charset=utf-8",
-      Origin: CJ_WEB_API_BASE_URL,
-      Referer: `${CJ_WEB_API_BASE_URL}/mine/myInventoryNew/inventoryDocuments`,
-      platform: "2",
-      token: input.accessToken,
-      "User-Agent":
-        "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0",
-    };
+      const headers: Record<string, string> = {
+        Accept: "application/json, text/plain, */*",
+        "Content-Type": "application/json;charset=utf-8",
+        Origin: CJ_WEB_API_BASE_URL,
+        Referer: `${CJ_WEB_API_BASE_URL}/mine/myInventoryNew/inventoryDocuments`,
+        platform: "2",
+        token: input.accessToken,
+        "User-Agent":
+          "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0",
+      };
 
-    const response = await fetch(this.url(endpoint, undefined, CJ_WEB_API_BASE_URL), {
-      method: "POST",
-      headers,
-      body: JSON.stringify(input.body ?? {}),
-      cache: "no-store",
+      let response: Response;
+      try {
+        response = await fetch(this.url(endpoint, undefined, CJ_WEB_API_BASE_URL), {
+          method: "POST",
+          headers,
+          body: JSON.stringify(input.body ?? {}),
+          cache: "no-store",
+        });
+      } catch (error) {
+        throw wrapFetchError(endpoint, error);
+      }
+      const raw = await response.text();
+      const parsed = safeJsonParse(raw);
+
+      if (!response.ok) {
+        throw new CjDropshippingApiError(
+          `CJdropshipping private inventory HTTP ${response.status} on ${endpoint}`,
+          { status: response.status },
+        );
+      }
+
+      if (!parsed || typeof parsed !== "object") {
+        throw new CjDropshippingApiError(
+          `CJdropshipping private inventory returned invalid JSON on ${endpoint}`,
+          { status: response.status },
+        );
+      }
+
+      return requireData(parsed as CjApiEnvelope<T>, endpoint);
     });
-    const raw = await response.text();
-    const parsed = safeJsonParse(raw);
-
-    if (!response.ok) {
-      throw new CjDropshippingApiError(
-        `CJdropshipping private inventory HTTP ${response.status} on ${endpoint}`,
-        { status: response.status },
-      );
-    }
-
-    if (!parsed || typeof parsed !== "object") {
-      throw new CjDropshippingApiError(
-        `CJdropshipping private inventory returned invalid JSON on ${endpoint}`,
-        { status: response.status },
-      );
-    }
-
-    return requireData(parsed as CjApiEnvelope<T>, endpoint);
   }
 
   authenticateWithApiKey(apiKey: string) {

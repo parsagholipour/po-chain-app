@@ -83,14 +83,21 @@ type NormalizedInventoryRow = {
 };
 
 function errorMessage(error: unknown) {
+  if (error instanceof CjDropshippingApiError) {
+    const details = [
+      error.message,
+      error.code != null && !error.message.includes(`code ${error.code}`)
+        ? `code ${error.code}`
+        : null,
+    ].filter((part): part is string => Boolean(part));
+    return details.join(", ");
+  }
   return error instanceof Error ? error.message : String(error);
 }
 
 function isCjProductNotFoundError(error: unknown) {
-  return (
-    error instanceof CjDropshippingApiError &&
-    error.message.trim().toLowerCase() === "product not found"
-  );
+  if (!(error instanceof CjDropshippingApiError)) return false;
+  return error.message.trim().toLowerCase().startsWith("product not found");
 }
 
 function elapsedMs(startedAt: number) {
