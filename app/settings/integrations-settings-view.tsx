@@ -46,6 +46,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+type IntegrationTab = "stripe" | "shopify" | "cjdropshipping" | "crm";
+type ShopifySection = "connection" | "health" | "inventory" | "backups";
+type CjDropshippingSection = "connection" | "inventory";
+type CrmSection = "connection" | "leads";
+
+function IntegrationLoading() {
+  return <p className="py-8 text-center text-sm text-muted-foreground">Loading...</p>;
+}
 
 const shopifyIntegrationKey = ["shopify-integration"] as const;
 const cjDropshippingIntegrationKey = ["cjdropshipping-integration"] as const;
@@ -971,6 +981,7 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
   const [accessToken, setAccessToken] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [section, setSection] = useState<ShopifySection>("connection");
 
   const saveMut = useMutation({
     mutationFn: async () => {
@@ -1091,182 +1102,202 @@ function ShopifyIntegrationForm({ data }: { data: ShopifyIntegrationSettings }) 
   }, [data.checkoutCurrency, data.checkoutEnabled, data.checkoutWebhookRegistered]);
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border bg-background p-4 sm:p-5">
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-semibold">Shopify</h2>
-            <p className="text-sm text-muted-foreground">
-              Inventory sync for catalog stock counts.
-            </p>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Checkbox
-              checked={enabled}
-              onCheckedChange={(value) => setEnabled(value === true)}
-              label="Enabled"
-            />
-            <Checkbox
-              checked={enabled && checkoutEnabled}
-              onCheckedChange={(value) => setCheckoutEnabled(value === true)}
-              disabled={!enabled}
-              label="Store checkout"
-            />
-            <FieldDescription className="max-w-xs">
-              Store orders are paid through a Shopify draft order instead of Stripe. Draft orders
-              are created tax-exempt with no Shopify shipping charge, because fulfilment and
-              totals are managed in this app.
-            </FieldDescription>
-          </div>
-        </div>
+    <Tabs
+      value={section}
+      onValueChange={(value) => setSection(value as ShopifySection)}
+    >
+      <TabsList variant="underline">
+        <TabsTrigger value="connection">Connection</TabsTrigger>
+        <TabsTrigger value="health">Health</TabsTrigger>
+        <TabsTrigger value="inventory">Inventory</TabsTrigger>
+        <TabsTrigger value="backups">Backups</TabsTrigger>
+      </TabsList>
 
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="shopify-shop-domain">Shop domain</FieldLabel>
-            <Input
-              id="shopify-shop-domain"
-              value={shopDomain}
-              onChange={(event) => setShopDomain(event.target.value)}
-              placeholder="example.myshopify.com"
-              autoComplete="off"
-            />
-          </Field>
-
-          <div className="grid gap-5 md:grid-cols-2">
-            <Field>
-              <FieldLabel htmlFor="shopify-access-token">Admin API token</FieldLabel>
-              <Input
-                id="shopify-access-token"
-                type="password"
-                value={accessToken}
-                onChange={(event) => setAccessToken(event.target.value)}
-                placeholder={tokenPlaceholder}
-                autoComplete="off"
+      <TabsContent value="connection" className="space-y-6 pt-4">
+        <div className="rounded-lg border bg-background p-4 sm:p-5">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold">Shopify</h2>
+              <p className="text-sm text-muted-foreground">
+                Inventory sync for catalog stock counts.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Checkbox
+                checked={enabled}
+                onCheckedChange={(value) => setEnabled(value === true)}
+                label="Enabled"
               />
-              <FieldDescription>
-                Needs read_products and read_inventory. Grant read_metaobjects to expand
-                referenced metaobjects in stored variant snapshots.
+              <Checkbox
+                checked={enabled && checkoutEnabled}
+                onCheckedChange={(value) => setCheckoutEnabled(value === true)}
+                disabled={!enabled}
+                label="Store checkout"
+              />
+              <FieldDescription className="max-w-xs">
+                Store orders are paid through a Shopify draft order instead of Stripe. Draft orders
+                are created tax-exempt with no Shopify shipping charge, because fulfilment and
+                totals are managed in this app.
               </FieldDescription>
-              {data.hasAccessToken ? (
-                <FieldDescription>Leave blank to keep the saved token.</FieldDescription>
-              ) : null}
-            </Field>
+            </div>
+          </div>
 
+          <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="shopify-webhook-secret">Webhook signing secret</FieldLabel>
+              <FieldLabel htmlFor="shopify-shop-domain">Shop domain</FieldLabel>
               <Input
-                id="shopify-webhook-secret"
-                type="password"
-                value={webhookSecret}
-                onChange={(event) => setWebhookSecret(event.target.value)}
-                placeholder={secretPlaceholder}
+                id="shopify-shop-domain"
+                value={shopDomain}
+                onChange={(event) => setShopDomain(event.target.value)}
+                placeholder="example.myshopify.com"
                 autoComplete="off"
               />
-              {data.hasWebhookSecret ? (
-                <FieldDescription>Leave blank to keep the saved secret.</FieldDescription>
-              ) : null}
             </Field>
-          </div>
-        </FieldGroup>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            onClick={() => saveMut.mutate()}
-            disabled={saveMut.isPending}
-          >
-            <Save className="size-4" />
-            Save
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => syncMut.mutate()}
-            disabled={!canSync || syncMut.isPending}
-          >
-            <RefreshCw className={syncMut.isPending ? "size-4 animate-spin" : "size-4"} />
-            Sync now
-          </Button>
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="shopify-access-token">Admin API token</FieldLabel>
+                <Input
+                  id="shopify-access-token"
+                  type="password"
+                  value={accessToken}
+                  onChange={(event) => setAccessToken(event.target.value)}
+                  placeholder={tokenPlaceholder}
+                  autoComplete="off"
+                />
+                <FieldDescription>
+                  Needs read_products and read_inventory. Grant read_metaobjects to expand
+                  referenced metaobjects in stored variant snapshots.
+                </FieldDescription>
+                {data.hasAccessToken ? (
+                  <FieldDescription>Leave blank to keep the saved token.</FieldDescription>
+                ) : null}
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="shopify-webhook-secret">Webhook signing secret</FieldLabel>
+                <Input
+                  id="shopify-webhook-secret"
+                  type="password"
+                  value={webhookSecret}
+                  onChange={(event) => setWebhookSecret(event.target.value)}
+                  placeholder={secretPlaceholder}
+                  autoComplete="off"
+                />
+                {data.hasWebhookSecret ? (
+                  <FieldDescription>Leave blank to keep the saved secret.</FieldDescription>
+                ) : null}
+              </Field>
+            </div>
+          </FieldGroup>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={() => saveMut.mutate()}
+              disabled={saveMut.isPending}
+            >
+              <Save className="size-4" />
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => syncMut.mutate()}
+              disabled={!canSync || syncMut.isPending}
+            >
+              <RefreshCw className={syncMut.isPending ? "size-4 animate-spin" : "size-4"} />
+              Sync now
+            </Button>
+          </div>
+          {syncMut.isPending && syncMessage ? (
+            <p className="mt-3 text-sm text-muted-foreground">{syncMessage}</p>
+          ) : null}
         </div>
-        {syncMut.isPending && syncMessage ? (
-          <p className="mt-3 text-sm text-muted-foreground">{syncMessage}</p>
-        ) : null}
-      </div>
 
-      <div className="rounded-lg border bg-background p-4 sm:p-5">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Status
-            </p>
-            <p className={`mt-1 text-sm font-medium ${statusTone}`}>
-              {enabled ? statusLabel(data.lastSyncStatus) : "Disabled"}
-            </p>
+        <div className="rounded-lg border bg-background p-4 sm:p-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Status
+              </p>
+              <p className={`mt-1 text-sm font-medium ${statusTone}`}>
+                {enabled ? statusLabel(data.lastSyncStatus) : "Disabled"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Last sync
+              </p>
+              <p className="mt-1 text-sm">{formatDate(data.lastSyncAt)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Products
+              </p>
+              <p className="mt-1 text-sm tabular-nums">
+                {data.lastSyncedProductCount}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                SKUs
+              </p>
+              <p className="mt-1 text-sm tabular-nums">
+                {data.lastMatchedSkuCount} matched
+                <span className="text-muted-foreground">
+                  {" "}
+                  / {data.lastUnmatchedLocalSkuCount} unmatched
+                </span>
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Mirror
+              </p>
+              <p className="mt-1 text-sm tabular-nums">
+                {data.lastSyncAt ? "Ready" : "Waiting"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Checkout
+              </p>
+              <p className={`mt-1 text-sm font-medium ${checkoutStatus.tone}`}>
+                {checkoutStatus.label}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Last sync
+          {data.lastSyncError ? (
+            <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {data.lastSyncError}
             </p>
-            <p className="mt-1 text-sm">{formatDate(data.lastSyncAt)}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Products
+          ) : null}
+          {data.checkoutLastError ? (
+            <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {data.checkoutLastError}
             </p>
-            <p className="mt-1 text-sm tabular-nums">
-              {data.lastSyncedProductCount}
+          ) : null}
+          {data.id ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Webhook: /api/webhooks/shopify/{data.id}/orders-paid
             </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              SKUs
-            </p>
-            <p className="mt-1 text-sm tabular-nums">
-              {data.lastMatchedSkuCount} matched
-              <span className="text-muted-foreground">
-                {" "}
-                / {data.lastUnmatchedLocalSkuCount} unmatched
-              </span>
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Mirror
-            </p>
-            <p className="mt-1 text-sm tabular-nums">
-              {data.lastSyncAt ? "Ready" : "Waiting"}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Checkout
-            </p>
-            <p className={`mt-1 text-sm font-medium ${checkoutStatus.tone}`}>
-              {checkoutStatus.label}
-            </p>
-          </div>
+          ) : null}
         </div>
-        {data.lastSyncError ? (
-          <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {data.lastSyncError}
-          </p>
-        ) : null}
-        {data.checkoutLastError ? (
-          <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {data.checkoutLastError}
-          </p>
-        ) : null}
-        {data.id ? (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Webhook: /api/webhooks/shopify/{data.id}/orders-paid
-          </p>
-        ) : null}
-      </div>
+      </TabsContent>
 
-      <ShopifyHealthCard enabled={data.enabled && data.hasAccessToken} />
-      <ShopifyInventoryMirrorCard />
-      <ProductStockBackupsCard />
-    </div>
+      <TabsContent value="health" className="pt-4">
+        <ShopifyHealthCard enabled={data.enabled && data.hasAccessToken} />
+      </TabsContent>
+
+      <TabsContent value="inventory" className="pt-4">
+        <ShopifyInventoryMirrorCard />
+      </TabsContent>
+
+      <TabsContent value="backups" className="pt-4">
+        <ProductStockBackupsCard />
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -1279,6 +1310,7 @@ function CjDropshippingIntegrationForm({
   const [enabled, setEnabled] = useState(data.enabled);
   const [apiKey, setApiKey] = useState("");
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [section, setSection] = useState<CjDropshippingSection>("connection");
 
   const saveMut = useMutation({
     mutationFn: async () => {
@@ -1347,136 +1379,148 @@ function CjDropshippingIntegrationForm({
   }, [data.enabled, data.lastSyncStatus]);
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border bg-background p-4 sm:p-5">
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-semibold">CJdropshipping</h2>
-            <p className="text-sm text-muted-foreground">
-              API-key authentication and SKU-based inventory sync.
-            </p>
-          </div>
-          <Checkbox
-            checked={enabled}
-            onCheckedChange={(value) => setEnabled(value === true)}
-            label="Enabled"
-          />
-        </div>
+    <Tabs
+      value={section}
+      onValueChange={(value) => setSection(value as CjDropshippingSection)}
+    >
+      <TabsList variant="underline">
+        <TabsTrigger value="connection">Connection</TabsTrigger>
+        <TabsTrigger value="inventory">Inventory</TabsTrigger>
+      </TabsList>
 
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="cjdropshipping-api-key">API key</FieldLabel>
-            <Input
-              id="cjdropshipping-api-key"
-              type="password"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              placeholder={data.hasApiKey ? "Configured" : "Paste CJdropshipping API key"}
-              autoComplete="off"
+      <TabsContent value="connection" className="space-y-6 pt-4">
+        <div className="rounded-lg border bg-background p-4 sm:p-5">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold">CJdropshipping</h2>
+              <p className="text-sm text-muted-foreground">
+                API-key authentication and SKU-based inventory sync.
+              </p>
+            </div>
+            <Checkbox
+              checked={enabled}
+              onCheckedChange={(value) => setEnabled(value === true)}
+              label="Enabled"
             />
-            {data.hasApiKey ? (
-              <FieldDescription>Leave blank to keep the saved API key.</FieldDescription>
-            ) : (
-              <FieldDescription>
-                The key is exchanged for CJ access and refresh tokens on save.
-              </FieldDescription>
-            )}
-          </Field>
-        </FieldGroup>
+          </div>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            onClick={() => saveMut.mutate()}
-            disabled={saveMut.isPending}
-          >
-            <Save className="size-4" />
-            Save
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => syncMut.mutate()}
-            disabled={!canSync || syncMut.isPending}
-          >
-            <RefreshCw className={syncMut.isPending ? "size-4 animate-spin" : "size-4"} />
-            Sync now
-          </Button>
-        </div>
-        {syncMut.isPending && syncMessage ? (
-          <p className="mt-3 text-sm text-muted-foreground">{syncMessage}</p>
-        ) : null}
-      </div>
+          <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="cjdropshipping-api-key">API key</FieldLabel>
+              <Input
+                id="cjdropshipping-api-key"
+                type="password"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                placeholder={data.hasApiKey ? "Configured" : "Paste CJdropshipping API key"}
+                autoComplete="off"
+              />
+              {data.hasApiKey ? (
+                <FieldDescription>Leave blank to keep the saved API key.</FieldDescription>
+              ) : (
+                <FieldDescription>
+                  The key is exchanged for CJ access and refresh tokens on save.
+                </FieldDescription>
+              )}
+            </Field>
+          </FieldGroup>
 
-      <div className="rounded-lg border bg-background p-4 sm:p-5">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Status
-            </p>
-            <p className={`mt-1 text-sm font-medium ${statusTone}`}>
-              {enabled ? statusLabel(data.lastSyncStatus) : "Disabled"}
-            </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={() => saveMut.mutate()}
+              disabled={saveMut.isPending}
+            >
+              <Save className="size-4" />
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => syncMut.mutate()}
+              disabled={!canSync || syncMut.isPending}
+            >
+              <RefreshCw className={syncMut.isPending ? "size-4 animate-spin" : "size-4"} />
+              Sync now
+            </Button>
           </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Last sync
-            </p>
-            <p className="mt-1 text-sm">{formatDate(data.lastSyncAt)}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              SKUs
-            </p>
-            <p className="mt-1 text-sm tabular-nums">
-              {data.lastMatchedSkuCount} matched
-              <span className="text-muted-foreground">
-                {" "}
-                / {data.lastSyncedSkuCount} checked
-              </span>
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Unmatched
-            </p>
-            <p className="mt-1 text-sm tabular-nums">
-              {data.lastUnmatchedCjSkuCount} CJ
-              <span className="text-muted-foreground">
-                {" "}
-                / {data.lastUnmatchedLocalSkuCount} local
-              </span>
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Mirror
-            </p>
-            <p className="mt-1 text-sm tabular-nums">
-              {data.lastSyncedInventoryCount} counts
-              <span className="text-muted-foreground">
-                {" "}
-                / {data.lastMovementCount} txns
-              </span>
-            </p>
-          </div>
+          {syncMut.isPending && syncMessage ? (
+            <p className="mt-3 text-sm text-muted-foreground">{syncMessage}</p>
+          ) : null}
         </div>
-        <div className="mt-4 grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
-          <p>Access token expires: {formatDate(data.accessTokenExpiresAt)}</p>
-          <p>Refresh token expires: {formatDate(data.refreshTokenExpiresAt)}</p>
-        </div>
-        {data.openId ? (
-          <p className="mt-2 text-sm text-muted-foreground">CJ open ID: {data.openId}</p>
-        ) : null}
-        {data.lastSyncError ? (
-          <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {data.lastSyncError}
-          </p>
-        ) : null}
-      </div>
 
-      <CjDropshippingInventoryMirrorCard />
-    </div>
+        <div className="rounded-lg border bg-background p-4 sm:p-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Status
+              </p>
+              <p className={`mt-1 text-sm font-medium ${statusTone}`}>
+                {enabled ? statusLabel(data.lastSyncStatus) : "Disabled"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Last sync
+              </p>
+              <p className="mt-1 text-sm">{formatDate(data.lastSyncAt)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                SKUs
+              </p>
+              <p className="mt-1 text-sm tabular-nums">
+                {data.lastMatchedSkuCount} matched
+                <span className="text-muted-foreground">
+                  {" "}
+                  / {data.lastSyncedSkuCount} checked
+                </span>
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Unmatched
+              </p>
+              <p className="mt-1 text-sm tabular-nums">
+                {data.lastUnmatchedCjSkuCount} CJ
+                <span className="text-muted-foreground">
+                  {" "}
+                  / {data.lastUnmatchedLocalSkuCount} local
+                </span>
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Mirror
+              </p>
+              <p className="mt-1 text-sm tabular-nums">
+                {data.lastSyncedInventoryCount} counts
+                <span className="text-muted-foreground">
+                  {" "}
+                  / {data.lastMovementCount} txns
+                </span>
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
+            <p>Access token expires: {formatDate(data.accessTokenExpiresAt)}</p>
+            <p>Refresh token expires: {formatDate(data.refreshTokenExpiresAt)}</p>
+          </div>
+          {data.openId ? (
+            <p className="mt-2 text-sm text-muted-foreground">CJ open ID: {data.openId}</p>
+          ) : null}
+          {data.lastSyncError ? (
+            <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {data.lastSyncError}
+            </p>
+          ) : null}
+        </div>
+      </TabsContent>
+
+      <TabsContent value="inventory" className="pt-4">
+        <CjDropshippingInventoryMirrorCard />
+      </TabsContent>
+    </Tabs>
   );
 }
 
@@ -1590,6 +1634,7 @@ function CrmIntegrationForm({ data }: { data: CrmIntegrationSettings }) {
   const [apiToken, setApiToken] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [section, setSection] = useState<CrmSection>("connection");
 
   const saveMut = useMutation({
     mutationFn: async () => {
@@ -1657,165 +1702,159 @@ function CrmIntegrationForm({ data }: { data: CrmIntegrationSettings }) {
   }, [data.enabled, data.lastSyncStatus]);
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-lg border bg-background p-4 sm:p-5">
-        <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-base font-semibold">CRM</h2>
-            <p className="text-sm text-muted-foreground">
-              Read-only Lead sync from the CRM public API.
-            </p>
-          </div>
-          <Checkbox
-            checked={enabled}
-            onCheckedChange={(value) => setEnabled(value === true)}
-            label="Enabled"
-          />
-        </div>
+    <Tabs
+      value={section}
+      onValueChange={(value) => setSection(value as CrmSection)}
+    >
+      <TabsList variant="underline">
+        <TabsTrigger value="connection">Connection</TabsTrigger>
+        <TabsTrigger value="leads">Leads</TabsTrigger>
+      </TabsList>
 
-        <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="crm-base-url">CRM host URL</FieldLabel>
-            <Input
-              id="crm-base-url"
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-              placeholder="https://crm.example.com"
-              autoComplete="off"
+      <TabsContent value="connection" className="space-y-6 pt-4">
+        <div className="rounded-lg border bg-background p-4 sm:p-5">
+          <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h2 className="text-base font-semibold">CRM</h2>
+              <p className="text-sm text-muted-foreground">
+                Read-only Lead sync from the CRM public API.
+              </p>
+            </div>
+            <Checkbox
+              checked={enabled}
+              onCheckedChange={(value) => setEnabled(value === true)}
+              label="Enabled"
             />
-          </Field>
+          </div>
 
-          <div className="grid gap-5 md:grid-cols-2">
+          <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="crm-api-token">API token</FieldLabel>
+              <FieldLabel htmlFor="crm-base-url">CRM host URL</FieldLabel>
               <Input
-                id="crm-api-token"
-                type="password"
-                value={apiToken}
-                onChange={(event) => setApiToken(event.target.value)}
-                placeholder={data.hasApiToken ? "Configured" : "crm_…"}
+                id="crm-base-url"
+                value={baseUrl}
+                onChange={(event) => setBaseUrl(event.target.value)}
+                placeholder="https://crm.example.com"
                 autoComplete="off"
               />
-              {data.hasApiToken ? (
-                <FieldDescription>Leave blank to keep the saved token.</FieldDescription>
-              ) : (
-                <FieldDescription>
-                  Created in CRM Setup → API Access. Shown only once.
-                </FieldDescription>
-              )}
             </Field>
 
-            <Field>
-              <FieldLabel htmlFor="crm-webhook-secret">Webhook signing secret</FieldLabel>
-              <Input
-                id="crm-webhook-secret"
-                type="password"
-                value={webhookSecret}
-                onChange={(event) => setWebhookSecret(event.target.value)}
-                placeholder={data.hasWebhookSecret ? "Configured" : "whsec_…"}
-                autoComplete="off"
-              />
-              {data.hasWebhookSecret ? (
-                <FieldDescription>Leave blank to keep the saved secret.</FieldDescription>
-              ) : (
-                <FieldDescription>
-                  Paste the CRM webhook signing secret, then register the callback URL below.
-                </FieldDescription>
-              )}
-            </Field>
-          </div>
-        </FieldGroup>
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="crm-api-token">API token</FieldLabel>
+                <Input
+                  id="crm-api-token"
+                  type="password"
+                  value={apiToken}
+                  onChange={(event) => setApiToken(event.target.value)}
+                  placeholder={data.hasApiToken ? "Configured" : "crm_…"}
+                  autoComplete="off"
+                />
+                {data.hasApiToken ? (
+                  <FieldDescription>Leave blank to keep the saved token.</FieldDescription>
+                ) : (
+                  <FieldDescription>
+                    Created in CRM Setup → API Access. Shown only once.
+                  </FieldDescription>
+                )}
+              </Field>
 
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button
-            type="button"
-            onClick={() => saveMut.mutate()}
-            disabled={saveMut.isPending}
-          >
-            <Save className="size-4" />
-            Save
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => syncMut.mutate()}
-            disabled={!canSync || syncMut.isPending}
-          >
-            <RefreshCw className={syncMut.isPending ? "size-4 animate-spin" : "size-4"} />
-            Sync now
-          </Button>
+              <Field>
+                <FieldLabel htmlFor="crm-webhook-secret">Webhook signing secret</FieldLabel>
+                <Input
+                  id="crm-webhook-secret"
+                  type="password"
+                  value={webhookSecret}
+                  onChange={(event) => setWebhookSecret(event.target.value)}
+                  placeholder={data.hasWebhookSecret ? "Configured" : "whsec_…"}
+                  autoComplete="off"
+                />
+                {data.hasWebhookSecret ? (
+                  <FieldDescription>Leave blank to keep the saved secret.</FieldDescription>
+                ) : (
+                  <FieldDescription>
+                    Paste the CRM webhook signing secret, then register the callback URL below.
+                  </FieldDescription>
+                )}
+              </Field>
+            </div>
+          </FieldGroup>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={() => saveMut.mutate()}
+              disabled={saveMut.isPending}
+            >
+              <Save className="size-4" />
+              Save
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => syncMut.mutate()}
+              disabled={!canSync || syncMut.isPending}
+            >
+              <RefreshCw className={syncMut.isPending ? "size-4 animate-spin" : "size-4"} />
+              Sync now
+            </Button>
+          </div>
+          {syncMut.isPending && syncMessage ? (
+            <p className="mt-3 text-sm text-muted-foreground">{syncMessage}</p>
+          ) : null}
         </div>
-        {syncMut.isPending && syncMessage ? (
-          <p className="mt-3 text-sm text-muted-foreground">{syncMessage}</p>
-        ) : null}
-      </div>
 
-      <div className="rounded-lg border bg-background p-4 sm:p-5">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Status
-            </p>
-            <p className={`mt-1 text-sm font-medium ${statusTone}`}>
-              {enabled ? statusLabel(data.lastSyncStatus) : "Disabled"}
-            </p>
+        <div className="rounded-lg border bg-background p-4 sm:p-5">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Status
+              </p>
+              <p className={`mt-1 text-sm font-medium ${statusTone}`}>
+                {enabled ? statusLabel(data.lastSyncStatus) : "Disabled"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Last sync
+              </p>
+              <p className="mt-1 text-sm">{formatDate(data.lastSyncAt)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Leads
+              </p>
+              <p className="mt-1 text-sm tabular-nums">{data.lastSyncedLeadCount}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Organization
+              </p>
+              <p className="mt-1 text-sm">{data.organizationName ?? "—"}</p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Last sync
+          {data.lastSyncError ? (
+            <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {data.lastSyncError}
             </p>
-            <p className="mt-1 text-sm">{formatDate(data.lastSyncAt)}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Leads
+          ) : null}
+          {data.webhookUrl ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Webhook: {data.webhookUrl}
             </p>
-            <p className="mt-1 text-sm tabular-nums">{data.lastSyncedLeadCount}</p>
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Organization
-            </p>
-            <p className="mt-1 text-sm">{data.organizationName ?? "—"}</p>
-          </div>
+          ) : null}
         </div>
-        {data.lastSyncError ? (
-          <p className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {data.lastSyncError}
-          </p>
-        ) : null}
-        {data.webhookUrl ? (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Webhook: {data.webhookUrl}
-          </p>
-        ) : null}
-      </div>
+      </TabsContent>
 
-      <CrmLeadsMirrorCard />
-    </div>
+      <TabsContent value="leads" className="pt-4">
+        <CrmLeadsMirrorCard />
+      </TabsContent>
+    </Tabs>
   );
 }
 
-export function IntegrationsSettingsView() {
-  const { data: shopifyData, isPending: shopifyPending } = useQuery({
-    queryKey: shopifyIntegrationKey,
-    queryFn: async () => {
-      const { data: row } = await api.get<ShopifyIntegrationSettings>(
-        "/api/integrations/shopify",
-      );
-      return row;
-    },
-  });
-  const { data: cjDropshippingData, isPending: cjDropshippingPending } = useQuery({
-    queryKey: cjDropshippingIntegrationKey,
-    queryFn: async () => {
-      const { data: row } = await api.get<CjDropshippingIntegrationSettings>(
-        "/api/integrations/cjdropshipping",
-      );
-      return row;
-    },
-  });
-  const { data: stripeData, isPending: stripePending } = useQuery({
+function StripeIntegrationTab() {
+  const { data, isPending } = useQuery({
     queryKey: stripeIntegrationKey,
     queryFn: async () => {
       const { data: row } = await api.get<StripeIntegrationSettings>(
@@ -1824,7 +1863,61 @@ export function IntegrationsSettingsView() {
       return row;
     },
   });
-  const { data: crmData, isPending: crmPending } = useQuery({
+
+  if (isPending || !data) return <IntegrationLoading />;
+
+  return (
+    <StripeIntegrationForm
+      key={`stripe:${data.id ?? "new"}:${data.updatedAt ?? "never"}:${data.enabled}`}
+      data={data}
+    />
+  );
+}
+
+function ShopifyIntegrationTab() {
+  const { data, isPending } = useQuery({
+    queryKey: shopifyIntegrationKey,
+    queryFn: async () => {
+      const { data: row } = await api.get<ShopifyIntegrationSettings>(
+        "/api/integrations/shopify",
+      );
+      return row;
+    },
+  });
+
+  if (isPending || !data) return <IntegrationLoading />;
+
+  return (
+    <ShopifyIntegrationForm
+      key={`shopify:${data.id ?? "new"}:${data.updatedAt ?? "never"}:${data.enabled}`}
+      data={data}
+    />
+  );
+}
+
+function CjDropshippingIntegrationTab() {
+  const { data, isPending } = useQuery({
+    queryKey: cjDropshippingIntegrationKey,
+    queryFn: async () => {
+      const { data: row } = await api.get<CjDropshippingIntegrationSettings>(
+        "/api/integrations/cjdropshipping",
+      );
+      return row;
+    },
+  });
+
+  if (isPending || !data) return <IntegrationLoading />;
+
+  return (
+    <CjDropshippingIntegrationForm
+      key={`cjdropshipping:${data.id ?? "new"}:${data.updatedAt ?? "never"}:${data.enabled}`}
+      data={data}
+    />
+  );
+}
+
+function CrmIntegrationTab() {
+  const { data, isPending } = useQuery({
     queryKey: crmIntegrationKey,
     queryFn: async () => {
       const { data: row } = await api.get<CrmIntegrationSettings>(
@@ -1834,37 +1927,42 @@ export function IntegrationsSettingsView() {
     },
   });
 
-  if (
-    shopifyPending ||
-    cjDropshippingPending ||
-    stripePending ||
-    crmPending ||
-    !shopifyData ||
-    !cjDropshippingData ||
-    !stripeData ||
-    !crmData
-  ) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">Loading...</p>;
-  }
+  if (isPending || !data) return <IntegrationLoading />;
 
   return (
-    <div className="space-y-6">
-      <StripeIntegrationForm
-        key={`stripe:${stripeData.id ?? "new"}:${stripeData.updatedAt ?? "never"}:${stripeData.enabled}`}
-        data={stripeData}
-      />
-      <ShopifyIntegrationForm
-        key={`shopify:${shopifyData.id ?? "new"}:${shopifyData.updatedAt ?? "never"}:${shopifyData.enabled}`}
-        data={shopifyData}
-      />
-      <CjDropshippingIntegrationForm
-        key={`cjdropshipping:${cjDropshippingData.id ?? "new"}:${cjDropshippingData.updatedAt ?? "never"}:${cjDropshippingData.enabled}`}
-        data={cjDropshippingData}
-      />
-      <CrmIntegrationForm
-        key={`crm:${crmData.id ?? "new"}:${crmData.updatedAt ?? "never"}:${crmData.enabled}`}
-        data={crmData}
-      />
-    </div>
+    <CrmIntegrationForm
+      key={`crm:${data.id ?? "new"}:${data.updatedAt ?? "never"}:${data.enabled}`}
+      data={data}
+    />
+  );
+}
+
+export function IntegrationsSettingsView() {
+  const [activeTab, setActiveTab] = useState<IntegrationTab>("stripe");
+
+  return (
+    <Tabs
+      value={activeTab}
+      onValueChange={(value) => setActiveTab(value as IntegrationTab)}
+    >
+      <TabsList>
+        <TabsTrigger value="stripe">Stripe</TabsTrigger>
+        <TabsTrigger value="shopify">Shopify</TabsTrigger>
+        <TabsTrigger value="cjdropshipping">CJdropshipping</TabsTrigger>
+        <TabsTrigger value="crm">CRM</TabsTrigger>
+      </TabsList>
+      <TabsContent value="stripe">
+        <StripeIntegrationTab />
+      </TabsContent>
+      <TabsContent value="shopify">
+        <ShopifyIntegrationTab />
+      </TabsContent>
+      <TabsContent value="cjdropshipping">
+        <CjDropshippingIntegrationTab />
+      </TabsContent>
+      <TabsContent value="crm">
+        <CrmIntegrationTab />
+      </TabsContent>
+    </Tabs>
   );
 }
