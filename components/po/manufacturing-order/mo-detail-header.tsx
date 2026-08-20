@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import Link from "next/link";
 import { Label } from "@/components/ui/label";
 import {
@@ -24,6 +24,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import type { ManufacturingOrderDetail } from "@/lib/types/api";
 import {
   moStatusLabels,
@@ -31,8 +32,9 @@ import {
   shippingStatusLabels,
   statusBadgeClassName,
 } from "@/lib/po/status-labels";
+import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { PoDocumentLink } from "@/components/po/purchase-order/po-document-link";
-import { ChevronLeft, Factory, FileStack, Truck } from "lucide-react";
+import { Check, ChevronLeft, Factory, FileStack, Loader2, Pencil, Truck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const moOrderStatusSelectItems = moStatuses.map((s) => ({
@@ -55,7 +57,9 @@ type Props = {
   statusLogs: ManufacturingOrderDetail["statusLogs"];
   onStatusChange: (status: string) => void;
   onSaveStatusLogNote?: (logId: string, note: string | null) => Promise<void>;
+  onDocumentUpload?: (file: File) => Promise<void>;
   isSaving?: boolean;
+  isDocumentSaving?: boolean;
   /** Deletes the MO (linked POs and their lines are kept). */
   onDelete?: () => Promise<void>;
   isDeleting?: boolean;
@@ -66,15 +70,39 @@ export function MoDetailHeader({
   statusLogs,
   onStatusChange,
   onSaveStatusLogNote,
+  onDocumentUpload,
   isSaving = false,
+  isDocumentSaving = false,
   onDelete,
   isDeleting = false,
 }: Props) {
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [isEditingDocument, setIsEditingDocument] = useState(false);
+  const [pendingDocumentName, setPendingDocumentName] = useState<string | null>(null);
   const mfrCount = mo.manufacturers.length;
   const shipCount = mo.shippings.length;
   const lineAllocCount = mo.lineAllocations.length;
   const poCount = mo.purchaseOrders.length;
+  const currentDocumentName = storageObjectDisplayName(mo.documentKey);
+  const visibleDocumentName = pendingDocumentName ?? currentDocumentName;
+  const isDocumentBusy = isSaving || isDocumentSaving || isDeleting;
+
+  function handleDocumentChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0] ?? null;
+    if (!file || !onDocumentUpload) return;
+    setPendingDocumentName(file.name);
+    void onDocumentUpload(file)
+      .then(() => {
+        setPendingDocumentName(null);
+        setIsEditingDocument(false);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        input.value = "";
+      });
+  }
+
   return (
     <Card className="border-border/80 shadow-sm ring-border/40">
       <CardHeader className="gap-4 border-b border-border/60 pb-4">
@@ -216,9 +244,65 @@ export function MoDetailHeader({
         </div>
       </CardHeader>
       <CardContent className="pt-4">
-        <div className="text-sm">
-          <span className="text-muted-foreground">Document: </span>
-          <PoDocumentLink documentKey={mo.documentKey} />
+        <div className="min-w-0 space-y-2 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-muted-foreground">Document:</span>
+            <PoDocumentLink documentKey={mo.documentKey} />
+            {visibleDocumentName ? (
+              <span className="break-all text-xs text-muted-foreground">{visibleDocumentName}</span>
+            ) : null}
+            {onDocumentUpload ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                className="text-muted-foreground"
+                disabled={isDocumentBusy}
+                aria-label={isEditingDocument ? "Close document editor" : "Edit document"}
+                onClick={() => setIsEditingDocument((prev) => !prev)}
+              >
+                {isDocumentSaving ? <Loader2 className="size-3 animate-spin" /> : <Pencil className="size-3" />}
+              </Button>
+            ) : null}
+          </div>
+          {onDocumentUpload && isEditingDocument ? (
+            <div className="flex max-w-sm flex-wrap items-center gap-2 rounded-md border border-border/60 bg-muted/30 p-2">
+              <div className="min-w-0 flex-1">
+                <Label htmlFor="mo-document" className="text-xs text-muted-foreground">
+                  Choose a new file
+                </Label>
+                <Input
+                  id="mo-document"
+                  type="file"
+                  disabled={isDocumentBusy}
+                  className="mt-1"
+                  onChange={handleDocumentChange}
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                disabled={isDocumentBusy}
+                aria-label="Close document editor"
+                onClick={() => setIsEditingDocument(false)}
+              >
+                <X className="size-3" />
+              </Button>
+            </div>
+          ) : null}
+          {isDocumentSaving ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" />
+              Uploading{pendingDocumentName ? ` ${pendingDocumentName}` : ""}…
+            </p>
+          ) : null}
+          {!isDocumentSaving && pendingDocumentName ? (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Check className="size-3.5" />
+              {pendingDocumentName}
+            </p>
+          ) : null}
         </div>
       </CardContent>
     </Card>

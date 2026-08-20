@@ -8,6 +8,7 @@ import { useMemo, useState } from "react";
 import { api } from "@/lib/axios";
 import { apiErrorMessage } from "@/lib/api-error-message";
 import { invalidateNavCounts } from "@/lib/query-invalidation";
+import { uploadFileToStorage } from "@/lib/upload-client";
 import { invoiceDefaultsForPivot } from "@/lib/po/invoice-defaults";
 import type {
   Manufacturer,
@@ -340,6 +341,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
 
   const [statusChangeTarget, setStatusChangeTarget] = useState<StatusChangeTarget | null>(null);
   const [editStepRow, setEditStepRow] = useState<MoManufacturerPivot | null>(null);
+  const [isDocumentSaving, setIsDocumentSaving] = useState(false);
 
   const [invoiceTarget, setInvoiceTarget] = useState<{
     row: MoManufacturerPivot;
@@ -373,6 +375,22 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         manufacturerId: invoiceTarget.row.manufacturerId,
         body: { invoice: payload },
       });
+    }
+  }
+
+  async function uploadDocument(file: File) {
+    setIsDocumentSaving(true);
+    try {
+      const documentKey = await uploadFileToStorage(file, "purchase-orders");
+      await patchMo.mutateAsync({ documentKey });
+      toast.success("Document uploaded");
+    } catch (e) {
+      if (!axios.isAxiosError(e)) {
+        toast.error(e instanceof Error ? e.message : "Upload failed");
+      }
+      throw e;
+    } finally {
+      setIsDocumentSaving(false);
     }
   }
 
@@ -492,7 +510,9 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         onSaveStatusLogNote={async (logId, note) => {
           await saveStatusLogNote.mutateAsync({ logId, note });
         }}
+        onDocumentUpload={uploadDocument}
         isSaving={patchMo.isPending}
+        isDocumentSaving={isDocumentSaving}
         onDelete={() => deleteMo.mutateAsync()}
         isDeleting={deleteMo.isPending}
       />
