@@ -14,6 +14,7 @@ export const OPERATOR_WARNING_TYPES = [
   "mo_line_missing_cost",
   "mo_allocation_unverified",
   "mo_missing_eta",
+  "mo_missing_invoice",
   "po_stale_in_transit",
 ] as const satisfies readonly OperatorWarningType[];
 
@@ -34,6 +35,7 @@ export const OPERATOR_WARNING_TYPE_LABELS: Record<OperatorWarningType, string> =
   mo_line_missing_cost: "MO line missing cost",
   mo_allocation_unverified: "Unverified MO allocation",
   mo_missing_eta: "MO missing ETA",
+  mo_missing_invoice: "MO missing invoice",
   po_stale_in_transit: "Stale in-transit PO",
 };
 

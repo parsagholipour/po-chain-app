@@ -1052,6 +1052,7 @@ export type OperatorWarningType =
   | "mo_line_missing_cost"
   | "mo_allocation_unverified"
   | "mo_missing_eta"
+  | "mo_missing_invoice"
   | "po_stale_in_transit";
 
 export type OperatorWarningTier = "low" | "medium" | "high" | "critical";

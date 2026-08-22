@@ -346,22 +346,60 @@ const moManufacturerSelect = {
   manufacturer: { select: { name: true } },
 } as const;
 
+function moManufacturerFinding(
+  type: Extract<OperatorWarningType, "mo_missing_eta" | "mo_missing_invoice">,
+  row: {
+    manufacturingOrderId: string;
+    manufacturerId: string;
+    manufacturingOrder: { number: number };
+    manufacturer: { name: string };
+  },
+  messageSuffix: string,
+): WarningFinding {
+  return {
+    type,
+    tier: "medium",
+    entityType: "mo_manufacturer",
+    entityId: `${row.manufacturingOrderId}:${row.manufacturerId}`,
+    title: `MO #${row.manufacturingOrder.number}`,
+    message: `${row.manufacturer.name} on MO #${row.manufacturingOrder.number} ${messageSuffix}.`,
+    href: manufacturingOrderHref(row.manufacturingOrderId),
+  };
+}
+
 function moMissingEtaFinding(row: {
   manufacturingOrderId: string;
   manufacturerId: string;
   manufacturingOrder: { number: number };
   manufacturer: { name: string };
 }): WarningFinding {
-  const entityId = `${row.manufacturingOrderId}:${row.manufacturerId}`;
-  return {
-    type: "mo_missing_eta",
-    tier: "medium",
-    entityType: "mo_manufacturer",
-    entityId,
-    title: `MO #${row.manufacturingOrder.number}`,
-    message: `${row.manufacturer.name} on MO #${row.manufacturingOrder.number} has no estimated completion date.`,
-    href: manufacturingOrderHref(row.manufacturingOrderId),
-  };
+  return moManufacturerFinding(
+    "mo_missing_eta",
+    row,
+    "has no estimated completion date",
+  );
+}
+
+function moMissingInvoiceFinding(row: {
+  manufacturingOrderId: string;
+  manufacturerId: string;
+  manufacturingOrder: { number: number };
+  manufacturer: { name: string };
+}): WarningFinding {
+  return moManufacturerFinding("mo_missing_invoice", row, "has no invoice");
+}
+
+async function manufacturingOrderIdsWithMultipleManufacturers(storeId: string) {
+  const groups = await prisma.manufacturingOrderManufacturer.groupBy({
+    by: ["manufacturingOrderId"],
+    where: { storeId },
+    having: {
+      manufacturerId: {
+        _count: { gt: 1 },
+      },
+    },
+  });
+  return groups.map((group) => group.manufacturingOrderId);
 }
 
 const moMissingEta: WarningCheck = {
@@ -392,6 +430,43 @@ const moMissingEta: WarningCheck = {
     });
     if (!row) return null;
     return moMissingEtaFinding(row);
+  },
+};
+
+const moMissingInvoice: WarningCheck = {
+  type: "mo_missing_invoice",
+  async scan(storeId) {
+    const manufacturingOrderIds = await manufacturingOrderIdsWithMultipleManufacturers(storeId);
+    if (manufacturingOrderIds.length === 0) return [];
+    const rows = await prisma.manufacturingOrderManufacturer.findMany({
+      where: {
+        storeId,
+        invoiceId: null,
+        manufacturingOrderId: { in: manufacturingOrderIds },
+      },
+      select: moManufacturerSelect,
+    });
+    return rows.map(moMissingInvoiceFinding);
+  },
+  async evaluate(storeId, entityId) {
+    const parsed = parseCompositeEntityId(entityId);
+    if (!parsed) return null;
+    const row = await prisma.manufacturingOrderManufacturer.findFirst({
+      where: {
+        storeId,
+        manufacturingOrderId: parsed.left,
+        manufacturerId: parsed.right,
+        invoiceId: null,
+        manufacturingOrder: {
+          manufacturers: {
+            some: { manufacturerId: { not: parsed.right } },
+          },
+        },
+      },
+      select: moManufacturerSelect,
+    });
+    if (!row) return null;
+    return moMissingInvoiceFinding(row);
   },
 };
 
@@ -453,6 +528,7 @@ export const OPERATOR_WARNING_CHECKS: readonly WarningCheck[] = [
   moLineMissingCost,
   moAllocationUnverified,
   moMissingEta,
+  moMissingInvoice,
   poStaleInTransit,
 ];
 
