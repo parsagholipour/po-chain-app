@@ -807,6 +807,7 @@ export type MoManufacturerPivot = {
   manufacturerId: string;
   status: string;
   invoiceId: string | null;
+  manufacturerInvoiceDocumentKey: string | null;
   manufacturer: { id: string; name: string; region: string };
   invoice: null | {
     id: string;

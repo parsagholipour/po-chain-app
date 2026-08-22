@@ -28,6 +28,7 @@ export const moManufacturerPatchSchema = z.object({
     ])
     .optional(),
   invoice: invoiceUpsertSchema.optional(),
+  manufacturerInvoiceDocumentKey: z.string().min(1).nullable().optional(),
 
   depositPaidAt: optionalIsoDateTime,
   depositPaidAmount: z.number().nonnegative().nullable().optional(),

@@ -76,6 +76,7 @@ export async function PATCH(
 
       // Merge any explicitly-provided step fields
       const stepFields = [
+        "manufacturerInvoiceDocumentKey",
         "depositPaidAt",
         "depositPaidAmount",
         "depositRefNumber",

@@ -1314,12 +1314,13 @@ model WarehouseOrder {
 }
 
 model ManufacturingOrderManufacturer {
-  manufacturingOrderId String                               @db.Uuid
-  manufacturerId       String                               @db.Uuid
-  status               ManufacturingOrderManufacturerStatus @default(initial)
-  invoiceId            String?                              @unique @db.Uuid
-  storeId              String                               @db.Uuid
-  store                Store                                @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  manufacturingOrderId           String                               @db.Uuid
+  manufacturerId                 String                               @db.Uuid
+  status                         ManufacturingOrderManufacturerStatus @default(initial)
+  invoiceId                      String?                              @unique @db.Uuid
+  manufacturerInvoiceDocumentKey String?
+  storeId                        String                               @db.Uuid
+  store                          Store                                @relation(fields: [storeId], references: [id], onDelete: Restrict)
 
   depositPaidAt      DateTime?
   depositPaidAmount  Decimal?  @db.Decimal(12, 2)

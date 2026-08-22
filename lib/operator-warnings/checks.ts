@@ -348,6 +348,7 @@ const moManufacturerSelect = {
 
 function moManufacturerFinding(
   type: Extract<OperatorWarningType, "mo_missing_eta" | "mo_missing_invoice">,
+  tier: WarningFinding["tier"],
   row: {
     manufacturingOrderId: string;
     manufacturerId: string;
@@ -358,7 +359,7 @@ function moManufacturerFinding(
 ): WarningFinding {
   return {
     type,
-    tier: "medium",
+    tier,
     entityType: "mo_manufacturer",
     entityId: `${row.manufacturingOrderId}:${row.manufacturerId}`,
     title: `MO #${row.manufacturingOrder.number}`,
@@ -375,6 +376,7 @@ function moMissingEtaFinding(row: {
 }): WarningFinding {
   return moManufacturerFinding(
     "mo_missing_eta",
+    "medium",
     row,
     "has no estimated completion date",
   );
@@ -386,8 +388,18 @@ function moMissingInvoiceFinding(row: {
   manufacturingOrder: { number: number };
   manufacturer: { name: string };
 }): WarningFinding {
-  return moManufacturerFinding("mo_missing_invoice", row, "has no invoice");
+  return moManufacturerFinding(
+    "mo_missing_invoice",
+    "high",
+    row,
+    "has no manufacturer invoice",
+  );
 }
+
+const moMissingInvoiceWhere = {
+  manufacturerInvoiceDocumentKey: null,
+  OR: [{ invoiceId: null }, { invoice: { is: { documentKey: null } } }],
+} satisfies Prisma.ManufacturingOrderManufacturerWhereInput;
 
 async function manufacturingOrderIdsWithMultipleManufacturers(storeId: string) {
   const groups = await prisma.manufacturingOrderManufacturer.groupBy({
@@ -441,8 +453,8 @@ const moMissingInvoice: WarningCheck = {
     const rows = await prisma.manufacturingOrderManufacturer.findMany({
       where: {
         storeId,
-        invoiceId: null,
         manufacturingOrderId: { in: manufacturingOrderIds },
+        ...moMissingInvoiceWhere,
       },
       select: moManufacturerSelect,
     });
@@ -456,7 +468,7 @@ const moMissingInvoice: WarningCheck = {
         storeId,
         manufacturingOrderId: parsed.left,
         manufacturerId: parsed.right,
-        invoiceId: null,
+        ...moMissingInvoiceWhere,
         manufacturingOrder: {
           manufacturers: {
             some: { manufacturerId: { not: parsed.right } },

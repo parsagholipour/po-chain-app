@@ -1,8 +1,9 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useState, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -15,8 +16,9 @@ import { Separator } from "@/components/ui/separator";
 import type { MoManufacturerPivot } from "@/lib/types/api";
 import { formatInvoiceDate } from "@/lib/po/invoice-form";
 import { PoDocumentLink } from "@/components/po/purchase-order/po-document-link";
+import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { moManufacturerStatuses, moStatusLabels } from "@/lib/po/status-labels";
-import { Pencil } from "lucide-react";
+import { Check, Loader2, Pencil, X } from "lucide-react";
 import { PriceView } from "@/components/ui/price-view";
 
 function PivotStepDetails({ row, onEdit }: { row: MoManufacturerPivot; onEdit?: () => void }) {
@@ -120,11 +122,106 @@ function pivotStatusItemsForValue(currentStatus: string) {
   ];
 }
 
+function ManufacturerInvoiceDocumentField({
+  row,
+  onUpload,
+  isSaving,
+}: {
+  row: MoManufacturerPivot;
+  onUpload: (file: File) => Promise<void>;
+  isSaving: boolean;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [pendingName, setPendingName] = useState<string | null>(null);
+  const inputId = `manufacturer-invoice-${row.manufacturerId}`;
+  const currentName = storageObjectDisplayName(row.manufacturerInvoiceDocumentKey);
+  const visibleName = pendingName ?? currentName;
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    const input = event.currentTarget;
+    const file = input.files?.[0] ?? null;
+    if (!file) return;
+    setPendingName(file.name);
+    void onUpload(file)
+      .then(() => {
+        setPendingName(null);
+        setIsEditing(false);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        input.value = "";
+      });
+  }
+
+  return (
+    <div className="space-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium">Manufacturer Invoice</span>
+        <PoDocumentLink documentKey={row.manufacturerInvoiceDocumentKey} />
+        {visibleName ? (
+          <span className="break-all text-xs text-muted-foreground">{visibleName}</span>
+        ) : null}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          className="text-muted-foreground"
+          disabled={isSaving}
+          aria-label={isEditing ? "Close manufacturer invoice editor" : "Upload manufacturer invoice"}
+          onClick={() => setIsEditing((prev) => !prev)}
+        >
+          {isSaving ? <Loader2 className="size-3 animate-spin" /> : <Pencil className="size-3" />}
+        </Button>
+      </div>
+      {isEditing ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-muted/30 p-2">
+          <div className="min-w-0 flex-1">
+            <Label htmlFor={inputId} className="text-xs text-muted-foreground">
+              Choose a file
+            </Label>
+            <Input
+              id={inputId}
+              type="file"
+              disabled={isSaving}
+              className="mt-1"
+              onChange={handleChange}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            disabled={isSaving}
+            aria-label="Close manufacturer invoice editor"
+            onClick={() => setIsEditing(false)}
+          >
+            <X className="size-3" />
+          </Button>
+        </div>
+      ) : null}
+      {isSaving ? (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" />
+          Uploading{pendingName ? ` ${pendingName}` : ""}…
+        </p>
+      ) : null}
+      {!isSaving && pendingName ? (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Check className="size-3.5" />
+          {pendingName}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 type Props = {
   manufacturers: MoManufacturerPivot[];
   onPivotStatusChange: (manufacturerId: string, status: string) => void;
   onCreateInvoice: (row: MoManufacturerPivot) => void;
   onEditInvoice: (row: MoManufacturerPivot) => void;
+  onManufacturerInvoiceUpload?: (row: MoManufacturerPivot, file: File) => Promise<void>;
+  uploadingManufacturerInvoiceId?: string | null;
   onEditStepDetails?: (row: MoManufacturerPivot) => void;
   /** Edit manufacturer master record (e.g. from MO detail). */
   onEditManufacturer?: (manufacturerId: string) => void;
@@ -137,10 +234,14 @@ export function PoManufacturersSection({
   onPivotStatusChange,
   onCreateInvoice,
   onEditInvoice,
+  onManufacturerInvoiceUpload,
+  uploadingManufacturerInvoiceId = null,
   onEditStepDetails,
   onEditManufacturer,
   hideHeading = false,
 }: Props) {
+  const showManufacturerInvoice = manufacturers.length > 1 && !!onManufacturerInvoiceUpload;
+
   return (
     <section
       className="space-y-4"
@@ -202,6 +303,20 @@ export function PoManufacturersSection({
                   </SelectContent>
                 </Select>
               </div>
+              {showManufacturerInvoice ? (
+                <>
+                  <Separator />
+                  <ManufacturerInvoiceDocumentField
+                    row={row}
+                    isSaving={uploadingManufacturerInvoiceId === row.manufacturerId}
+                    onUpload={(file) =>
+                      onManufacturerInvoiceUpload
+                        ? onManufacturerInvoiceUpload(row, file)
+                        : Promise.resolve()
+                    }
+                  />
+                </>
+              ) : null}
               <Separator />
               {row.invoice ? (
                 <div className="space-y-2 text-sm">

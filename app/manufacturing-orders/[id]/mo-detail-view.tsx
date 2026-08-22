@@ -342,6 +342,9 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
   const [statusChangeTarget, setStatusChangeTarget] = useState<StatusChangeTarget | null>(null);
   const [editStepRow, setEditStepRow] = useState<MoManufacturerPivot | null>(null);
   const [isDocumentSaving, setIsDocumentSaving] = useState(false);
+  const [uploadingManufacturerInvoiceId, setUploadingManufacturerInvoiceId] = useState<
+    string | null
+  >(null);
 
   const [invoiceTarget, setInvoiceTarget] = useState<{
     row: MoManufacturerPivot;
@@ -391,6 +394,24 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
       throw e;
     } finally {
       setIsDocumentSaving(false);
+    }
+  }
+
+  async function uploadManufacturerInvoice(row: MoManufacturerPivot, file: File) {
+    setUploadingManufacturerInvoiceId(row.manufacturerId);
+    try {
+      const manufacturerInvoiceDocumentKey = await uploadFileToStorage(file, "pivot-docs");
+      await patchMf.mutateAsync({
+        manufacturerId: row.manufacturerId,
+        body: { manufacturerInvoiceDocumentKey },
+      });
+    } catch (e) {
+      if (!axios.isAxiosError(e)) {
+        toast.error(e instanceof Error ? e.message : "Upload failed");
+      }
+      throw e;
+    } finally {
+      setUploadingManufacturerInvoiceId(null);
     }
   }
 
@@ -553,7 +574,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         sectionId="mo-manufacturers"
         title="Manufacturers & invoices"
         summary={manufacturersSummary}
-        description="Status and invoices per manufacturer on this manufacturing order."
+        description="Status, manufacturer invoices, and production details per manufacturer on this manufacturing order."
       >
         <PoManufacturersSection
           manufacturers={mo.manufacturers}
@@ -574,6 +595,8 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
           }}
           onCreateInvoice={(row) => setInvoiceTarget({ row, mode: "create" })}
           onEditInvoice={(row) => setInvoiceTarget({ row, mode: "edit" })}
+          onManufacturerInvoiceUpload={uploadManufacturerInvoice}
+          uploadingManufacturerInvoiceId={uploadingManufacturerInvoiceId}
           onEditStepDetails={(row) => setEditStepRow(row)}
           onEditManufacturer={(manufacturerId) => {
             const m = manufacturers.find((x) => x.id === manufacturerId);

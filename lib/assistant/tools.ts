@@ -1017,6 +1017,7 @@ async function getManufacturingOrderTool(
           status: manufacturer.status,
           statusLabel: moStatusLabels[manufacturer.status] ?? manufacturer.status,
           invoiceNumber: manufacturer.invoice?.invoiceNumber ?? null,
+          manufacturerInvoiceAttached: Boolean(manufacturer.manufacturerInvoiceDocumentKey),
         })),
         linkedOrders: data.purchaseOrders.map((link) => ({
           id: link.purchaseOrder.id,
