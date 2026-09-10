@@ -37,6 +37,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 type DistributorPoDetail = Extract<PurchaseOrderDetail, { type: "distributor" }>;
 
@@ -280,7 +286,27 @@ export function NewWarehouseOrderWizard() {
                   <TableRow>
                     <TableHead>Product</TableHead>
                     <TableHead>PO</TableHead>
-                    <TableHead className="w-28">Available</TableHead>
+                    <TableHead className="w-32">
+                      <span className="inline-flex items-center gap-1.5">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger
+                              type="button"
+                              className="inline-flex size-4 shrink-0 items-center justify-center rounded-full border border-border text-[10px] leading-none font-medium text-muted-foreground hover:bg-muted"
+                              aria-label="What does Available mean?"
+                            >
+                              ?
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-64 text-left">
+                              Remaining quantity on this PO line that is not
+                              already assigned to a manufacturing order or
+                              warehouse order.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        Available
+                      </span>
+                    </TableHead>
                     <TableHead className="w-32">WO qty</TableHead>
                   </TableRow>
                 </TableHeader>

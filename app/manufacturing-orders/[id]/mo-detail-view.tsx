@@ -574,7 +574,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         sectionId="mo-manufacturers"
         title="Manufacturers & invoices"
         summary={manufacturersSummary}
-        description="Status, manufacturer invoices, and production details per manufacturer on this manufacturing order."
+        description="Status, manufacturer invoice documents, and invoice numbers for each manufacturer."
       >
         <PoManufacturersSection
           manufacturers={mo.manufacturers}
@@ -690,7 +690,7 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         onOpenChange={(o) => {
           if (!o) setInvoiceTarget(null);
         }}
-        title={invoiceTarget?.mode === "edit" ? "Edit invoice" : "Create invoice"}
+        title={invoiceTarget?.mode === "edit" ? "Edit invoice number" : "Create invoice number"}
         defaultValues={invoiceDialogDefaults}
         existingDocumentKey={invoiceTarget?.row.invoice?.documentKey ?? null}
         resetToken={invoiceResetToken}

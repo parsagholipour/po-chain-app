@@ -122,6 +122,26 @@ function pivotStatusItemsForValue(currentStatus: string) {
   ];
 }
 
+function ManufacturerCardGroup({
+  label,
+  description,
+  children,
+}: {
+  label: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="space-y-0.5">
+        <Label className="text-xs">{label}</Label>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      {children}
+    </div>
+  );
+}
+
 function ManufacturerInvoiceDocumentField({
   row,
   onUpload,
@@ -154,9 +174,11 @@ function ManufacturerInvoiceDocumentField({
   }
 
   return (
-    <div className="space-y-2 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-medium">Manufacturer Invoice</span>
+    <ManufacturerCardGroup
+      label="Manufacturer invoice"
+      description="Document from this manufacturer."
+    >
+      <div className="flex flex-wrap items-center gap-2 text-sm">
         <PoDocumentLink documentKey={row.manufacturerInvoiceDocumentKey} />
         {visibleName ? (
           <span className="break-all text-xs text-muted-foreground">{visibleName}</span>
@@ -211,7 +233,51 @@ function ManufacturerInvoiceDocumentField({
           {pendingName}
         </p>
       ) : null}
-    </div>
+    </ManufacturerCardGroup>
+  );
+}
+
+function ManufacturerInvoiceNumberField({
+  row,
+  onCreate,
+  onEdit,
+  distinguishFromManufacturerInvoice,
+}: {
+  row: MoManufacturerPivot;
+  onCreate: () => void;
+  onEdit: () => void;
+  distinguishFromManufacturerInvoice: boolean;
+}) {
+  return (
+    <ManufacturerCardGroup
+      label="Invoice number"
+      description={
+        distinguishFromManufacturerInvoice
+          ? "Numbered record, not the manufacturer invoice document above."
+          : "Numbered invoice record for this manufacturer."
+      }
+    >
+      {row.invoice ? (
+        <div className="space-y-2 text-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium">{row.invoice.invoiceNumber}</span>
+            <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+              Edit
+            </Button>
+          </div>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+            <dt className="text-muted-foreground">Attached document</dt>
+            <dd>
+              <PoDocumentLink documentKey={row.invoice.documentKey} />
+            </dd>
+          </dl>
+        </div>
+      ) : (
+        <Button type="button" variant="secondary" size="sm" onClick={onCreate}>
+          Create invoice number
+        </Button>
+      )}
+    </ManufacturerCardGroup>
   );
 }
 
@@ -318,36 +384,12 @@ export function PoManufacturersSection({
                 </>
               ) : null}
               <Separator />
-              {row.invoice ? (
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">Invoice {row.invoice.invoiceNumber}</span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onEditInvoice(row)}
-                    >
-                      Edit
-                    </Button>
-                  </div>
-                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                    <dt className="text-muted-foreground">Document</dt>
-                    <dd>
-                      <PoDocumentLink documentKey={row.invoice.documentKey} />
-                    </dd>
-                  </dl>
-                </div>
-              ) : (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => onCreateInvoice(row)}
-                >
-                  Create invoice
-                </Button>
-              )}
+              <ManufacturerInvoiceNumberField
+                row={row}
+                distinguishFromManufacturerInvoice={showManufacturerInvoice}
+                onCreate={() => onCreateInvoice(row)}
+                onEdit={() => onEditInvoice(row)}
+              />
               <PivotStepDetails
                 row={row}
                 onEdit={onEditStepDetails ? () => onEditStepDetails(row) : undefined}
