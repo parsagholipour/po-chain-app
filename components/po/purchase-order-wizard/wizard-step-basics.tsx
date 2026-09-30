@@ -15,6 +15,8 @@ export function documentDisplayName(documentKey: string | null, docFile: File | 
 type Props = {
   name: string;
   onNameChange: (value: string) => void;
+  date?: string;
+  onDateChange?: (value: string) => void;
   documentKey: string | null;
   docFile: File | null;
   onDocFileChange: (file: File | null) => void;
@@ -28,6 +30,8 @@ type Props = {
 export function WizardStepBasics({
   name,
   onNameChange,
+  date,
+  onDateChange,
   documentKey,
   docFile,
   onDocFileChange,
@@ -50,6 +54,20 @@ export function WizardStepBasics({
           placeholder="e.g. Spring restock — EU"
         />
       </div>
+      {onDateChange ? (
+        <div className="space-y-2">
+          <Label htmlFor="po-date" required>
+            Date
+          </Label>
+          <Input
+            id="po-date"
+            type="date"
+            required
+            value={date ?? ""}
+            onChange={(e) => onDateChange(e.target.value)}
+          />
+        </div>
+      ) : null}
       <div className="space-y-2">
         <Label htmlFor="po-doc">Document (optional)</Label>
         <Input

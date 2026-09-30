@@ -8,6 +8,7 @@ import {
 } from "@/lib/validations/purchase-order";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import type { Prisma } from "@/app/generated/prisma/client";
+import { purchaseOrderDateToday } from "@/lib/purchase-order-date";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_STOCK } from "@/lib/purchase-order-type";
 import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
@@ -70,6 +71,7 @@ export async function GET(request: Request) {
           name: true,
         },
       },
+      date: true,
       createdAt: true,
       updatedAt: true,
       lines: {
@@ -114,6 +116,7 @@ export async function GET(request: Request) {
       isBackOrder: r.isBackOrder,
       actualizedPoId: r.actualizedPoId,
       actualizedPo: r.actualizedPo,
+      date: r.date,
       createdAt: r.createdAt,
       saleChannel: r.saleChannel,
       saleChannelLocation: r.saleChannelLocation,
@@ -212,6 +215,7 @@ export async function POST(request: Request) {
       const po = await tx.purchaseOrder.create({
         data: {
           name,
+          date: purchaseOrderDateToday(),
           type: PURCHASE_ORDER_TYPE_STOCK,
           documentKey: documentKey ?? null,
           storeId,

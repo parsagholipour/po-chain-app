@@ -469,6 +469,13 @@ export function PoDetailView({ purchaseOrderId }: { purchaseOrderId: string }) {
               }
             : undefined
         }
+        onDateChange={
+          !isDistributor
+            ? async (date) => {
+                await patchPo.mutateAsync({ date });
+              }
+            : undefined
+        }
         onStatusChange={!isDistributor ? (s) => patchPo.mutate({ status: s }) : undefined}
         onSaveStatusLogNote={
           !isDistributor

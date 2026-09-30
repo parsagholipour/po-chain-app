@@ -566,6 +566,7 @@ export type PurchaseOrderSummary = {
   isBackOrder: boolean;
   actualizedPoId: string | null;
   actualizedPo: { id: string; number: number; name: string } | null;
+  date: string;
   createdAt: string;
   saleChannel: { id: string; name: string; type: string; logoKey: string | null } | null;
   saleChannelLocation: SaleChannelLocationRef | null;
@@ -756,6 +757,7 @@ type PurchaseOrderDetailBase = {
   isBackOrder: boolean;
   actualizedPoId: string | null;
   actualizedPo: { id: string; number: number; name: string } | null;
+  date: string;
   invoiceId: string | null;
   invoice: null | {
     id: string;

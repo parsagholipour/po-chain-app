@@ -269,7 +269,7 @@ function PoListFiltersAndTable({
             <col style={{ width: viewOnly ? "13%" : "14%" }} />
             <col style={{ width: viewOnly ? "14%" : "14%" }} />
             <col />
-            <col style={{ width: "5rem" }} />
+            <col style={{ width: "6.5rem" }} />
             {showActions ? <col style={{ width: "3.5rem" }} /> : null}
           </colgroup>
           <TableHeader>
@@ -280,7 +280,7 @@ function PoListFiltersAndTable({
               <TableHead>Fulfillment</TableHead>
               <TableHead>Tracking #</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="px-2 pr-4 sm:px-2 sm:pr-4">Created</TableHead>
+              <TableHead className="px-2 pr-4 sm:px-2 sm:pr-4">Date</TableHead>
               {showActions ? (
                 <TableHead className="pl-2 pr-3 sm:pl-2 sm:pr-3">
                   <span className="sr-only">Actions</span>

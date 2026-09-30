@@ -27,6 +27,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { distributorPoStatusLabels, statusBadgeClassName } from "@/lib/po/status-labels";
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
+import { formatPurchaseOrderDate } from "@/lib/purchase-order-date";
 import { invalidateNavCounts } from "@/lib/query-invalidation";
 import { cn } from "@/lib/utils";
 import { MoLinkedOrderLabel } from "@/components/po/mo-linked-order-label";
@@ -38,6 +39,7 @@ type WizardOrderRow = {
   number: number;
   name: string;
   status: string;
+  date: string;
   createdAt: string;
   saleChannel: { id: string; name: string; type: string; logoKey: string | null } | null;
   kind: "distributor" | "stock";
@@ -362,7 +364,9 @@ export function NewManufacturingOrderWizard() {
                           <span className="text-xs text-muted-foreground truncate">{o.saleChannel.name}</span>
                         ) : null}
                         <span className="text-xs text-muted-foreground ml-auto shrink-0">
-                          {new Date(o.createdAt).toLocaleDateString()}
+                          {o.kind === "stock"
+                            ? new Date(o.createdAt).toLocaleDateString()
+                            : formatPurchaseOrderDate(o.date)}
                         </span>
                         <Badge
                           variant="secondary"
@@ -528,7 +532,9 @@ export function NewManufacturingOrderWizard() {
                             </span>
                           ) : null}
                           <span className="text-xs text-muted-foreground ml-auto shrink-0">
-                            {new Date(o.createdAt).toLocaleDateString()}
+                            {o.kind === "stock"
+                              ? new Date(o.createdAt).toLocaleDateString()
+                              : formatPurchaseOrderDate(o.date)}
                           </span>
                           <Badge
                             variant="secondary"

@@ -10,6 +10,7 @@ import {
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { createExternalOrderNotifications } from "@/lib/notification-events";
 import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
+import { purchaseOrderDateToday } from "@/lib/purchase-order-date";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import {
   isDistributorContext,
@@ -484,6 +485,7 @@ export async function POST(request: Request) {
             const purchaseOrder = await tx.purchaseOrder.create({
               data: {
                 name: purchaseOrderNameForDestination(destination, isBackOrder),
+                date: purchaseOrderDateToday(),
                 type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
                 status: "open",
                 documentKey: documentByDestinationKey.get(destinationKey) ?? null,

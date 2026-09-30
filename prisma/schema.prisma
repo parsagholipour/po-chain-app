@@ -1050,6 +1050,8 @@ model PurchaseOrder {
   shipToPostalCode      String?
   shipToCountry         String?
   shipToNotes           String?
+  /// Business date of the purchase order. Existing rows are backfilled from createdAt.
+  date                  DateTime             @db.Date
   storeId               String               @db.Uuid
   store                 Store                @relation(fields: [storeId], references: [id], onDelete: Restrict)
   createdAt             DateTime             @default(now())

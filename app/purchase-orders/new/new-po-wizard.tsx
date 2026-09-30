@@ -33,6 +33,10 @@ import { isPdfDocument } from "@/components/ui/document-pdf-preview";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { invalidateNavCounts } from "@/lib/query-invalidation";
+import {
+  formatPurchaseOrderDate,
+  localPurchaseOrderDateInputValue,
+} from "@/lib/purchase-order-date";
 import { cn } from "@/lib/utils";
 
 function lineCountLabel(count: number) {
@@ -74,6 +78,7 @@ export function NewPurchaseOrderWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
+  const [date, setDate] = useState(localPurchaseOrderDateInputValue);
   const {
     documentKey,
     setDocumentKey,
@@ -132,6 +137,7 @@ export function NewPurchaseOrderWizard() {
     mutationFn: async (vars: { documentKey: string | null }) => {
       const { data } = await api.post<{ id: string }>("/api/purchase-orders", {
         name: name.trim(),
+        date,
         documentKey: vars.documentKey,
         saleChannelId,
         saleChannelLocationId,
@@ -274,7 +280,9 @@ export function NewPurchaseOrderWizard() {
   }
 
   function canNext(): boolean {
-    if (step === 0) return name.trim().length > 0 && !isDocUploading && !isImportingPdfLines;
+    if (step === 0) {
+      return name.trim().length > 0 && date.length > 0 && !isDocUploading && !isImportingPdfLines;
+    }
     if (step === 1) return saleChannelId.length > 0;
     if (step === 2) return productAssetIssues.length === 0;
     return true;
@@ -324,7 +332,7 @@ export function NewPurchaseOrderWizard() {
     isPdfDocument({ documentKey, file: docFile, fileName: documentName });
 
   const stepDescriptions = [
-    "Name the PO and attach an optional document.",
+    "Name the PO, choose a date, and attach an optional document.",
     "Choose the distributor sale channel for this order.",
     "Add products and quantities from the distributor.",
     "Confirm and create the purchase order.",
@@ -378,6 +386,8 @@ export function NewPurchaseOrderWizard() {
             <WizardStepBasics
               name={name}
               onNameChange={setName}
+              date={date}
+              onDateChange={setDate}
               documentKey={documentKey}
               docFile={docFile}
               onDocFileChange={onDocFileChange}
@@ -425,6 +435,7 @@ export function NewPurchaseOrderWizard() {
           {step === 3 ? (
             <WizardStepReview
               name={name}
+              dateLabel={date ? formatPurchaseOrderDate(date) : null}
               hasDocument={!!(documentKey || docFile)}
               documentName={documentName}
               documentKey={documentKey}
@@ -460,6 +471,7 @@ export function NewPurchaseOrderWizard() {
                 disabled={
                   isFinishing ||
                   !name.trim() ||
+                  !date ||
                   !saleChannelId ||
                   productAssetIssues.length > 0
                 }

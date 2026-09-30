@@ -35,8 +35,9 @@ import { Badge } from "@/components/ui/badge";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { StorageObjectImage } from "@/components/ui/storage-object-image";
 import { OrderStatusLogsDialog } from "@/components/po/order-status-logs-dialog";
+import { formatPurchaseOrderDate, purchaseOrderDateInputValue } from "@/lib/purchase-order-date";
 import { PoDocumentLink } from "./po-document-link";
-import { Check, ChevronLeft, FileStack, Factory, Loader2, Pencil, Truck, X } from "lucide-react";
+import { Calendar, Check, ChevronLeft, FileStack, Factory, Loader2, Pencil, Truck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const poOrderStatusSelectItems = distributorPoStatuses.map((s) => ({
@@ -62,6 +63,7 @@ type Props = {
   po: PurchaseOrderDetail;
   statusLogs: PurchaseOrderDetail["statusLogs"];
   onNameChange?: (name: string) => Promise<void> | void;
+  onDateChange?: (date: string) => Promise<void> | void;
   onStatusChange?: (status: string) => void;
   onSaveStatusLogNote?: (logId: string, note: string | null) => Promise<void>;
   /** Distributor PO only — omit for stock orders */
@@ -84,6 +86,7 @@ export function PoDetailHeader({
   po,
   statusLogs,
   onNameChange,
+  onDateChange,
   saleChannelOptions = [],
   onSaleChannelChange,
   saleChannelLocations = [],
@@ -105,6 +108,7 @@ export function PoDetailHeader({
   const [draftName, setDraftName] = useState(po.name);
   const [isEditingDocument, setIsEditingDocument] = useState(false);
   const [pendingDocumentName, setPendingDocumentName] = useState<string | null>(null);
+  const [draftDate, setDraftDate] = useState<string | null>(null);
   const isStock = po.type === "stock";
   const listHref = isStock ? "/stock-orders" : "/purchase-orders-overview";
   const backLabel = isStock ? "Back to stock orders" : "Back to purchase orders";
@@ -143,6 +147,9 @@ export function PoDetailHeader({
   const showLocation = po.saleChannel != null && onLocationChange != null && !hasSnapshotOnlyLocation;
   const documentInputId = isStock ? "stock-order-document" : "po-document";
   const nameInputId = isStock ? "stock-order-name" : "po-name";
+  const dateInputId = "po-date";
+  const serverDate = purchaseOrderDateInputValue(po.date);
+  const dateValue = draftDate == null || draftDate === serverDate ? serverDate : draftDate;
   const currentDocumentName = storageObjectDisplayName(po.documentKey);
   const visibleDocumentName = pendingDocumentName ?? currentDocumentName;
   const isDocumentBusy = isSaving || isDocumentSaving || isDeleting;
@@ -306,6 +313,40 @@ export function PoDetailHeader({
               className="grid gap-2 pt-2 text-xs text-muted-foreground sm:flex sm:flex-wrap sm:gap-x-4 sm:gap-y-2"
               aria-label={summaryAria}
             >
+              {!isStock ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Calendar className="size-3.5 shrink-0 opacity-70" aria-hidden />
+                  <span>Date</span>
+                  {onDateChange ? (
+                    <>
+                      <Label htmlFor={dateInputId} className="sr-only">
+                        Date
+                      </Label>
+                      <Input
+                        id={dateInputId}
+                        type="date"
+                        required
+                        value={dateValue}
+                        disabled={isSaving || isDeleting}
+                        className="h-7 w-[9.5rem] bg-background text-xs"
+                        onBlur={() => {
+                          if (!draftDate) setDraftDate(null);
+                        }}
+                        onChange={(event) => {
+                          const next = event.target.value;
+                          setDraftDate(next);
+                          if (!next || next === serverDate) return;
+                          void Promise.resolve(onDateChange(next)).catch(() => {
+                            setDraftDate(null);
+                          });
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <span>{formatPurchaseOrderDate(po.date)}</span>
+                  )}
+                </span>
+              ) : null}
               <span className="inline-flex items-center gap-1.5">
                 <FileStack className="size-3.5 shrink-0 opacity-70" aria-hidden />
                 <span>

@@ -302,7 +302,7 @@ function drawDistributorTemplateSummary(doc: PDFKit.PDFDocument, po: PurchaseOrd
   const cells = [
     ["STATUS", titleCase(po.status), po.status === "open" ? TEMPLATE_GREEN : TEMPLATE_DARK],
     ["ORDER TYPE", po.isBackOrder ? "Back Order" : "Standard Order", TEMPLATE_DARK],
-    ["PO DATE", formatTemplateDate(po.createdAt), TEMPLATE_DARK],
+    ["PO DATE", formatUtcTemplateDate(po.date), TEMPLATE_DARK],
     ["DISTRIBUTOR ORDER", distributorOrderNumber(po), TEMPLATE_DARK],
     ["PLACED BY", po.saleChannel?.name ?? "", TEMPLATE_DARK],
   ] as const;
@@ -668,6 +668,7 @@ function drawPurchaseOrder(doc: PDFKit.PDFDocument, po: PurchaseOrderPdfData) {
   drawKeyValueGrid(doc, [
     ["Status", titleCase(po.status)],
     ["Type", po.isBackOrder ? "Back order" : titleCase(po.type)],
+    ["Date", formatUtcTemplateDate(po.date)],
     ["Created", formatDateTime(po.createdAt)],
     ["Updated", formatDateTime(po.updatedAt)],
     ["Created by", personLabel(po.createdBy)],
@@ -1142,11 +1143,12 @@ function distributorCityStatePostal(po: PurchaseOrderPdfData) {
   return [cityState, po.shipToPostalCode].filter(Boolean).join(" ");
 }
 
-function formatTemplateDate(value: Date) {
+function formatUtcTemplateDate(value: Date) {
   return value.toLocaleDateString(undefined, {
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 

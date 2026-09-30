@@ -6,6 +6,7 @@ import {
   isDistributorContext,
   requireStoreContext,
 } from "@/lib/store-context";
+import { purchaseOrderDateToPrisma } from "@/lib/purchase-order-date";
 import {
   purchaseOrderCreateSchema,
   purchaseOrderStatusSchema,
@@ -123,6 +124,7 @@ export async function GET(request: Request) {
           name: true,
         },
       },
+      date: true,
       createdAt: true,
       updatedAt: true,
       lines: {
@@ -204,6 +206,7 @@ export async function GET(request: Request) {
       isBackOrder: r.isBackOrder,
       actualizedPoId: r.actualizedPoId,
       actualizedPo: r.actualizedPo,
+      date: r.date,
       createdAt: r.createdAt,
       saleChannel: r.saleChannel,
       saleChannelLocation: r.saleChannelLocation,
@@ -275,7 +278,7 @@ export async function POST(request: Request) {
   const parsed = purchaseOrderCreateSchema.safeParse(body);
   if (!parsed.success) return jsonFromZod(parsed.error);
 
-  const { name, documentKey, saleChannelId, saleChannelLocationId, lines } = parsed.data;
+  const { name, date, documentKey, saleChannelId, saleChannelLocationId, lines } = parsed.data;
 
   try {
     const result = await prisma.$transaction(async (tx) => {
@@ -342,6 +345,7 @@ export async function POST(request: Request) {
       const po = await tx.purchaseOrder.create({
         data: {
           name,
+          date: purchaseOrderDateToPrisma(date),
           type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
           documentKey: documentKey ?? null,
           storeId,

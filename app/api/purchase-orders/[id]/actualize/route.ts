@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { jsonError, jsonFromPrisma, jsonFromZod } from "@/lib/json-error";
 import { createBackorderActualizedNotification } from "@/lib/notification-events";
 import { dispatchNotificationEmailsSafely } from "@/lib/notifications";
+import { purchaseOrderDateToday } from "@/lib/purchase-order-date";
 import { purchaseOrderDetailInclude } from "@/lib/purchase-order-include";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 import { purchaseOrderDetailFromPrisma } from "@/lib/shipping-api";
@@ -58,6 +59,7 @@ export async function POST(
       const actualizedPo = await tx.purchaseOrder.create({
         data: {
           name: actualizedPurchaseOrderName(backPo.name),
+          date: purchaseOrderDateToday(),
           type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
           status: "open",
           invoiceId: backPo.invoiceId,

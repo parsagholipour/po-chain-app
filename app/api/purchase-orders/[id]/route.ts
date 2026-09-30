@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { purchaseOrderDateToPrisma } from "@/lib/purchase-order-date";
 import {
   invoicePayloadToPrisma,
   purchaseOrderPatchSchema,
@@ -134,7 +135,7 @@ export async function PATCH(
     return jsonError("No fields to update", 400);
   }
 
-  const { saleChannelId, saleChannelLocationId, invoice, ...scalarRest } = parsed.data;
+  const { saleChannelId, saleChannelLocationId, invoice, date, ...scalarRest } = parsed.data;
 
   try {
     const notificationIds = await prisma.$transaction(async (tx) => {
@@ -224,6 +225,7 @@ export async function PATCH(
 
       const data = {
         ...scalarRest,
+        ...(date !== undefined ? { date: purchaseOrderDateToPrisma(date) } : {}),
         ...(saleChannelId !== undefined ? { saleChannelId } : {}),
         ...locationData,
       };

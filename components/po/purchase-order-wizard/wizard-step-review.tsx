@@ -97,6 +97,7 @@ export function WizardLinesPreview({
 
 type Props = {
   name: string;
+  dateLabel?: string | null;
   hasDocument: boolean;
   /** When set, shown instead of a bare "Yes" for the document row. */
   documentName?: string | null;
@@ -117,6 +118,7 @@ type Props = {
 
 export function WizardStepReview({
   name,
+  dateLabel = null,
   hasDocument,
   documentName = null,
   documentKey = null,
@@ -167,6 +169,12 @@ export function WizardStepReview({
         <span className="text-muted-foreground">Name: </span>
         <span className="font-medium">{name.trim() || "—"}</span>
       </div>
+      {dateLabel ? (
+        <div>
+          <span className="text-muted-foreground">Date: </span>
+          <span className="font-medium">{dateLabel}</span>
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-muted-foreground">Document:</span>
         {hasDocument ? (

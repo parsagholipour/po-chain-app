@@ -1,4 +1,10 @@
 import { z } from "zod";
+import { isPurchaseOrderDate } from "@/lib/purchase-order-date";
+
+export const purchaseOrderDateSchema = z
+  .string()
+  .min(1, "Date is required")
+  .refine(isPurchaseOrderDate, "Enter a valid date");
 
 export const purchaseOrderStatusSchema = z.enum(["open", "in_transit", "invoiced", "closed"]);
 
@@ -21,6 +27,7 @@ export const invoicePatchSchema = invoiceUpsertSchema.partial();
 
 export const purchaseOrderCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
+  date: purchaseOrderDateSchema,
   documentKey: z.string().min(1).nullable().optional(),
   saleChannelId: z.uuid(),
   saleChannelLocationId: z.uuid().nullable().optional(),
@@ -36,6 +43,7 @@ export const purchaseOrderCreateSchema = z.object({
 
 export const purchaseOrderPatchSchema = z.object({
   name: z.string().min(1).optional(),
+  date: purchaseOrderDateSchema.optional(),
   status: purchaseOrderStatusSchema.optional(),
   documentKey: z.string().min(1).nullable().optional(),
   saleChannelId: z.uuid().optional(),

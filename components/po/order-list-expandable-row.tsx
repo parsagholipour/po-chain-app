@@ -26,6 +26,7 @@ import {
   statusBadgeClassName,
   warehouseOrderStatusLabels,
 } from "@/lib/po/status-labels";
+import { formatPurchaseOrderDate } from "@/lib/purchase-order-date";
 import { ChevronDown, ChevronRight, Loader2, Trash2 } from "lucide-react";
 
 export type OrderListLinesApiScope = "purchase-orders" | "stock-orders";
@@ -248,7 +249,9 @@ export function ExpandableOrderSummaryRow({
               : "whitespace-nowrap text-xs text-muted-foreground"
           }
         >
-          {new Date(row.createdAt).toLocaleDateString()}
+          {apiScope === "purchase-orders"
+            ? formatPurchaseOrderDate(row.date)
+            : new Date(row.createdAt).toLocaleDateString()}
         </TableCell>
         {onDelete ? (
           <TableCell className="pl-2 pr-3 py-0 sm:pl-2 sm:pr-3 sm:py-0 align-middle">

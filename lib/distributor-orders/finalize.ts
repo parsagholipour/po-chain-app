@@ -1,5 +1,6 @@
 import type { Prisma } from "@/app/generated/prisma/client";
 import { createExternalOrderNotifications } from "@/lib/notification-events";
+import { purchaseOrderDateToday } from "@/lib/purchase-order-date";
 import { PURCHASE_ORDER_TYPE_DISTRIBUTOR } from "@/lib/purchase-order-type";
 
 export async function convertPaidDistributorInvoiceDrafts({
@@ -73,6 +74,7 @@ export async function convertPaidDistributorInvoiceDrafts({
     const purchaseOrder = await tx.purchaseOrder.create({
       data: {
         name: draft.name,
+        date: purchaseOrderDateToday(),
         type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
         status: "open",
         invoiceId: invoice.id,
