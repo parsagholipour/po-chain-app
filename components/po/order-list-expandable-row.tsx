@@ -222,8 +222,8 @@ export function ExpandableOrderSummaryRow({
             )}
           </TableCell>
         ) : null}
-        <TableCell className="min-w-0 whitespace-normal">
-          <div className="flex min-w-0 flex-col gap-1.5">
+        <TableCell className="min-w-28 whitespace-normal">
+          <div className="flex min-w-28 flex-col gap-1.5">
             <Badge variant="secondary" className={statusBadgeClassName(row.status)}>
               {distributorPoStatusLabels[row.status] ?? row.status}
             </Badge>
@@ -243,20 +243,14 @@ export function ExpandableOrderSummaryRow({
             )}
           </div>
         </TableCell>
-        <TableCell
-          className={
-            apiScope === "purchase-orders"
-              ? "px-2 pr-4 sm:px-2 sm:pr-4 whitespace-nowrap text-xs text-muted-foreground"
-              : "whitespace-nowrap text-xs text-muted-foreground"
-          }
-        >
+        <TableCell className="min-w-28 whitespace-nowrap text-xs text-muted-foreground">
           {apiScope === "purchase-orders"
             ? formatPurchaseOrderDate(row.date)
             : new Date(row.createdAt).toLocaleDateString()}
         </TableCell>
         {showCreatedAt ? (
-          <TableCell className="px-2 pr-4 sm:px-2 sm:pr-4 whitespace-nowrap text-xs text-muted-foreground">
-            {new Date(row.createdAt).toLocaleString()}
+          <TableCell className="min-w-28 whitespace-nowrap text-xs text-muted-foreground">
+            {new Date(row.createdAt).toLocaleDateString()}
           </TableCell>
         ) : null}
         {onDelete ? (
