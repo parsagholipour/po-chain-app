@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireStoreContext } from "@/lib/store-context";
-import { parseAnalyticsRange, toEndOfDay, toStartOfDay } from "@/lib/analytics/date-range";
+import { parseAnalyticsRange } from "@/lib/analytics/date-range";
+import { closedDistributorPoWhere } from "@/lib/analytics/where";
 import { prisma } from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -15,13 +16,7 @@ export async function GET(request: Request) {
   const soldRows = await prisma.purchaseOrderLine.findMany({
     where: {
       storeId,
-      purchaseOrder: {
-        storeId,
-        type: "distributor",
-        isBackOrder: false,
-        status: "closed",
-        updatedAt: { gte: toStartOfDay(range.from), lte: toEndOfDay(range.to) },
-      },
+      purchaseOrder: closedDistributorPoWhere(storeId, range),
     },
     select: { productId: true },
   });

@@ -9,7 +9,7 @@ export function closedDistributorPoWhere(storeId: string, range: AnalyticsRange)
     type: PURCHASE_ORDER_TYPE_DISTRIBUTOR,
     isBackOrder: false,
     status: "closed",
-    updatedAt: {
+    date: {
       gte: toStartOfDay(range.from),
       lte: toEndOfDay(range.to),
     },

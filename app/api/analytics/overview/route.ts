@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireStoreContext } from "@/lib/store-context";
 import { prisma } from "@/lib/prisma";
 import { parseAnalyticsRange, previousPeriod } from "@/lib/analytics/date-range";
+import { closedDistributorPoWhere } from "@/lib/analytics/where";
 import {
   getClosedPoLineTotals,
   getManufacturingSpend,
@@ -82,17 +83,8 @@ export async function GET(request: Request) {
   });
 }
 
-async function closedPoCount(storeId: string, range: { from: string; to: string }) {
+async function closedPoCount(storeId: string, range: { from: string; to: string; granularity: "day" | "week" | "month" }) {
   return prisma.purchaseOrder.count({
-    where: {
-      storeId,
-      type: "distributor",
-      isBackOrder: false,
-      status: "closed",
-      updatedAt: {
-        gte: new Date(`${range.from}T00:00:00.000Z`),
-        lte: new Date(`${range.to}T23:59:59.999Z`),
-      },
-    },
+    where: closedDistributorPoWhere(storeId, range),
   });
 }

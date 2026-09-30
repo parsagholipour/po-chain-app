@@ -109,7 +109,7 @@ export async function GET(request: Request) {
 
   const rows = await prisma.purchaseOrder.findMany({
     where,
-    orderBy: { number: "desc" },
+    orderBy: [{ date: "desc" }, { number: "desc" }],
     select: {
       id: true,
       number: true,

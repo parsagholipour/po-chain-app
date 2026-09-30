@@ -28,7 +28,7 @@ export async function getRevenueSeries(storeId: string, range: AnalyticsRange): 
   const orders = await prisma.purchaseOrder.findMany({
     where: closedDistributorPoWhere(storeId, range),
     select: {
-      updatedAt: true,
+      date: true,
       lines: {
         select: {
           quantity: true,
@@ -37,12 +37,12 @@ export async function getRevenueSeries(storeId: string, range: AnalyticsRange): 
         },
       },
     },
-    orderBy: { updatedAt: "asc" },
+    orderBy: { date: "asc" },
   });
 
   const buckets = new Map<string, TimeSeriesPoint>();
   for (const order of orders) {
-    const bucket = formatBucket(order.updatedAt, range.granularity);
+    const bucket = formatBucket(order.date, range.granularity);
     const current = buckets.get(bucket) ?? { bucket, revenue: 0, cost: 0, profit: 0, units: 0 };
     for (const line of order.lines) {
       const revenue = line.quantity * num(line.unitPrice);
