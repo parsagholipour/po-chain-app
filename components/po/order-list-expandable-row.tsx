@@ -96,7 +96,8 @@ export function ExpandableOrderSummaryRow({
     enabled: open,
   });
 
-  const baseColumnCount = isStockList ? 4 : showTrackingNumbers ? 7 : 6;
+  const showCreatedAt = apiScope === "purchase-orders";
+  const baseColumnCount = isStockList ? 4 : (showTrackingNumbers ? 7 : 6) + (showCreatedAt ? 1 : 0);
   const colSpan = baseColumnCount + (onDelete ? 1 : 0);
 
   return (
@@ -253,6 +254,11 @@ export function ExpandableOrderSummaryRow({
             ? formatPurchaseOrderDate(row.date)
             : new Date(row.createdAt).toLocaleDateString()}
         </TableCell>
+        {showCreatedAt ? (
+          <TableCell className="px-2 pr-4 sm:px-2 sm:pr-4 whitespace-nowrap text-xs text-muted-foreground">
+            {new Date(row.createdAt).toLocaleString()}
+          </TableCell>
+        ) : null}
         {onDelete ? (
           <TableCell className="pl-2 pr-3 py-0 sm:pl-2 sm:pr-3 sm:py-0 align-middle">
             <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
