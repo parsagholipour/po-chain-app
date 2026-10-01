@@ -34,7 +34,8 @@ import {
 } from "@/lib/po/status-labels";
 import { storageObjectDisplayName } from "@/lib/storage/display-name";
 import { PoDocumentLink } from "@/components/po/purchase-order/po-document-link";
-import { Check, ChevronLeft, Factory, FileStack, Loader2, Pencil, Truck, X } from "lucide-react";
+import { formatPurchaseOrderDate, purchaseOrderDateInputValue } from "@/lib/purchase-order-date";
+import { Calendar, Check, ChevronLeft, Factory, FileStack, Loader2, Pencil, Truck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const moOrderStatusSelectItems = moStatuses.map((s) => ({
@@ -56,6 +57,7 @@ type Props = {
   mo: ManufacturingOrderDetail;
   statusLogs: ManufacturingOrderDetail["statusLogs"];
   onStatusChange: (status: string) => void;
+  onDateChange?: (date: string) => Promise<void> | void;
   onSaveStatusLogNote?: (logId: string, note: string | null) => Promise<void>;
   onDocumentUpload?: (file: File) => Promise<void>;
   isSaving?: boolean;
@@ -69,6 +71,7 @@ export function MoDetailHeader({
   mo,
   statusLogs,
   onStatusChange,
+  onDateChange,
   onSaveStatusLogNote,
   onDocumentUpload,
   isSaving = false,
@@ -77,6 +80,7 @@ export function MoDetailHeader({
   isDeleting = false,
 }: Props) {
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [draftDate, setDraftDate] = useState<string | null>(null);
   const [isEditingDocument, setIsEditingDocument] = useState(false);
   const [pendingDocumentName, setPendingDocumentName] = useState<string | null>(null);
   const mfrCount = mo.manufacturers.length;
@@ -86,6 +90,8 @@ export function MoDetailHeader({
   const currentDocumentName = storageObjectDisplayName(mo.documentKey);
   const visibleDocumentName = pendingDocumentName ?? currentDocumentName;
   const isDocumentBusy = isSaving || isDocumentSaving || isDeleting;
+  const serverDate = purchaseOrderDateInputValue(mo.date);
+  const dateValue = draftDate == null || draftDate === serverDate ? serverDate : draftDate;
 
   function handleDocumentChange(event: ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
@@ -124,6 +130,38 @@ export function MoDetailHeader({
               className="flex flex-wrap gap-x-4 gap-y-2 pt-2 text-xs text-muted-foreground"
               aria-label="Manufacturing order summary"
             >
+              <span className="inline-flex items-center gap-1.5">
+                <Calendar className="size-3.5 shrink-0 opacity-70" aria-hidden />
+                <span>Date</span>
+                {onDateChange ? (
+                  <>
+                    <Label htmlFor="mo-date" className="sr-only">
+                      Date
+                    </Label>
+                    <Input
+                      id="mo-date"
+                      type="date"
+                      required
+                      value={dateValue}
+                      disabled={isSaving || isDeleting}
+                      className="h-7 w-[9.5rem] bg-background text-xs"
+                      onBlur={() => {
+                        if (!draftDate) setDraftDate(null);
+                      }}
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        setDraftDate(next);
+                        if (!next || next === serverDate) return;
+                        void Promise.resolve(onDateChange(next)).catch(() => {
+                          setDraftDate(null);
+                        });
+                      }}
+                    />
+                  </>
+                ) : (
+                  <span>{formatPurchaseOrderDate(mo.date)}</span>
+                )}
+              </span>
               <span className="inline-flex items-center gap-1.5">
                 <FileStack className="size-3.5 shrink-0 opacity-70" aria-hidden />
                 <span>

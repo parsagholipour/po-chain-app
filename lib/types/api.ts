@@ -859,6 +859,7 @@ export type ManufacturingOrderSummary = {
   number: number;
   name: string;
   status: string;
+  date: string;
   createdAt: string;
   manufacturers: ManufacturingOrderSummaryManufacturer[];
   shippingBadges: ShippingStatusBadge[];
@@ -899,6 +900,7 @@ export type ManufacturingOrderDetail = {
   name: string;
   status: string;
   documentKey: string | null;
+  date: string;
   createdAt: string;
   updatedAt: string;
   statusLogs: OrderStatusLog[];

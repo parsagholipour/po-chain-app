@@ -244,32 +244,33 @@ function MoListFiltersAndTable({
         </Select>
       </div>
       <div className="overflow-hidden rounded-lg border border-border/60">
-        <Table>
+        <Table className="min-w-[64rem]">
           <TableHeader>
             <TableRow>
               <ExpandableMoTableHead />
-              <TableHead>Name</TableHead>
+              <TableHead className="min-w-48">Name</TableHead>
               <TableHead className="min-w-[11rem] max-w-[22rem]">Orders</TableHead>
               <TableHead className="min-w-[12rem]">Status</TableHead>
-              <TableHead className="w-40">Created</TableHead>
+              <TableHead className="min-w-28">Date</TableHead>
+              <TableHead className="min-w-28">Created At</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {!filterReady ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   {emptyNoScopeMessage}
                 </TableCell>
               </TableRow>
             ) : isPending ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   Loading…
                 </TableCell>
               </TableRow>
             ) : data.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="h-28 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   {emptyFilteredMessage}
                 </TableCell>
               </TableRow>

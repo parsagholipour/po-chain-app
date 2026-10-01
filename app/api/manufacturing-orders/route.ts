@@ -15,6 +15,7 @@ import {
 } from "@/lib/mo-product-assets";
 import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 import { getFulfillmentAvailability } from "@/lib/fulfillment-quantity";
+import { purchaseOrderDateToPrisma } from "@/lib/purchase-order-date";
 
 export const runtime = "nodejs";
 
@@ -47,12 +48,13 @@ export async function GET(request: Request) {
 
   const rows = await prisma.manufacturingOrder.findMany({
     where,
-    orderBy: { number: "desc" },
+    orderBy: [{ date: "desc" }, { number: "desc" }],
     select: {
       id: true,
       number: true,
       name: true,
       status: true,
+      date: true,
       createdAt: true,
       updatedAt: true,
       manufacturers: {
@@ -137,6 +139,7 @@ export async function GET(request: Request) {
         number: r.number,
         name: r.name,
         status: r.status,
+        date: r.date,
         createdAt: r.createdAt,
         manufacturers: r.manufacturers.map((m) => ({
           manufacturerId: m.manufacturerId,
@@ -171,7 +174,7 @@ export async function POST(request: Request) {
   const parsed = manufacturingOrderCreateSchema.safeParse(body);
   if (!parsed.success) return jsonFromZod(parsed.error);
 
-  const { name, documentKey, status, purchaseOrderIds, manufacturers } = parsed.data;
+  const { name, date, documentKey, status, purchaseOrderIds, manufacturers } = parsed.data;
 
   const mIds = manufacturers.map((m) => m.manufacturerId);
   if (new Set(mIds).size !== mIds.length) {
@@ -275,6 +278,7 @@ export async function POST(request: Request) {
       const mo = await tx.manufacturingOrder.create({
         data: {
           name,
+          date: purchaseOrderDateToPrisma(date),
           documentKey: documentKey ?? null,
           status: status ?? "open",
           storeId,

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   invoiceUpsertSchema,
+  purchaseOrderDateSchema,
 } from "@/lib/validations/purchase-order";
 import { shippingCreateSchema, shippingPatchSchema } from "@/lib/validations/shipping";
 
@@ -54,6 +55,7 @@ export const moManufacturerPatchSchema = z.object({
 
 export const manufacturingOrderCreateSchema = z.object({
   name: z.string().min(1, "Name is required"),
+  date: purchaseOrderDateSchema,
   documentKey: z.string().min(1).nullable().optional(),
   status: manufacturingOrderStatusSchema.optional(),
   purchaseOrderIds: z.array(z.uuid()).default([]),
@@ -78,6 +80,7 @@ export const manufacturingOrderCreateSchema = z.object({
 
 export const manufacturingOrderPatchSchema = z.object({
   name: z.string().min(1).optional(),
+  date: purchaseOrderDateSchema.optional(),
   status: manufacturingOrderStatusSchema.optional(),
   documentKey: z.string().min(1).nullable().optional(),
 });

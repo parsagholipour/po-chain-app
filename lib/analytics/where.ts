@@ -28,6 +28,15 @@ export function closedStockOrderWhere(storeId: string, range: AnalyticsRange): P
   };
 }
 
+export function manufacturingOrderDateWhere(range: AnalyticsRange): Prisma.ManufacturingOrderWhereInput {
+  return {
+    date: {
+      gte: toStartOfDay(range.from),
+      lte: toEndOfDay(range.to),
+    },
+  };
+}
+
 export function shippingDateWhere(range: AnalyticsRange): Prisma.ShippingWhereInput {
   return {
     OR: [

@@ -1270,6 +1270,8 @@ model ManufacturingOrder {
   name        String
   status      ManufacturingOrderStatus @default(open)
   documentKey String?
+  /// Business date of the manufacturing order. Existing rows are backfilled from createdAt.
+  date        DateTime                 @db.Date
   storeId     String                   @db.Uuid
   store       Store                    @relation(fields: [storeId], references: [id], onDelete: Restrict)
   createdAt   DateTime                 @default(now())

@@ -16,6 +16,7 @@ import type {
 } from "@/lib/types/api";
 import { MoLinkedOrderLabel } from "@/components/po/mo-linked-order-label";
 import { moStatusLabels, shippingStatusLabels, statusBadgeClassName } from "@/lib/po/status-labels";
+import { formatPurchaseOrderDate } from "@/lib/purchase-order-date";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 function linkedOrderHref(type: "distributor" | "stock", id: string) {
@@ -130,7 +131,7 @@ export function ExpandableManufacturingOrderSummaryRow({
     enabled: open,
   });
 
-  const colSpan = 5;
+  const colSpan = 6;
   const allocations = mo?.lineAllocations ?? [];
 
   return (
@@ -212,7 +213,10 @@ export function ExpandableManufacturingOrderSummaryRow({
             </Badge>
           )}
         </TableCell>
-        <TableCell className="text-muted-foreground text-xs">
+        <TableCell className="min-w-28 whitespace-nowrap text-xs text-muted-foreground">
+          {formatPurchaseOrderDate(row.date)}
+        </TableCell>
+        <TableCell className="min-w-28 whitespace-nowrap text-xs text-muted-foreground">
           {new Date(row.createdAt).toLocaleDateString()}
         </TableCell>
       </TableRow>

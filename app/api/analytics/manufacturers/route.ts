@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireStoreContext } from "@/lib/store-context";
-import { parseAnalyticsRange, toEndOfDay, toStartOfDay } from "@/lib/analytics/date-range";
+import { parseAnalyticsRange } from "@/lib/analytics/date-range";
 import { prisma } from "@/lib/prisma";
-import { closedDistributorPoWhere } from "@/lib/analytics/where";
+import { closedDistributorPoWhere, manufacturingOrderDateWhere } from "@/lib/analytics/where";
 import type { BreakdownRow } from "@/lib/types/analytics";
 
 export const runtime = "nodejs";
@@ -36,10 +36,7 @@ export async function GET(request: Request) {
     prisma.manufacturingOrderManufacturer.findMany({
       where: {
         storeId,
-        OR: [
-          { depositPaidAt: { gte: toStartOfDay(range.from), lte: toEndOfDay(range.to) } },
-          { balancePaidAt: { gte: toStartOfDay(range.from), lte: toEndOfDay(range.to) } },
-        ],
+        manufacturingOrder: manufacturingOrderDateWhere(range),
       },
       select: {
         manufacturerId: true,

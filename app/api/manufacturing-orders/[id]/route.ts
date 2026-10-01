@@ -6,6 +6,7 @@ import { manufacturingOrderDetailInclude } from "@/lib/manufacturing-order-inclu
 import { createOrderStatusLog } from "@/lib/order-status-log";
 import { manufacturingOrderDetailFromPrisma } from "@/lib/shipping-api";
 import { requireStoreContext } from "@/lib/store-context";
+import { purchaseOrderDateToPrisma } from "@/lib/purchase-order-date";
 import { manufacturingOrderPatchSchema } from "@/lib/validations/manufacturing-order";
 
 export const runtime = "nodejs";
@@ -81,9 +82,13 @@ export async function PATCH(
         }
       }
 
+      const { date, ...rest } = parsed.data;
       await tx.manufacturingOrder.update({
         where: { id: pid.data.id },
-        data: parsed.data,
+        data: {
+          ...rest,
+          ...(date !== undefined ? { date: purchaseOrderDateToPrisma(date) } : {}),
+        },
       });
 
       if (parsed.data.status && parsed.data.status !== existing.status) {

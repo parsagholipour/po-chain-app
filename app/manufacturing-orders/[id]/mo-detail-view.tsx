@@ -528,6 +528,9 @@ export function MoDetailView({ manufacturingOrderId }: { manufacturingOrderId: s
         mo={mo}
         statusLogs={mo.statusLogs}
         onStatusChange={(s) => patchMo.mutate({ status: s })}
+        onDateChange={async (date) => {
+          await patchMo.mutateAsync({ date });
+        }}
         onSaveStatusLogNote={async (logId, note) => {
           await saveStatusLogNote.mutateAsync({ logId, note });
         }}

@@ -27,7 +27,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { distributorPoStatusLabels, statusBadgeClassName } from "@/lib/po/status-labels";
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
-import { formatPurchaseOrderDate } from "@/lib/purchase-order-date";
+import { formatPurchaseOrderDate, localPurchaseOrderDateInputValue } from "@/lib/purchase-order-date";
 import { invalidateNavCounts } from "@/lib/query-invalidation";
 import { cn } from "@/lib/utils";
 import { MoLinkedOrderLabel } from "@/components/po/mo-linked-order-label";
@@ -50,6 +50,7 @@ export function NewManufacturingOrderWizard() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
+  const [date, setDate] = useState(() => localPurchaseOrderDateInputValue());
   const {
     documentKey,
     setDocumentKey,
@@ -191,6 +192,7 @@ export function NewManufacturingOrderWizard() {
     mutationFn: async (vars: { documentKey: string | null }) => {
       const { data } = await api.post<{ id: string }>("/api/manufacturing-orders", {
         name: name.trim(),
+        date,
         documentKey: vars.documentKey,
         purchaseOrderIds: [...purchaseOrderIds],
         manufacturers: [...allSelectedManufacturerIds].map((manufacturerId) => ({
@@ -217,7 +219,7 @@ export function NewManufacturingOrderWizard() {
   }
 
   function canNext(): boolean {
-    if (step === 0) return name.trim().length > 0 && !isDocUploading;
+    if (step === 0) return name.trim().length > 0 && date.length > 0 && !isDocUploading;
     return true;
   }
 
@@ -268,7 +270,7 @@ export function NewManufacturingOrderWizard() {
   }
 
   const stepDescriptions = [
-    "Name the manufacturing order and attach an optional document.",
+    "Name the manufacturing order, choose a date, and attach an optional document.",
     "Link distributor POs and/or stock orders. Lines are allocated on create to each product’s default manufacturer.",
     "Manufacturers implied by linked lines are selected automatically and cannot be cleared. Add more manufacturers when several factories are involved.",
     "Confirm and create.",
@@ -325,6 +327,8 @@ export function NewManufacturingOrderWizard() {
             <WizardStepBasics
               name={name}
               onNameChange={setName}
+              date={date}
+              onDateChange={setDate}
               documentKey={documentKey}
               docFile={docFile}
               onDocFileChange={onDocFileChange}
@@ -498,6 +502,10 @@ export function NewManufacturingOrderWizard() {
                 <span className="text-muted-foreground">Name: </span>
                 <span className="font-medium">{name.trim()}</span>
               </div>
+              <div>
+                <span className="text-muted-foreground">Date: </span>
+                <span className="font-medium">{date ? formatPurchaseOrderDate(date) : "—"}</span>
+              </div>
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-muted-foreground">Document:</span>
                 {documentKey || docFile ? (
@@ -654,6 +662,7 @@ export function NewManufacturingOrderWizard() {
                 disabled={
                   isFinishing ||
                   !name.trim() ||
+                  !date ||
                   orderDefaultsLoading ||
                   missingProductAssetLines.length > 0
                 }

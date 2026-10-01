@@ -1,6 +1,11 @@
 import type { PurchaseOrderStatus } from "@/app/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
-import { closedDistributorPoWhere, closedStockOrderWhere, shippingDateWhere } from "@/lib/analytics/where";
+import {
+  closedDistributorPoWhere,
+  closedStockOrderWhere,
+  manufacturingOrderDateWhere,
+  shippingDateWhere,
+} from "@/lib/analytics/where";
 import type {
   AnalyticsRange,
   BreakdownRow,
@@ -171,10 +176,7 @@ export async function getManufacturingSpend(storeId: string, range: AnalyticsRan
   const rows = await prisma.manufacturingOrderManufacturer.findMany({
     where: {
       storeId,
-      OR: [
-        { depositPaidAt: { gte: new Date(`${range.from}T00:00:00.000Z`), lte: new Date(`${range.to}T23:59:59.999Z`) } },
-        { balancePaidAt: { gte: new Date(`${range.from}T00:00:00.000Z`), lte: new Date(`${range.to}T23:59:59.999Z`) } },
-      ],
+      manufacturingOrder: manufacturingOrderDateWhere(range),
     },
     select: { depositPaidAmount: true, balancePaidAmount: true },
   });
