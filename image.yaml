@@ -1,0 +1,3 @@
+# Written by the Deploy workflow; Argo CD deploys it (ypm-platform).
+image:
+  tag: "bootstrap"
