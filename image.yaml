@@ -1,3 +1,4 @@
 # Written by the Deploy workflow; Argo CD deploys it (ypm-platform).
 image:
-  tag: "bootstrap"
+  tag: "19b11540f9756374362a66d7019e3e6eb136b492"
+  digest: "sha256:a5794ac35d553d110f1675d5ebe050dd361301c015a77b7235009359eab43d23"
