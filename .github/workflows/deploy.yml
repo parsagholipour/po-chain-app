@@ -1,0 +1,140 @@
+# Builds the PO Chain App (Next.js) image on an AWS CodeBuild-hosted runner (arm64) and
+# releases it to the k3s cluster through this repo's release branch; Argo CD deploys it.
+# The runner's IAM role provides AWS access; no credentials are stored in GitHub.
+# Infrastructure lives in ypm-export-backend/infra (Terraform) and ypm-platform. Build-time
+# values (NEXT_PUBLIC_*) come from SSM /ypm/prod/build/po_app/ and are inlined by next build.
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+    paths-ignore:
+      - "**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # push the release branch (a ruleset keeps master PR-only)
+  statuses: read    # read Argo CD's verdict
+
+concurrency:
+  group: deploy-po_app
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: codebuild-ypm-prod-po_app-${{ github.run_id }}-${{ github.run_attempt }}
+    timeout-minutes: 60
+    env:
+      AWS_REGION: us-east-1
+      SERVICE: po_app
+      ECR_REPOSITORY: ypm/po-chain-app
+      ARGOCD_APP: po-app           # Argo CD application; status context argocd/<app>
+      COMPOSE_DEPLOY: "false"       # moved from Railway straight to k3s; never ran on the compose host
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Dockerfile.aws copies this to .env.production.local for next build. An empty
+      # path yields an empty file.
+      - name: Build-time configuration
+        run: |
+          set -euo pipefail
+          aws ssm get-parameters-by-path --path "/ypm/prod/build/$SERVICE" --recursive --output json |
+            jq -r '.Parameters[] | "\(.Name | split("/") | last)=\(.Value)"' > .aws-build.env
+          echo "configured: $(cut -d= -f1 .aws-build.env | tr '\n' ' ')"
+
+      - name: Build and push image
+        run: |
+          set -euo pipefail
+          account=$(aws sts get-caller-identity --query Account --output text)
+          registry="$account.dkr.ecr.$AWS_REGION.amazonaws.com"
+          image="$registry/$ECR_REPOSITORY:$GITHUB_SHA"
+          if aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$GITHUB_SHA" >/dev/null 2>&1; then
+            echo "$image already exists; skipping build"
+            exit 0
+          fi
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$registry"
+          docker build --pull --platform linux/arm64 -f Dockerfile.aws -t "$image" .
+          docker push "$image"
+
+      - name: Deploy to the compose host
+        if: env.COMPOSE_DEPLOY == 'true'
+        run: |
+          set -euo pipefail
+          aws ssm put-parameter --name "/ypm/prod/images/$SERVICE" --value "$GITHUB_SHA" --type String --overwrite >/dev/null
+          command_id=$(aws ssm send-command \
+            --document-name ypm-prod-deploy \
+            --targets "Key=tag:ypm:role,Values=app-host" \
+            --parameters "service=$SERVICE" \
+            --timeout-seconds 900 \
+            --comment "$GITHUB_REPOSITORY@${GITHUB_SHA::7}" \
+            --query Command.CommandId --output text)
+          echo "SSM command: $command_id"
+          for _ in $(seq 1 180); do
+            status=$(aws ssm list-commands --command-id "$command_id" --query 'Commands[0].Status' --output text)
+            case "$status" in
+              Pending | InProgress | Delayed | None) sleep 5 ;;
+              *) break ;;
+            esac
+          done
+          aws ssm list-command-invocations --command-id "$command_id" --details \
+            --query 'CommandInvocations[].CommandPlugins[].[Output]' --output text
+          echo "status: $status"
+          test "$status" = Success
+
+      - name: Check out the release branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: release
+          path: release
+          fetch-depth: 2      # a revert needs the previous release
+
+      - name: Release to k3s
+        id: release
+        working-directory: release
+        run: |
+          set -euo pipefail
+          digest=$(aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids imageTag="$GITHUB_SHA" \
+            --query 'imageDetails[0].imageDigest' --output text)
+          printf '# Written by the Deploy workflow; Argo CD deploys it (ypm-platform).\nimage:\n  tag: "%s"\n  digest: "%s"\n' \
+            "$GITHUB_SHA" "$digest" >image.yaml
+          if git diff --quiet; then
+            echo "already released"
+          else
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -qam "release: ${GITHUB_SHA::7}"
+            git push -q origin HEAD:release
+          fi
+          echo "sha=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+
+      - name: Wait for Argo CD
+        working-directory: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -euo pipefail
+          context="argocd/$ARGOCD_APP"
+          state=pending
+          # Argo CD polls Git every minute; a release that never becomes healthy
+          # is marked failed at the Deployment's 10-minute progress deadline.
+          for _ in $(seq 1 120); do
+            state=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/$RELEASE_SHA/statuses?per_page=100" |
+              jq -r --arg c "$context" 'map(select(.context == $c)) | first | .state // "pending"')
+            case "$state" in
+              success) echo "$context: deployed and healthy"; exit 0 ;;
+              failure | error) break ;;
+            esac
+            sleep 10
+          done
+          if [[ $state == pending ]]; then
+            echo "::error::No verdict from Argo CD in 20 minutes; the release was NOT reverted. Check the $ARGOCD_APP app in Argo CD (docs/k3s/README.md, section 11)."
+            exit 1
+          fi
+          echo "::error::Argo CD reports $state for $context; reverting to the previous release."
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            revert --no-edit HEAD
+          git push -q origin HEAD:release
+          exit 1
